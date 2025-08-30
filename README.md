@@ -33,7 +33,7 @@ The ES Inventory Hub collectors reuse existing API integration code from working
 - **NinjaRMM Collector**: Reuses API logic from `/opt/dashboard-project/es-dashboards/dashboards/ninja-seat-count-monthly`
 - **ThreatLocker Collector**: Reuses API logic from `/opt/dashboard-project/es-dashboards/dashboards/threatlocker-stats`
 
-This ensures proven authentication patterns, field coverage, and data processing logic.
+This ensures proven authentication patterns, field coverage, and data processing logic. The collectors preserve all fields used by the dashboard modals and maintain the same data processing patterns.
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐

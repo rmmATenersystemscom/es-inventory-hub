@@ -5,6 +5,7 @@ ThreatLocker Collector Main Entry Point
 
 import sys
 import os
+import argparse
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
@@ -26,6 +27,11 @@ logger = get_logger(__name__)
 
 def main():
     """Main entry point for ThreatLocker collector"""
+    parser = argparse.ArgumentParser(description='ThreatLocker Collector')
+    parser.add_argument('--dry-run', action='store_true', 
+                       help='Fetch up to 1 device and log normalized record without DB writes')
+    args = parser.parse_args()
+    
     try:
         # Load configuration
         config = Config()
@@ -38,6 +44,32 @@ def main():
         if not api.test_connection():
             logger.error("Failed to connect to ThreatLocker API")
             sys.exit(1)
+        
+        if args.dry_run:
+            # Dry run mode: fetch up to 1 device and log normalized record
+            logger.info("DRY RUN MODE: Fetching up to 1 device for testing...")
+            try:
+                devices = api.get_all_computers_with_child_organizations()
+                if devices:
+                    device = devices[0]
+                    logger.info("DRY RUN - Sample device normalized record:")
+                    logger.info(f"  ID: {device.get('id')}")
+                    logger.info(f"  Computer Name: {device.get('computerName')}")
+                    logger.info(f"  Display Name: {device.get('displayName')}")
+                    logger.info(f"  Operating System: {device.get('operatingSystem')}")
+                    logger.info(f"  OS Version: {device.get('osVersion')}")
+                    logger.info(f"  Status: {device.get('status')}")
+                    logger.info(f"  Organization ID: {device.get('organizationId')}")
+                    logger.info(f"  Location: {device.get('location')}")
+                    logger.info(f"  Last Check In: {device.get('lastCheckIn')}")
+                    logger.info(f"  IP Address: {device.get('ipAddress')}")
+                    logger.info(f"  MAC Address: {device.get('macAddress')}")
+                    logger.info("DRY RUN COMPLETE - No database writes performed")
+                else:
+                    logger.warning("DRY RUN: No devices found")
+            except Exception as e:
+                logger.error(f"DRY RUN failed: {e}")
+            return
         
         # Quick self-check: list 1 device to confirm parity
         logger.info("Performing self-check: listing 1 device...")

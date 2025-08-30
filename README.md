@@ -447,6 +447,94 @@ Structured JSON logging with correlation IDs for tracing requests across service
 4. Add tests for new functionality
 5. Submit a pull request
 
+## CHECK-IN Process
+
+### **Purpose**
+The CHECK-IN process is a complete Git commit and tag workflow that preserves all changes made to the project with comprehensive version control and documentation.
+
+### **When to Use CHECK-IN**
+- When you want to save all current changes to the project
+- After completing a set of related modifications
+- Before making major changes that might need to be reverted
+- When you want to create a versioned snapshot of the current state
+
+### **What Happens During CHECK-IN**
+
+#### **1. Git Add**
+- All changes are automatically staged for commit
+- No manual `git add` commands needed
+
+#### **2. Git Commit**
+- Changes are committed with a detailed, descriptive message
+- The commit message should describe all modifications made
+
+#### **3. Git Tag**
+- A version tag is created with a comprehensive descriptive message
+- Tag format: `vX.Y.Z` (e.g., v1.11.0, v3.0.42)
+- Tag message contains detailed notes about all changes
+
+#### **4. Version Number Update**
+- Updates the version number in main README.md to match the new tag
+- Updates line: `**Current Version**: vX.Y.Z (stable)`
+- Updates line: `##    Current Version (vX.Y.Z)`
+
+#### **5. Git Push**
+- Both commit and tag are pushed to the remote GitHub repository
+- Ensures all changes are backed up and available to other team members
+
+### **Version Strategy**
+- **Patch Updates**: `vX.Y.Z+1` (e.g., v1.14.2 → v1.14.3) for bug fixes and minor changes
+- **Minor Features**: `vX.Y+1.0` (e.g., v1.14.2 → v1.15.0) for new features
+- **Major Changes**: `vX+1.0.0` (e.g., v1.14.2 → v2.0.0) for significant architectural changes
+
+### **Version Checking**
+- Always check existing tags first to avoid conflicts
+- Use `git tag` to see current version numbers
+- Increment appropriately based on the type of changes made
+
+### **Documentation Preservation**
+- All detailed revision notes are preserved in Git tag messages
+- Commit history maintains full change documentation
+- README.md version numbers are kept in sync with Git tags
+
+### **Example CHECK-IN Output**
+```
+CHECK-IN COMPLETE! ✅
+
+Tag Used: v1.11.0
+
+Changes Committed:
+- Fixed modal visibility issues - Modal titles and close buttons are now clearly visible
+- Enhanced CSS styling - Added comprehensive dark theme styling for all modal elements
+- Improved user experience - Close buttons now have proper contrast and hover effects
+- Maintained theme consistency - All modal components match the dashboard's dark aesthetic
+- Updated version number in main README.md to v1.11.0
+
+Files Modified:
+- dashboards/topleft/app.py - Backend improvements
+- dashboards/topleft/templates/dashboard.html - CSS styling for modal visibility
+- README.md - Updated version number to v1.11.0
+
+The changes have been successfully committed and pushed to GitHub with the descriptive tag v1.11.0
+All detailed revision notes are preserved in Git tag messages and commit history
+```
+
+### **Key Benefits**
+- **Complete Traceability**: Every change is documented and versioned
+- **Rollback Capability**: Can revert to any previous version if needed
+- **Team Collaboration**: All changes are available to other team members
+- **Production Safety**: Versioned releases ensure stable deployments
+- **Change Documentation**: Comprehensive notes about what was modified and why
+
+### **Important Notes for Implementation**
+- The process is automated - just trigger "CHECK-IN!" in the chat
+- Always include descriptive commit and tag messages
+- Keep version numbers consistent across Git tags and README.md
+- Preserve all detailed notes in Git rather than just in chat
+- Push both commits and tags to ensure complete backup
+
+This process ensures that all project changes are properly versioned, documented, and safely stored in the Git repository for future reference and potential rollback.
+
 ## License
 
 Proprietary - Ener Systems

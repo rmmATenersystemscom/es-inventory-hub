@@ -1,0 +1,35 @@
+# Core dependencies
+Flask==2.3.3
+SQLAlchemy==2.0.23
+psycopg2-binary==2.9.9
+alembic==1.12.1
+python-dotenv==1.0.0
+
+# API clients
+requests==2.31.0
+httpx==0.25.2
+
+# Data processing
+pandas==2.1.4
+numpy==1.25.2
+
+# Utilities
+python-dateutil==2.8.2
+pytz==2023.3
+click==8.1.7
+
+# Testing
+pytest==7.4.3
+pytest-cov==4.1.0
+pytest-mock==3.12.0
+
+# Development
+black==23.11.0
+flake8==6.1.0
+mypy==1.7.1
+
+# Logging
+structlog==23.2.0
+
+# Security
+cryptography==41.0.8

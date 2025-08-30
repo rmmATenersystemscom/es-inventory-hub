@@ -1,0 +1,29 @@
+[Unit]
+Description=ES Inventory Hub Dashboard
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=es-inventory
+Group=es-inventory
+WorkingDirectory=/opt/es-inventory-hub
+Environment=PATH=/opt/es-inventory-hub/venv/bin
+Environment=PYTHONPATH=/opt/es-inventory-hub
+ExecStart=/opt/es-inventory-hub/venv/bin/python dashboard_diffs/app.py
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=es-inventory-dashboard
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/es-inventory-hub
+
+[Install]
+WantedBy=multi-user.target

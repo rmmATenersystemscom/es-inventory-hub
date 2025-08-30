@@ -1,0 +1,11 @@
+[Unit]
+Description=Run ES Inventory Hub ThreatLocker Collector daily at 3 AM
+Requires=es-inventory-threatlocker.service
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

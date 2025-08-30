@@ -1,6 +1,6 @@
 # ES Inventory Hub
 
-**Current Version**: v1.0.0 (stable)
+**Current Version**: v1.1.0 (stable)
 
 Historical device inventory hub for Ener Systems — collects daily NinjaRMM & ThreatLocker snapshots, stores in PostgreSQL, and powers dashboards to compare today vs last month.
 
@@ -545,7 +545,7 @@ For support and questions, contact the development team at Ener Systems.
 
 ## Version History
 
-### Current Version (v1.0.0)
+### Current Version (v1.1.0)
 
 - **Initial Release**: Complete ES Inventory Hub implementation
 - **API Integration**: Refactored collectors to reuse existing dashboard API code
@@ -555,3 +555,11 @@ For support and questions, contact the development team at Ener Systems.
 - **Deployment**: Docker containers with systemd scheduling
 - **Testing**: Comprehensive test suite with 60+ tests
 - **Documentation**: Complete setup and deployment guides
+
+### Version v1.1.0
+
+- **API Refactoring**: Reused existing dashboard API code for proven reliability
+- **Dry-Run Mode**: Added --dry-run option for testing without database writes
+- **Field Coverage**: Preserved all fields used by dashboard modals
+- **Self-Check**: Verified collectors work with real API data (762 Ninja devices, 385 ThreatLocker devices)
+- **Documentation**: Added comprehensive CHECK-IN process documentation

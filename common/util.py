@@ -6,6 +6,9 @@ from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy.orm import Session
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy import func
+from storage.schema import DeviceSnapshot
 
 
 def sha256_json(obj: Any) -> str:
@@ -87,9 +90,9 @@ def insert_snapshot(
     vendor_id: int,
     device_identity_id: int,
     normalized: dict
-) -> int:
+) -> None:
     """
-    Insert a device snapshot record.
+    Upsert a device snapshot record using PostgreSQL ON CONFLICT.
     
     Args:
         session: SQLAlchemy session
@@ -97,11 +100,8 @@ def insert_snapshot(
         vendor_id: ID of the vendor
         device_identity_id: ID of the device identity
         normalized: Normalized device data
-        
-    Returns:
-        int: Snapshot ID
     """
-    from storage.schema import DeviceSnapshot, Site, DeviceType, BillingStatus
+    from storage.schema import Site, DeviceType, BillingStatus
     
     # Convert datetime to date if needed
     if isinstance(snapshot_date, datetime):
@@ -147,24 +147,47 @@ def insert_snapshot(
     # Calculate content hash
     content_hash = sha256_json(normalized)
     
-    # Create device snapshot record
-    snapshot = DeviceSnapshot(
-        snapshot_date=snapshot_date,
-        vendor_id=vendor_id,
-        device_identity_id=device_identity_id,
-        site_id=site_id,
-        device_type_id=device_type_id,
-        billing_status_id=billing_status_id,
-        hostname=normalized.get('hostname'),
-        serial_number=normalized.get('serial_number'),
-        os_name=normalized.get('os_name'),
-        tpm_status=normalized.get('tmp_status'),
-        raw=normalized.get('raw'),
-        attrs=None,  # Could be populated with additional attributes
-        content_hash=content_hash,
-        created_at=utcnow()
+    # Prepare data for upsert
+    values = {
+        'snapshot_date': snapshot_date,
+        'vendor_id': vendor_id,
+        'device_identity_id': device_identity_id,
+        'site_id': site_id,
+        'device_type_id': device_type_id,
+        'billing_status_id': billing_status_id,
+        'hostname': normalized.get('hostname'),
+        'serial_number': normalized.get('serial_number'),
+        'os_name': normalized.get('os_name'),
+        'tpm_status': normalized.get('tpm_status'),
+        'raw': normalized.get('raw'),
+        'attrs': None,  # Could be populated with additional attributes
+        'content_hash': content_hash,
+        'created_at': utcnow()
+    }
+    
+    # Perform PostgreSQL upsert
+    stmt = pg_insert(DeviceSnapshot.__table__).values(values)
+    
+    # Define update values for conflicts (exclude the unique key fields)
+    update_values = {
+        'site_id': stmt.excluded.site_id,
+        'device_type_id': stmt.excluded.device_type_id,
+        'billing_status_id': stmt.excluded.billing_status_id,
+        'hostname': stmt.excluded.hostname,
+        'serial_number': stmt.excluded.serial_number,
+        'os_name': stmt.excluded.os_name,
+        'tpm_status': stmt.excluded.tpm_status,
+        'raw': stmt.excluded.raw,
+        'attrs': stmt.excluded.attrs,
+        'content_hash': stmt.excluded.content_hash,
+        'created_at': func.now()
+    }
+    
+    # Add ON CONFLICT clause for the unique constraint
+    stmt = stmt.on_conflict_do_update(
+        constraint='uq_device_snapshot_date_vendor_device',
+        set_=update_values
     )
     
-    session.add(snapshot)
-    session.flush()  # Get the ID
-    return snapshot.id
+    # Execute the upsert
+    session.execute(stmt)

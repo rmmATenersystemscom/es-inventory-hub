@@ -36,7 +36,7 @@ def normalize_ninja_device(raw: Dict[str, Any]) -> Dict[str, Any]:
     os_name = os_obj.get('name', '')
     
     # Get TPM status (not typically available in Ninja API, set to empty)
-    tmp_status = ''
+    tpm_status = ''
     
     # Resolve site information
     site_name = _get_site_name(raw)
@@ -55,7 +55,7 @@ def normalize_ninja_device(raw: Dict[str, Any]) -> Dict[str, Any]:
         'hostname': hostname,
         'serial_number': serial_number,
         'os_name': os_name,
-        'tmp_status': tmp_status,
+        'tpm_status': tpm_status,
         'site_name': site_name,
         'device_type': device_type,
         'billing_status': billing_status,

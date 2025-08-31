@@ -145,7 +145,7 @@ def run_collection(ninja_api: NinjaAPI, snapshot_date: date, limit: Optional[int
                 logger.debug(f"Upserted device identity ID: {device_identity_id}")
                 
                 # Insert snapshot
-                snapshot_id = insert_snapshot(
+                insert_snapshot(
                     session=session,
                     snapshot_date=snapshot_date,
                     vendor_id=vendor_id,
@@ -153,7 +153,7 @@ def run_collection(ninja_api: NinjaAPI, snapshot_date: date, limit: Optional[int
                     normalized=normalized
                 )
                 
-                logger.info(f"Inserted snapshot {snapshot_id} for device {normalized['vendor_device_key']} "
+                logger.info(f"Inserted snapshot for device {normalized['vendor_device_key']} "
                            f"with type: {normalized['device_type']}, billing: {normalized['billing_status']}")
                 
                 saved_count += 1
@@ -165,6 +165,15 @@ def run_collection(ninja_api: NinjaAPI, snapshot_date: date, limit: Optional[int
             except Exception as e:
                 error_count += 1
                 logger.error(f"Error processing device {device_name}: {e}")
+                
+                # Handle SQLAlchemy errors by rolling back
+                try:
+                    from sqlalchemy.exc import SQLAlchemyError
+                    if isinstance(e, SQLAlchemyError):
+                        session.rollback()
+                        logger.warning(f"Rolled back transaction for device {device_name}")
+                except ImportError:
+                    pass
                 
                 # Continue processing other devices
                 continue

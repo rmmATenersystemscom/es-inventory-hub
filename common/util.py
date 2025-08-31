@@ -50,15 +50,35 @@ def upsert_device_identity(
         
     Returns:
         int: Device identity ID
-        
-    TODO: Implement device identity upsert logic
     """
-    # TODO: Implement the following logic:
-    # 1. Query for existing device identity by vendor_id and vendor_device_key
-    # 2. If found, update last_seen_date if necessary and return ID
-    # 3. If not found, create new device identity record
-    # 4. Return the device identity ID
-    raise NotImplementedError("upsert_device_identity logic to be implemented")
+    from storage.schema import DeviceIdentity
+    
+    # Convert datetime to date if needed
+    if isinstance(first_seen_date, datetime):
+        first_seen_date = first_seen_date.date()
+    
+    # Query for existing device identity
+    device_identity = session.query(DeviceIdentity).filter_by(
+        vendor_id=vendor_id,
+        vendor_device_key=vendor_device_key
+    ).first()
+    
+    if device_identity:
+        # Update last_seen_date if this date is newer
+        if first_seen_date > device_identity.last_seen_date:
+            device_identity.last_seen_date = first_seen_date
+        return device_identity.id
+    else:
+        # Create new device identity record
+        device_identity = DeviceIdentity(
+            vendor_id=vendor_id,
+            vendor_device_key=vendor_device_key,
+            first_seen_date=first_seen_date,
+            last_seen_date=first_seen_date
+        )
+        session.add(device_identity)
+        session.flush()  # Get the ID
+        return device_identity.id
 
 
 def insert_snapshot(
@@ -80,13 +100,71 @@ def insert_snapshot(
         
     Returns:
         int: Snapshot ID
-        
-    TODO: Implement snapshot insertion logic
     """
-    # TODO: Implement the following logic:
-    # 1. Create DeviceSnapshot record with provided data
-    # 2. Map normalized data to appropriate fields (site, device_type, billing_status, etc.)
-    # 3. Calculate content_hash using sha256_json
-    # 4. Handle any foreign key lookups (site_id, device_type_id, billing_status_id)
-    # 5. Insert the record and return the ID
-    raise NotImplementedError("insert_snapshot logic to be implemented")
+    from storage.schema import DeviceSnapshot, Site, DeviceType, BillingStatus
+    
+    # Convert datetime to date if needed
+    if isinstance(snapshot_date, datetime):
+        snapshot_date = snapshot_date.date()
+    
+    # Look up foreign key IDs
+    site_id = None
+    if normalized.get('site_name'):
+        # First try to find by name
+        site = session.query(Site).filter_by(
+            vendor_id=vendor_id,
+            name=normalized['site_name']
+        ).first()
+        
+        # If not found, create a new site with the site name as both key and name
+        if not site:
+            site = Site(
+                vendor_id=vendor_id,
+                vendor_site_key=normalized['site_name'],
+                name=normalized['site_name']
+            )
+            session.add(site)
+            session.flush()  # Get the ID
+        
+        site_id = site.id
+    
+    device_type_id = None
+    if normalized.get('device_type'):
+        device_type = session.query(DeviceType).filter_by(
+            code=normalized['device_type']
+        ).first()
+        if device_type:
+            device_type_id = device_type.id
+    
+    billing_status_id = None
+    if normalized.get('billing_status'):
+        billing_status = session.query(BillingStatus).filter_by(
+            code=normalized['billing_status']
+        ).first()
+        if billing_status:
+            billing_status_id = billing_status.id
+    
+    # Calculate content hash
+    content_hash = sha256_json(normalized)
+    
+    # Create device snapshot record
+    snapshot = DeviceSnapshot(
+        snapshot_date=snapshot_date,
+        vendor_id=vendor_id,
+        device_identity_id=device_identity_id,
+        site_id=site_id,
+        device_type_id=device_type_id,
+        billing_status_id=billing_status_id,
+        hostname=normalized.get('hostname'),
+        serial_number=normalized.get('serial_number'),
+        os_name=normalized.get('os_name'),
+        tpm_status=normalized.get('tmp_status'),
+        raw=normalized.get('raw'),
+        attrs=None,  # Could be populated with additional attributes
+        content_hash=content_hash,
+        created_at=utcnow()
+    )
+    
+    session.add(snapshot)
+    session.flush()  # Get the ID
+    return snapshot.id

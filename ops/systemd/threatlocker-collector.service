@@ -1,0 +1,14 @@
+[Unit]
+Description=ThreatLocker daily collector for es-inventory-hub
+Wants=network-online.target
+After=network-online.target postgresql.service
+
+[Service]
+Type=oneshot
+User=%i
+WorkingDirectory=/opt/es-inventory-hub
+EnvironmentFile=/opt/dashboard-project/es-dashboards/.env
+ExecStart=/bin/bash -lc '/opt/es-inventory-hub/scripts/run_threatlocker_daily.sh'
+Restart=on-failure
+RestartSec=30s
+]

@@ -5,7 +5,7 @@ set -euo pipefail
 mkdir -p /var/log/es-inventory-hub
 
 # Log file path
-LOG_FILE="/var/log/es-inventory-hub/ninja_daily.log"
+LOG_FILE="/var/log/es-inventory-hub/threatlocker_daily.log"
 
 # Function to log with timestamp
 log_message() {
@@ -13,7 +13,7 @@ log_message() {
 }
 
 # Log start
-log_message "Starting Ninja daily collection"
+log_message "Starting ThreatLocker daily collection"
 
 # Load environment variables
 set -a
@@ -24,11 +24,11 @@ set +a
 source /opt/es-inventory-hub/.venv/bin/activate
 
 # Run the collector
-if python3 -m collectors.ninja.main; then
-    log_message "Ninja collection finished OK"
+if python3 -m collectors.threatlocker.main; then
+    log_message "ThreatLocker collection finished OK"
     exit 0
 else
     EXIT_CODE=$?
-    log_message "Ninja collection FAILED with exit code $EXIT_CODE"
+    log_message "ThreatLocker collection FAILED with exit code $EXIT_CODE"
     exit $EXIT_CODE
 fi

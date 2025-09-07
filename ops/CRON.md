@@ -152,3 +152,106 @@ The `run_ninja_daily.sh` script performs the following steps:
 - Ensure proper file permissions on the .env file to protect sensitive credentials
 - Log files may contain sensitive information; restrict access appropriately
 - Consider running the cron job as a dedicated service user rather than root
+
+## Verification
+
+### Check Cron Job Installation
+
+To verify that the cron job is properly installed and configured:
+
+```bash
+# Run the verification script
+./scripts/check_cron.sh
+```
+
+The verification script will check:
+
+1. **Script Executability**: Ensures `run_ninja_daily.sh` is executable
+2. **Cron Job Installation**: Searches for the cron job in your crontab
+3. **Log Directory**: Verifies the log directory exists and is writable
+4. **Log File**: Shows the last 10 lines of the log file (if it exists)
+
+### Example Verification Output
+
+**When cron job is installed:**
+```
+🔍 Cron Job Verification for ES Inventory Hub
+==============================================
+
+ℹ️  Checking if /opt/es-inventory-hub/scripts/run_ninja_daily.sh is executable...
+✅ Script is executable: /opt/es-inventory-hub/scripts/run_ninja_daily.sh
+
+ℹ️  Checking if cron job is installed...
+✅ Cron job installed
+Found cron line:
+  10 2 * * * /opt/es-inventory-hub/scripts/run_ninja_daily.sh >> /var/log/es-inventory-hub/ninja_daily.log 2>&1
+
+ℹ️  Checking log directory: /var/log/es-inventory-hub
+✅ Log directory exists and is writable
+
+ℹ️  Checking log file: /var/log/es-inventory-hub/ninja_daily.log
+✅ Log file exists and is readable
+Last 10 lines of log file:
+----------------------------------------
+  2025-09-01 02:10:01 === Starting Ninja daily collection ===
+  2025-09-01 02:10:01 Sourcing environment from /opt/dashboard-project/es-dashboards/.env
+  2025-09-01 02:10:01 Activating virtual environment: /opt/es-inventory-hub/.venv
+  2025-09-01 02:10:01 Starting Ninja collector...
+  2025-09-01 02:10:15 Ninja collector completed successfully
+  2025-09-01 02:10:15 === Ninja daily collection finished ===
+----------------------------------------
+
+==============================================
+✅ All checks passed! Cron job should be working correctly.
+```
+
+**When cron job is NOT installed:**
+```
+🔍 Cron Job Verification for ES Inventory Hub
+==============================================
+
+ℹ️  Checking if /opt/es-inventory-hub/scripts/run_ninja_daily.sh is executable...
+✅ Script is executable: /opt/es-inventory-hub/scripts/run_ninja_daily.sh
+
+ℹ️  Checking if cron job is installed...
+❌ Cron job not installed
+ℹ️  Install with: crontab -e and add:
+  10 2 * * * /opt/es-inventory-hub/scripts/run_ninja_daily.sh >> /var/log/es-inventory-hub/ninja_daily.log 2>&1
+
+ℹ️  Checking log directory: /var/log/es-inventory-hub
+⚠️  Log directory not found: /var/log/es-inventory-hub
+ℹ️  Directory will be created when cron job runs
+
+ℹ️  Checking log file: /var/log/es-inventory-hub/ninja_daily.log
+⚠️  Log file not found: /var/log/es-inventory-hub/ninja_daily.log
+ℹ️  This is normal if the cron job hasn't run yet
+
+==============================================
+❌ Some checks failed. Please review the issues above.
+ℹ️  For installation help, see: ops/CRON.md
+```
+
+### Exit Codes
+
+The verification script returns:
+- **Exit code 0**: All checks passed, cron job should be working
+- **Exit code 1**: Some checks failed, review the issues above
+
+### Troubleshooting with Verification
+
+Use the verification script to diagnose common issues:
+
+```bash
+# Check if cron job is installed
+./scripts/check_cron.sh
+
+# If script is not executable
+chmod +x /opt/es-inventory-hub/scripts/run_ninja_daily.sh
+
+# If cron job is missing, install it
+crontab -e
+# Add: 10 2 * * * /opt/es-inventory-hub/scripts/run_ninja_daily.sh >> /var/log/es-inventory-hub/ninja_daily.log 2>&1
+
+# Check again
+./scripts/check_cron.sh
+```

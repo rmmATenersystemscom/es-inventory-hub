@@ -49,7 +49,7 @@ get_next_version() {
     
     # Remove 'v' prefix and split into components
     version_number="${current_version#v}"
-    echo "$version_number" | IFS='.' read -r major minor patch
+    IFS='.' read -r major minor patch <<< "$version_number"
     
     # For now, increment patch version by default
     # In the future, this could be made configurable
@@ -193,10 +193,18 @@ main() {
     print_status "Creating tag $next_version..."
     git tag -a "$next_version" -m "$tag_message"
     
-    # Push changes and tags
-    print_status "Pushing to remote repository..."
-    git push origin "$(git branch --show-current)"
-    git push origin "$next_version"
+    # Push changes and tags (if remote exists)
+    if git remote | grep -q origin; then
+        print_status "Pushing to remote repository..."
+        if git push origin "$(git branch --show-current)" && git push origin "$next_version"; then
+            print_info "Successfully pushed to remote repository"
+        else
+            print_warning "Failed to push to remote repository, but local commit and tag were successful"
+        fi
+    else
+        print_warning "No remote repository configured - changes saved locally only"
+        print_info "To push later: git push origin $(git branch --show-current) && git push origin $next_version"
+    fi
     
     # Success summary
     echo
@@ -210,7 +218,17 @@ main() {
     echo -e "${GREEN}Files Modified:${NC}"
     git show --name-only --format="" "$next_version" | sed 's/^/- /'
     echo
-    echo -e "${GREEN}The changes have been successfully committed and pushed to the remote repository${NC}"
+    if git remote | grep -q origin; then
+        echo -e "${GREEN}The changes have been successfully committed and tagged${NC}"
+        if git ls-remote --exit-code origin >/dev/null 2>&1; then
+            echo -e "${GREEN}Changes pushed to remote repository${NC}"
+        else
+            echo -e "${YELLOW}Local commit successful - remote push may have failed${NC}"
+        fi
+    else
+        echo -e "${GREEN}The changes have been successfully committed and tagged locally${NC}"
+        echo -e "${YELLOW}No remote repository configured${NC}"
+    fi
     echo -e "${GREEN}All detailed revision notes are preserved in Git tag messages and commit history${NC}"
     echo
     echo -e "${BLUE}View this release:${NC} git show $next_version"

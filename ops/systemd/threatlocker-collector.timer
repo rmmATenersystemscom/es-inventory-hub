@@ -1,0 +1,11 @@
+[Unit]
+Description=Run ThreatLocker collector daily at 02:30
+
+[Timer]
+OnCalendar=--* 02:30:00
+Persistent=true
+AccuracySec=1m
+Unit=threatlocker-collector@%i.service
+
+[Install]
+WantedBy=timers.target

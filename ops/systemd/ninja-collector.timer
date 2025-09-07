@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Ninja collector daily at 02:10
+
+[Timer]
+OnCalendar=--* 02:10:00
+Persistent=true
+AccuracySec=1m
+Unit=ninja-collector@%i.service
+
+[Install]
+WantedBy=timers.target

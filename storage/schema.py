@@ -1,7 +1,7 @@
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import (
     Column, Integer, String, DateTime, Date, Text, ForeignKey, 
-    UniqueConstraint, Index, CheckConstraint
+    UniqueConstraint, Index, CheckConstraint, BigInteger, Boolean
 )
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlalchemy.orm import relationship
@@ -256,4 +256,22 @@ class JobRuns(Base):
         Index('idx_job_runs_job_name', 'job_name'),
         Index('idx_job_runs_started_at', 'started_at'),
         Index('idx_job_runs_status', 'status'),
+    )
+
+
+class Exceptions(Base):
+    """Exceptions table - persistent storage for cross-vendor checks and anomalies"""
+    __tablename__ = 'exceptions'
+    
+    id = Column(BigInteger, primary_key=True)
+    date_found = Column(Date, nullable=False, default=datetime.utcnow().date())
+    type = Column(String(64), nullable=False)  # e.g. MISSING_NINJA, DUPLICATE_TL, SITE_MISMATCH, SPARE_MISMATCH
+    hostname = Column(String(255), nullable=False)
+    details = Column(JSONB, nullable=False, default={})
+    resolved = Column(Boolean, nullable=False, default=False)
+    
+    __table_args__ = (
+        Index('ix_exceptions_type_date', 'type', 'date_found'),
+        Index('ix_exceptions_hostname', 'hostname'),
+        Index('ix_exceptions_resolved', 'resolved'),
     )

@@ -42,6 +42,19 @@ def get_vendor_ids(session: Session) -> Dict[str, int]:
     return {v.name: v.id for v in vendors}
 
 
+def clear_todays_exceptions(session: Session, snapshot_date: date) -> None:
+    """
+    Clear all exceptions for the given date to ensure idempotency.
+    
+    Args:
+        session: Database session
+        snapshot_date: Date to clear exceptions for
+    """
+    session.query(Exceptions).filter(
+        Exceptions.date_found == snapshot_date
+    ).delete()
+
+
 def insert_exception(
     session: Session,
     exception_type: str,
@@ -50,7 +63,7 @@ def insert_exception(
     snapshot_date: date
 ) -> bool:
     """
-    Insert an exception record if it doesn't already exist.
+    Insert an exception record.
     
     Args:
         session: Database session
@@ -60,20 +73,8 @@ def insert_exception(
         snapshot_date: Date of the snapshot
         
     Returns:
-        bool: True if exception was inserted, False if it already existed
+        bool: True if exception was inserted
     """
-    # Check if exception already exists for this date, type, and hostname
-    existing = session.query(Exceptions).filter(
-        and_(
-            Exceptions.date_found == snapshot_date,
-            Exceptions.type == exception_type,
-            Exceptions.hostname == hostname
-        )
-    ).first()
-    
-    if existing:
-        return False
-    
     # Insert new exception
     exception = Exceptions(
         date_found=snapshot_date,
@@ -89,7 +90,13 @@ def insert_exception(
 
 def check_missing_ninja(session: Session, vendor_ids: Dict[str, int], snapshot_date: date) -> int:
     """
-    Check for ThreatLocker hosts that have no matching Ninja host.
+    Check for ThreatLocker hosts that have no matching Ninja host using robust anchors.
+    
+    Uses canonical TL key: LOWER(LEFT(SPLIT_PART(hostname,'.',1),15))
+    Uses canonical Ninja keys (ANY match true):
+    1) LOWER(LEFT(SPLIT_PART(ds.hostname,'.',1),15))
+    2) LOWER(LEFT(SPLIT_PART(COALESCE(ds.raw->>'system_name', ds.raw->>'SystemName', ds.raw->>'systemName',''),'.',1),15))
+    3) LOWER(LEFT(SPLIT_PART(SPLIT_PART(COALESCE(ds.raw->>'display_name', ds.raw->>'DisplayName', ds.raw->>'displayName',''),'|',1),'.',1),15))
     
     Args:
         session: Database session
@@ -102,48 +109,108 @@ def check_missing_ninja(session: Session, vendor_ids: Dict[str, int], snapshot_d
     if 'ThreatLocker' not in vendor_ids or 'Ninja' not in vendor_ids:
         return 0
     
-    # Get all ThreatLocker hosts for the snapshot date
-    tl_hosts = session.query(DeviceSnapshot).filter(
-        and_(
-            DeviceSnapshot.snapshot_date == snapshot_date,
-            DeviceSnapshot.vendor_id == vendor_ids['ThreatLocker']
-        )
-    ).all()
+    from sqlalchemy import text
     
-    # Get all Ninja hosts for the snapshot date
-    ninja_hosts = session.query(DeviceSnapshot).filter(
+    # First, delete today's rows for type='MISSING_NINJA' to ensure idempotency
+    session.query(Exceptions).filter(
         and_(
-            DeviceSnapshot.snapshot_date == snapshot_date,
-            DeviceSnapshot.vendor_id == vendor_ids['Ninja']
+            Exceptions.date_found == snapshot_date,
+            Exceptions.type == 'MISSING_NINJA'
         )
-    ).all()
+    ).delete()
     
-    # Create set of Ninja hostname_base values for fast lookup
-    ninja_hostname_bases = set()
-    for ninja_host in ninja_hosts:
-        if ninja_host.hostname:
-            ninja_hostname_bases.add(to_base(ninja_host.hostname))
+    # Use SQL to find ThreatLocker hosts with no matching Ninja host using robust anchors
+    # Canonical TL key: LOWER(LEFT(SPLIT_PART(hostname,'.',1),15))
+    # Canonical Ninja keys (ANY match true):
+    # 1) LOWER(LEFT(SPLIT_PART(ds.hostname,'.',1),15))
+    # 2) LOWER(LEFT(SPLIT_PART(COALESCE(ds.raw->>'system_name', ds.raw->>'SystemName', ds.raw->>'systemName',''),'.',1),15))
+    # 3) LOWER(LEFT(SPLIT_PART(SPLIT_PART(COALESCE(ds.raw->>'display_name', ds.raw->>'DisplayName', ds.raw->>'displayName',''),'|',1),'.',1),15))
+    
+    # Add safeguard log line to confirm correct table name
+    print("Cross-vendor checks running against table device_snapshot")
+    
+    query = text("""
+        WITH tl_canonical AS (
+            SELECT 
+                ds.id,
+                ds.hostname,
+                ds.raw,
+                LOWER(LEFT(SPLIT_PART(ds.hostname,'.',1),15)) as canonical_key
+            FROM device_snapshot ds
+            WHERE ds.snapshot_date = :snapshot_date
+              AND ds.vendor_id = :tl_vendor_id
+              AND ds.hostname IS NOT NULL
+        ),
+        ninja_canonical AS (
+            SELECT DISTINCT
+                LOWER(LEFT(SPLIT_PART(ds.hostname,'.',1),15)) as canonical_key
+            FROM device_snapshot ds
+            WHERE ds.snapshot_date = :snapshot_date
+              AND ds.vendor_id = :ninja_vendor_id
+              AND ds.hostname IS NOT NULL
+            
+            UNION
+            
+            SELECT DISTINCT
+                LOWER(LEFT(SPLIT_PART(COALESCE(ds.raw->>'system_name', ds.raw->>'SystemName', ds.raw->>'systemName',''),'.',1),15)) as canonical_key
+            FROM device_snapshot ds
+            WHERE ds.snapshot_date = :snapshot_date
+              AND ds.vendor_id = :ninja_vendor_id
+              AND COALESCE(ds.raw->>'system_name', ds.raw->>'SystemName', ds.raw->>'systemName','') != ''
+            
+            UNION
+            
+            SELECT DISTINCT
+                LOWER(LEFT(SPLIT_PART(SPLIT_PART(COALESCE(ds.raw->>'display_name', ds.raw->>'DisplayName', ds.raw->>'displayName',''),'|',1),'.',1),15)) as canonical_key
+            FROM device_snapshot ds
+            WHERE ds.snapshot_date = :snapshot_date
+              AND ds.vendor_id = :ninja_vendor_id
+              AND COALESCE(ds.raw->>'display_name', ds.raw->>'DisplayName', ds.raw->>'displayName','') != ''
+        )
+        SELECT 
+            tl.id,
+            tl.hostname,
+            tl.raw,
+            tl.canonical_key
+        FROM tl_canonical tl
+        LEFT JOIN ninja_canonical nc ON tl.canonical_key = nc.canonical_key
+        WHERE nc.canonical_key IS NULL
+    """)
+    
+    result = session.execute(query, {
+        'snapshot_date': snapshot_date,
+        'tl_vendor_id': vendor_ids['ThreatLocker'],
+        'ninja_vendor_id': vendor_ids['Ninja']
+    })
     
     exceptions_inserted = 0
     
-    # Check each ThreatLocker host
-    for tl_host in tl_hosts:
-        if not tl_host.hostname:
-            continue
-            
-        tl_hostname_base = to_base(tl_host.hostname)
+    for row in result:
+        # Get site information
+        tl_site_name = None
+        tl_org_name = None
         
-        # If no matching Ninja host found
-        if tl_hostname_base not in ninja_hostname_bases:
-            details = {
-                'tl_hostname': tl_host.hostname,
-                'tl_hostname_base': tl_hostname_base,
-                'tl_site_name': tl_host.site.name if tl_host.site else None,
-                'tl_org_name': tl_host.raw.get('rootOrganization') if isinstance(tl_host.raw, dict) else None
-            }
-            
-            if insert_exception(session, 'MISSING_NINJA', tl_host.hostname, details, snapshot_date):
-                exceptions_inserted += 1
+        # Get site name from relationship
+        tl_device = session.query(DeviceSnapshot).filter(DeviceSnapshot.id == row.id).first()
+        if tl_device and tl_device.site:
+            tl_site_name = tl_device.site.name
+        
+        # Get org name from raw data
+        if isinstance(row.raw, dict):
+            tl_org_name = row.raw.get('rootOrganization')
+        
+        details = {
+            'tl_hostname': row.hostname,
+            'tl_canonical_key': row.canonical_key,
+            'tl_site_name': tl_site_name,
+            'tl_org_name': tl_org_name
+        }
+        
+        if insert_exception(session, 'MISSING_NINJA', row.hostname, details, snapshot_date):
+            exceptions_inserted += 1
+    
+    # Log the inserted count
+    print(f"MISSING_NINJA: Inserted {exceptions_inserted} exceptions for {snapshot_date}")
     
     return exceptions_inserted
 
@@ -164,8 +231,11 @@ def check_duplicate_tl(session: Session, vendor_ids: Dict[str, int], snapshot_da
         return 0
     
     # Query for duplicate hostname_base values in ThreatLocker data
+    # Use LEFT(LOWER(SPLIT_PART(hostname, '.', 1)), 15) normalization
     duplicates = session.query(
-        func.lower(func.split_part(DeviceSnapshot.hostname, '.', 1)).label('hostname_base'),
+        func.left(
+            func.lower(func.split_part(DeviceSnapshot.hostname, '.', 1)), 15
+        ).label('hostname_base'),
         func.count().label('count')
     ).filter(
         and_(
@@ -174,7 +244,9 @@ def check_duplicate_tl(session: Session, vendor_ids: Dict[str, int], snapshot_da
             DeviceSnapshot.hostname.isnot(None)
         )
     ).group_by(
-        func.lower(func.split_part(DeviceSnapshot.hostname, '.', 1))
+        func.left(
+            func.lower(func.split_part(DeviceSnapshot.hostname, '.', 1)), 15
+        )
     ).having(
         func.count() > 1
     ).all()
@@ -189,7 +261,9 @@ def check_duplicate_tl(session: Session, vendor_ids: Dict[str, int], snapshot_da
             and_(
                 DeviceSnapshot.snapshot_date == snapshot_date,
                 DeviceSnapshot.vendor_id == vendor_ids['ThreatLocker'],
-                func.lower(func.split_part(DeviceSnapshot.hostname, '.', 1)) == hostname_base
+                func.left(
+                    func.lower(func.split_part(DeviceSnapshot.hostname, '.', 1)), 15
+                ) == hostname_base
             )
         ).all()
         
@@ -240,12 +314,17 @@ def check_site_mismatch(session: Session, vendor_ids: Dict[str, int], snapshot_d
         )
     ).all()
     
-    # Create mapping of hostname_base to Ninja host
+    # Create mapping of normalized hostname to Ninja host using SQL normalization
     ninja_by_base = {}
     for ninja_host in ninja_hosts:
         if ninja_host.hostname:
-            hostname_base = to_base(ninja_host.hostname)
-            ninja_by_base[hostname_base] = ninja_host
+            # Use SQL normalization: LEFT(LOWER(SPLIT_PART(hostname, '.', 1)), 15)
+            normalized_hostname = session.query(
+                func.left(
+                    func.lower(func.split_part(DeviceSnapshot.hostname, '.', 1)), 15
+                )
+            ).filter(DeviceSnapshot.id == ninja_host.id).scalar()
+            ninja_by_base[normalized_hostname] = ninja_host
     
     exceptions_inserted = 0
     
@@ -254,11 +333,16 @@ def check_site_mismatch(session: Session, vendor_ids: Dict[str, int], snapshot_d
         if not tl_host.hostname:
             continue
             
-        tl_hostname_base = to_base(tl_host.hostname)
+        # Use SQL normalization: LEFT(LOWER(SPLIT_PART(hostname, '.', 1)), 15)
+        tl_normalized = session.query(
+            func.left(
+                func.lower(func.split_part(DeviceSnapshot.hostname, '.', 1)), 15
+            )
+        ).filter(DeviceSnapshot.id == tl_host.id).scalar()
         
         # If matching Ninja host found
-        if tl_hostname_base in ninja_by_base:
-            ninja_host = ninja_by_base[tl_hostname_base]
+        if tl_normalized in ninja_by_base:
+            ninja_host = ninja_by_base[tl_normalized]
             
             # Get site names
             tl_site = tl_host.site.name if tl_host.site else None
@@ -267,7 +351,7 @@ def check_site_mismatch(session: Session, vendor_ids: Dict[str, int], snapshot_d
             # Check for site mismatch
             if tl_site != ninja_site:
                 details = {
-                    'hostname_base': tl_hostname_base,
+                    'hostname_base': tl_normalized,
                     'tl_hostname': tl_host.hostname,
                     'ninja_hostname': ninja_host.hostname,
                     'tl_site': tl_site,
@@ -313,12 +397,17 @@ def check_spare_mismatch(session: Session, vendor_ids: Dict[str, int], snapshot_
         )
     ).all()
     
-    # Create mapping of hostname_base to Ninja host
+    # Create mapping of normalized hostname to Ninja host using SQL normalization
     ninja_by_base = {}
     for ninja_host in ninja_hosts:
         if ninja_host.hostname:
-            hostname_base = to_base(ninja_host.hostname)
-            ninja_by_base[hostname_base] = ninja_host
+            # Use SQL normalization: LEFT(LOWER(SPLIT_PART(hostname, '.', 1)), 15)
+            normalized_hostname = session.query(
+                func.left(
+                    func.lower(func.split_part(DeviceSnapshot.hostname, '.', 1)), 15
+                )
+            ).filter(DeviceSnapshot.id == ninja_host.id).scalar()
+            ninja_by_base[normalized_hostname] = ninja_host
     
     exceptions_inserted = 0
     
@@ -327,11 +416,16 @@ def check_spare_mismatch(session: Session, vendor_ids: Dict[str, int], snapshot_
         if not tl_host.hostname:
             continue
             
-        tl_hostname_base = to_base(tl_host.hostname)
+        # Use SQL normalization: LEFT(LOWER(SPLIT_PART(hostname, '.', 1)), 15)
+        tl_normalized = session.query(
+            func.left(
+                func.lower(func.split_part(DeviceSnapshot.hostname, '.', 1)), 15
+            )
+        ).filter(DeviceSnapshot.id == tl_host.id).scalar()
         
         # If matching Ninja host found
-        if tl_hostname_base in ninja_by_base:
-            ninja_host = ninja_by_base[tl_hostname_base]
+        if tl_normalized in ninja_by_base:
+            ninja_host = ninja_by_base[tl_normalized]
             
             # Check if Ninja marks this as spare
             is_ninja_spare = False
@@ -341,7 +435,7 @@ def check_spare_mismatch(session: Session, vendor_ids: Dict[str, int], snapshot_
             # If Ninja marks as spare but ThreatLocker has it as active
             if is_ninja_spare:
                 details = {
-                    'hostname_base': tl_hostname_base,
+                    'hostname_base': tl_normalized,
                     'tl_hostname': tl_host.hostname,
                     'ninja_hostname': ninja_host.hostname,
                     'ninja_billing_status': ninja_host.billing_status.code if ninja_host.billing_status else None,
@@ -371,6 +465,9 @@ def run_cross_vendor_checks(session: Session, snapshot_date: Optional[date] = No
     
     # Get vendor IDs
     vendor_ids = get_vendor_ids(session)
+    
+    # Clear today's exceptions for idempotency
+    clear_todays_exceptions(session, snapshot_date)
     
     # Run all checks
     results = {}

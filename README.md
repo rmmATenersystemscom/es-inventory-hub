@@ -1,6 +1,6 @@
 # ES Inventory Hub
 
-**Current Version**: v1.0.1 (stable)
+**Current Version**: v1.0.2 (stable)
 
 A centralized inventory management system for collecting and storing data from various sources including Ninja and ThreatLocker.
 
@@ -8,7 +8,7 @@ A centralized inventory management system for collecting and storing data from v
 
 This repository contains the core infrastructure for the ES Inventory Hub, providing data collection, storage, and management capabilities for enterprise security inventory tracking.
 
-## Current Version (v1.0.1)
+## Current Version (v1.0.2)
 
 This release includes the complete Ninja collector implementation with PostgreSQL UPSERT functionality, automated daily collection scripts, and comprehensive documentation.
 

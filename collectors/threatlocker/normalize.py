@@ -59,7 +59,8 @@ def build_row(tl: Dict[str, Any], ids: Dict[str, Dict[str, int]]) -> Dict[str, A
         dict: Normalized device data ready for DB insert
     """
     # Extract hostname
-    hostname = tl.get("computerName") or tl.get("hostname") or ""
+    hn = (tl.get("hostname") or tl.get("hostName") or tl.get("computerName") or "").strip()
+    hostname = hn
     
     # Get base hostname
     hostname_base = to_base(hostname)

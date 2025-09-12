@@ -39,9 +39,6 @@ def normalize_threatlocker_device(raw: Dict[str, Any]) -> Dict[str, Any]:
     # Classify device type
     device_type = _classify_device_type(raw)
     
-    # Classify billing status using the spare rule
-    billing_status = _classify_billing_status(raw)
-    
     # Prepare raw data for JSONB storage (ensure it's JSON serializable)
     raw_jsonb = _prepare_raw_for_jsonb(raw)
     
@@ -53,7 +50,6 @@ def normalize_threatlocker_device(raw: Dict[str, Any]) -> Dict[str, Any]:
         'tpm_status': tpm_status,
         'site_name': site_name,
         'device_type': device_type,
-        'billing_status': billing_status,
         'raw': raw_jsonb
     }
 
@@ -148,41 +144,6 @@ def _classify_device_type(device: Dict[str, Any]) -> str:
         
     except Exception:
         return 'unknown'  # Safe default
-
-
-def _classify_billing_status(device: Dict[str, Any]) -> str:
-    """
-    Classify device billing status using the spare rule.
-    
-    A device is "spare" if:
-    - Computer Name contains "spare" (case-insensitive), OR
-    - Organization/Location contains "spare" (case-insensitive), OR  
-    - Device Type indicates it's a VM/Virtual Machine
-    
-    Otherwise, it's "billable".
-    """
-    try:
-        # Check Group first for VM indicators
-        group = (device.get('group') or '').lower()
-        if 'vm' in group or 'virtual' in group:
-            return 'spare'
-        
-        # Get Computer Name for spare checking
-        computer_name = (device.get('computerName') or '').lower()
-        
-        # Get group name for spare checking
-        group_name = (device.get('group') or '').lower()
-        
-        # Check for spare indicators
-        if ('spare' in computer_name or 
-            'spare' in group_name):
-            return 'spare'
-        
-        # Default to billable
-        return 'billable'
-        
-    except Exception:
-        return 'billable'  # Safe default
 
 
 def _prepare_raw_for_jsonb(raw: Dict[str, Any]) -> Dict[str, Any]:

@@ -118,3 +118,32 @@ class NinjaAPI:
             # Update URL and reset params for next page
             devices_url = next_link
             params = {}  # next link already contains query parameters
+    
+    def get_device_custom_fields(self, device_id: int) -> Dict[str, Any]:
+        """
+        Get custom fields for a specific device.
+        
+        Args:
+            device_id: The device ID to fetch custom fields for
+            
+        Returns:
+            dict: Custom field data from Ninja API
+        """
+        try:
+            headers = self._get_api_headers()
+            custom_fields_url = f"{self.base_url}/api/v2/device/{device_id}/custom-fields"
+            
+            response = self.session.get(custom_fields_url, headers=headers, timeout=30)
+            response.raise_for_status()
+            
+            custom_fields_data = response.json()
+            
+            # The API returns a dict with field names as keys and values as values
+            if isinstance(custom_fields_data, dict):
+                return custom_fields_data
+            else:
+                return {}
+                
+        except Exception as e:
+            # Return empty dict if custom fields can't be fetched
+            return {}

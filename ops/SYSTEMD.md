@@ -5,10 +5,10 @@ This document describes how to set up automated daily collection from both the N
 ## Overview
 
 Both collectors are designed to run daily at specific times:
-- **Ninja collector**: 02:10 AM daily
-- **ThreatLocker collector**: 02:30 AM daily
+- **Ninja collector**: 02:10 AM Central Time daily
+- **ThreatLocker collector**: 02:31 AM Central Time daily
 
-The 20-minute stagger ensures they don't interfere with each other and provides time for any database locks to clear.
+The 21-minute stagger ensures they don't interfere with each other and provides time for any database locks to clear.
 
 ## Architecture
 

@@ -370,6 +370,11 @@ def check_spare_mismatch(session: Session, vendor_ids: Dict[str, int], snapshot_
     """
     Check for spare mismatch: ThreatLocker present but Ninja marks as spare.
     
+    Since only Ninja determines billing status, this check identifies devices that:
+    - Exist in both ThreatLocker and Ninja
+    - Are marked as 'spare' in Ninja (meaning they shouldn't be billed)
+    - Are still present in ThreatLocker (which may indicate they need cleanup)
+    
     Args:
         session: Database session
         vendor_ids: Mapping of vendor names to IDs
@@ -432,7 +437,7 @@ def check_spare_mismatch(session: Session, vendor_ids: Dict[str, int], snapshot_
             if ninja_host.billing_status and ninja_host.billing_status.code == 'spare':
                 is_ninja_spare = True
             
-            # If Ninja marks as spare but ThreatLocker has it as active
+            # If Ninja marks as spare, this may indicate a cleanup opportunity
             if is_ninja_spare:
                 details = {
                     'hostname_base': tl_normalized,
@@ -440,7 +445,8 @@ def check_spare_mismatch(session: Session, vendor_ids: Dict[str, int], snapshot_
                     'ninja_hostname': ninja_host.hostname,
                     'ninja_billing_status': ninja_host.billing_status.code if ninja_host.billing_status else None,
                     'tl_site': tl_host.site.name if tl_host.site else None,
-                    'ninja_site': ninja_host.site.name if ninja_host.site else None
+                    'ninja_site': ninja_host.site.name if ninja_host.site else None,
+                    'note': 'Device marked as spare in Ninja - consider if ThreatLocker cleanup needed'
                 }
                 
                 if insert_exception(session, 'SPARE_MISMATCH', tl_host.hostname, details, snapshot_date):

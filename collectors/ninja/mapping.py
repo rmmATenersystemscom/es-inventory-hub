@@ -3,7 +3,7 @@
 from typing import Dict, Any, Optional
 
 
-def normalize_ninja_device(raw: Dict[str, Any]) -> Dict[str, Any]:
+def normalize_ninja_device(raw: Dict[str, Any], ninja_api=None) -> Dict[str, Any]:
     """
     Normalize a raw Ninja device record into standardized format.
     
@@ -16,6 +16,8 @@ def normalize_ninja_device(raw: Dict[str, Any]) -> Dict[str, Any]:
     # Extract nested objects
     os_obj = raw.get("os") or {}
     sys_obj = raw.get("system") or {}
+    network_obj = raw.get("network") or {}
+    hardware_obj = raw.get("hardware") or {}
     
     # Get vendor device key (use device ID as unique identifier)
     vendor_device_key = str(raw.get('id', ''))
@@ -35,9 +37,6 @@ def normalize_ninja_device(raw: Dict[str, Any]) -> Dict[str, Any]:
     # Get OS name
     os_name = os_obj.get('name', '')
     
-    # Get TPM status (not typically available in Ninja API, set to empty)
-    tpm_status = ''
-    
     # Resolve site information
     site_name = _get_site_name(raw)
     
@@ -47,19 +46,69 @@ def normalize_ninja_device(raw: Dict[str, Any]) -> Dict[str, Any]:
     # Classify billing status using the spare rule
     billing_status = _classify_billing_status(raw)
     
-    # Prepare raw data for JSONB storage (ensure it's JSON serializable)
-    raw_jsonb = _prepare_raw_for_jsonb(raw)
-    
+    # Extract all the new fields to match the Ninja modal
     return {
         'vendor_device_key': vendor_device_key,
         'hostname': hostname,
         'serial_number': serial_number,
         'os_name': os_name,
-        'tpm_status': tpm_status,
         'site_name': site_name,
         'device_type': device_type,
         'billing_status': billing_status,
-        'raw': raw_jsonb
+        
+        # Core Device Information
+        'organization_name': raw.get('organizationName', ''),
+        'location_name': site_name,
+        'system_name': raw.get('systemName', ''),
+        'display_name': raw.get('displayName', ''),
+        'device_status': raw.get('status', ''),
+        'last_logged_in_user': raw.get('lastLoggedInUser', ''),
+        
+        # OS Information
+        'os_release_id': os_obj.get('releaseId', ''),
+        'os_build': os_obj.get('build', ''),
+        'os_architecture': os_obj.get('architecture', ''),
+        'os_manufacturer': os_obj.get('manufacturer', ''),
+        'device_timezone': raw.get('timezone', ''),
+        
+        # Network Information
+        'ip_addresses': _format_network_addresses(network_obj.get('addresses', [])),
+        'ipv4_addresses': _format_ipv4_addresses(network_obj.get('addresses', [])),
+        'ipv6_addresses': _format_ipv6_addresses(network_obj.get('addresses', [])),
+        'mac_addresses': _format_mac_addresses(network_obj.get('macAddresses', [])),
+        'public_ip': raw.get('publicIp', ''),
+        
+        # Hardware Information
+        'system_manufacturer': sys_obj.get('manufacturer', ''),
+        'system_model': sys_obj.get('model', ''),
+        'cpu_model': hardware_obj.get('cpuModel', ''),
+        'cpu_cores': hardware_obj.get('cpuCores'),
+        'cpu_threads': hardware_obj.get('cpuThreads'),
+        'cpu_speed_mhz': hardware_obj.get('cpuSpeedMhz'),
+        'memory_gib': _convert_memory_to_gib(hardware_obj.get('memoryBytes')),
+        'memory_bytes': hardware_obj.get('memoryBytes'),
+        'volumes': _format_volumes(hardware_obj.get('volumes', [])),
+        'bios_serial': sys_obj.get('biosSerialNumber', ''),
+        
+        # Timestamps
+        'last_online': _parse_timestamp(raw.get('lastContact')),
+        'last_update': _parse_timestamp(raw.get('lastUpdate')),
+        'last_boot_time': _parse_timestamp(raw.get('lastBootTime')),
+        'agent_install_timestamp': _parse_timestamp(raw.get('agentInstallTimestamp')),
+        
+        # Security Information - fetch from custom fields
+        **_get_security_fields(raw, ninja_api),
+        
+        # Monitoring and Health
+        'health_state': raw.get('healthState', ''),
+        'antivirus_status': _format_antivirus_status(raw.get('antivirus', {})),
+        
+        # Metadata
+        'tags': _format_tags(raw.get('tags', [])),
+        'notes': raw.get('notes', ''),
+        'approval_status': raw.get('approvalStatus', ''),
+        'node_class': raw.get('nodeClass', ''),
+        'system_domain': raw.get('domain', ''),
     }
 
 
@@ -148,22 +197,24 @@ def _classify_device_type(device: Dict[str, Any]) -> str:
 
 def _classify_billing_status(device: Dict[str, Any]) -> str:
     """
-    Classify device billing status using the spare rule.
+    Classify device billing status using simplified spare rules.
     
     A device is "spare" if:
+    - Device Type is 'vmguest' (VM guests are not billable), OR
     - Display Name contains "spare" (case-insensitive), OR
-    - Location contains "spare" (case-insensitive), OR  
-    - Node Class == VMWARE_VM_GUEST
+    - Location contains "spare" (case-insensitive)
+    
+    Note: VM Hosts (VMWARE_VM_HOST, HYPERV_VMM_GUEST) remain billable as they are physical infrastructure.
     
     Otherwise, it's "billable".
     """
     try:
-        # Check Node Class first
-        node_class = device.get('nodeClass', '').upper()
-        if node_class == 'VMWARE_VM_GUEST':
-            return 'spare'
+        # Rule 1: Check device type for VM guests (only guests are non-billable)
+        device_type = device.get('deviceType', '').lower()
+        if device_type == 'vmguest':
+            return 'spare'  # VM guests are not billable
         
-        # Get Display Name and Location for spare checking
+        # Rule 2: Check for "spare" in name or location
         display_name = device.get('displayName', '').lower()
         
         # Get location name (try multiple sources)
@@ -187,6 +238,124 @@ def _classify_billing_status(device: Dict[str, Any]) -> str:
         return 'billable'  # Safe default
 
 
+def _format_network_addresses(addresses: list) -> str:
+    """Format network addresses as comma-separated string."""
+    if not addresses:
+        return ''
+    return ', '.join(str(addr) for addr in addresses if addr)
+
+
+def _format_ipv4_addresses(addresses: list) -> str:
+    """Format IPv4 addresses as comma-separated string."""
+    if not addresses:
+        return ''
+    import ipaddress
+    ipv4_addrs = []
+    for addr in addresses:
+        try:
+            ip = ipaddress.ip_address(str(addr))
+            if isinstance(ip, ipaddress.IPv4Address):
+                ipv4_addrs.append(str(ip))
+        except ValueError:
+            continue
+    return ', '.join(ipv4_addrs)
+
+
+def _format_ipv6_addresses(addresses: list) -> str:
+    """Format IPv6 addresses as comma-separated string."""
+    if not addresses:
+        return ''
+    import ipaddress
+    ipv6_addrs = []
+    for addr in addresses:
+        try:
+            ip = ipaddress.ip_address(str(addr))
+            if isinstance(ip, ipaddress.IPv6Address):
+                ipv6_addrs.append(str(ip))
+        except ValueError:
+            continue
+    return ', '.join(ipv6_addrs)
+
+
+def _format_mac_addresses(mac_addresses: list) -> str:
+    """Format MAC addresses as comma-separated string."""
+    if not mac_addresses:
+        return ''
+    return ', '.join(str(mac) for mac in mac_addresses if mac)
+
+
+def _convert_memory_to_gib(memory_bytes: Optional[int]) -> Optional[float]:
+    """Convert memory bytes to GiB."""
+    if memory_bytes is None:
+        return None
+    try:
+        return round(memory_bytes / (1024 ** 3), 2)
+    except (TypeError, ValueError):
+        return None
+
+
+def _format_volumes(volumes: list) -> str:
+    """Format volume information as comma-separated string."""
+    if not volumes:
+        return ''
+    volume_info = []
+    for vol in volumes:
+        if isinstance(vol, dict):
+            name = vol.get('name', '')
+            size = vol.get('size', '')
+            if name and size:
+                volume_info.append(f"{name}: {size}")
+            elif name:
+                volume_info.append(name)
+        else:
+            volume_info.append(str(vol))
+    return ', '.join(volume_info)
+
+
+def _parse_timestamp(timestamp: Any) -> Optional[str]:
+    """Parse timestamp to ISO format string."""
+    if not timestamp:
+        return None
+    try:
+        if isinstance(timestamp, (int, float)):
+            # Unix timestamp
+            from datetime import datetime
+            return datetime.fromtimestamp(timestamp).isoformat()
+        elif isinstance(timestamp, str):
+            # Already a string, return as-is
+            return timestamp
+        else:
+            # Try to convert to string
+            return str(timestamp)
+    except (ValueError, TypeError, OSError):
+        return None
+
+
+def _format_antivirus_status(antivirus: dict) -> str:
+    """Format antivirus status information."""
+    if not antivirus:
+        return ''
+    
+    products = antivirus.get('products', [])
+    state = antivirus.get('state', '')
+    
+    if products and state:
+        return f"{', '.join(products)} - {state}"
+    elif products:
+        return ', '.join(products)
+    elif state:
+        return state
+    else:
+        return ''
+
+
+def _format_tags(tags: list) -> str:
+    """Format tags as comma-separated string."""
+    if not tags:
+        return ''
+    return ', '.join(str(tag) for tag in tags if tag)
+
+
 def _prepare_raw_for_jsonb(raw: Dict[str, Any]) -> Dict[str, Any]:
     """
     Prepare raw device data for JSONB storage.
@@ -208,3 +377,65 @@ def _prepare_raw_for_jsonb(raw: Dict[str, Any]) -> Dict[str, Any]:
             'organizationId': raw.get('organizationId'),
             'error': 'Failed to serialize raw data'
         }
+
+
+def _get_security_fields(raw: Dict[str, Any], ninja_api=None) -> Dict[str, Any]:
+    """Get security-related fields from custom fields API."""
+    security_fields = {
+        'has_tpm': None,
+        'tpm_enabled': None,
+        'tpm_version': '',
+        'secure_boot_available': None,
+        'secure_boot_enabled': None,
+    }
+    
+    # If no API client provided, return defaults
+    if not ninja_api:
+        return security_fields
+    
+    try:
+        device_id = raw.get('id')
+        if not device_id:
+            return security_fields
+        
+        # Fetch custom fields for this device
+        custom_fields = ninja_api.get_device_custom_fields(device_id)
+        
+        # Map custom field values to our security fields
+        # Custom field names are lowercase in Ninja API
+        security_fields['has_tpm'] = _interpret_boolean_field(custom_fields.get('hastpm'))
+        security_fields['tpm_enabled'] = _interpret_boolean_field(custom_fields.get('tpmenabled'))
+        security_fields['tpm_version'] = _interpret_tpm_version(custom_fields.get('tpmversion', ''))
+        security_fields['secure_boot_available'] = _interpret_boolean_field(custom_fields.get('securebootavailable'))
+        security_fields['secure_boot_enabled'] = _interpret_boolean_field(custom_fields.get('securebootenabled'))
+        
+    except Exception as e:
+        # If there's an error fetching custom fields, return defaults
+        pass
+    
+    return security_fields
+
+
+def _interpret_boolean_field(value: str) -> Optional[bool]:
+    """Interpret boolean custom field values."""
+    if not value or value == '':
+        return None  # Not checked
+    
+    value_lower = value.lower()
+    if value_lower == 'true':
+        return True
+    elif value_lower == 'false':
+        return False
+    else:
+        return None  # Unknown value
+
+
+def _interpret_tpm_version(value: str) -> str:
+    """Interpret TPM version custom field values."""
+    if not value or value == '':
+        return ''  # Not checked
+    
+    if value == '0.0':
+        return 'No TPM'
+    else:
+        return value  # Return version string as-is (e.g., "2.0, 0, 1.38")

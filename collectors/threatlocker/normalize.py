@@ -73,8 +73,7 @@ def build_row(tl: Dict[str, Any], ids: Dict[str, Dict[str, int]]) -> Dict[str, A
     device_type_name = map_device_type_name(tl)
     device_type_id = ids["device_type"][device_type_name]
     
-    # Get other IDs
-    billing_status_id = ids["billing_status"]["unknown"]
+    # Get vendor ID (billing status not applicable for ThreatLocker)
     vendor_id = ids["vendor"]["threatlocker"]
     
     # Set snapshot date to today
@@ -89,7 +88,6 @@ def build_row(tl: Dict[str, Any], ids: Dict[str, Dict[str, int]]) -> Dict[str, A
         'site_name': site_name,
         'org_name': org_name,
         'device_type_id': device_type_id,
-        'billing_status_id': billing_status_id,
         'vendor_id': vendor_id,
         'snapshot_date': snapshot_date,
         'raw': raw

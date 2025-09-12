@@ -77,7 +77,7 @@ def run_dry_run(ninja_api: NinjaAPI, limit: Optional[int], logger) -> None:
         logger.info(f"Processing device {device_count}: {raw_device.get('systemName', 'N/A')}")
         
         # Normalize the device
-        normalized = normalize_ninja_device(raw_device)
+        normalized = normalize_ninja_device(raw_device, ninja_api)
         
         # Print normalized device dict
         print(f"\n--- Device {device_count} ---")
@@ -133,7 +133,7 @@ def run_collection(ninja_api: NinjaAPI, snapshot_date: date, limit: Optional[int
                 logger.info(f"Processing device {device_count}: {device_name}")
                 
                 # Normalize the device
-                normalized = normalize_ninja_device(raw_device)
+                normalized = normalize_ninja_device(raw_device, ninja_api)
                 
                 # Upsert device identity
                 device_identity_id = upsert_device_identity(

@@ -4,7 +4,7 @@ This document describes how to set up automated daily collection from the Ninja 
 
 ## Overview
 
-The Ninja collector is designed to run daily at 02:10 AM to collect device inventory data. This is done via a cron job that executes the `run_ninja_daily.sh` script.
+The Ninja collector is designed to run daily at 02:10 AM Central Time to collect device inventory data. This is done via a cron job that executes the `run_ninja_daily.sh` script.
 
 ## Installation
 
@@ -16,14 +16,14 @@ To install the cron job, edit your crontab:
 crontab -e
 ```
 
-Add the following line to run the Ninja collector daily at 02:10 AM:
+Add the following line to run the Ninja collector daily at 02:10 AM Central Time:
 
 ```
 10 2 * * * /opt/es-inventory-hub/scripts/run_ninja_daily.sh >> /var/log/es-inventory-hub/ninja_daily.log 2>&1
 ```
 
 **Note**: This crontab entry:
-- Runs at 02:10 (2:10 AM) every day
+- Runs at 02:10 (2:10 AM Central Time) every day
 - Executes the shell script with proper error handling
 - Appends both stdout and stderr to the log file
 - Creates log entries with timestamps for debugging

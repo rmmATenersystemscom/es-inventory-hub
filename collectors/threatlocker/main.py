@@ -30,7 +30,7 @@ def get_id_maps(session: Any) -> Dict[str, Dict[str, int]]:
     Returns:
         dict: Dictionary containing ID mappings for all lookup tables
     """
-    from storage.schema import Vendor, DeviceType, BillingStatus
+    from storage.schema import Vendor, DeviceType
     
     # Get vendor IDs
     vendors = session.query(Vendor).all()
@@ -40,13 +40,8 @@ def get_id_maps(session: Any) -> Dict[str, Dict[str, int]]:
     device_types = session.query(DeviceType).all()
     device_type_map = {dt.code: dt.id for dt in device_types}
     
-    # Get billing status IDs
-    billing_statuses = session.query(BillingStatus).all()
-    billing_status_map = {bs.code: bs.id for bs in billing_statuses}
-    
     return {
         "vendor": vendor_map,
-        "billing_status": billing_status_map,
         "device_type": device_type_map
     }
 
@@ -115,7 +110,6 @@ def write_rows(session: Any, rows: list) -> Dict[str, int]:
                 vendor_id=vendor_id,
                 device_identity_id=device_identity_id,
                 device_type_id=row['device_type_id'],
-                billing_status_id=row['billing_status_id'],
                 hostname=row['hostname'],
                 raw=row['raw']
             )

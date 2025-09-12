@@ -138,11 +138,65 @@ class DeviceSnapshot(Base):
     hostname = Column(String(255), nullable=True)
     serial_number = Column(String(255), nullable=True)
     os_name = Column(String(255), nullable=True)
-    tpm_status = Column(String(100), nullable=True)
-    raw = Column(JSONB, nullable=True)
-    attrs = Column(JSONB, nullable=True)
-    content_hash = Column(String(64), nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow)
+    
+    # Core Device Information
+    organization_name = Column(String(255), nullable=True)
+    location_name = Column(String(255), nullable=True)
+    system_name = Column(String(255), nullable=True)
+    display_name = Column(String(255), nullable=True)
+    device_status = Column(String(100), nullable=True)
+    last_logged_in_user = Column(String(255), nullable=True)
+    
+    # OS Information
+    os_release_id = Column(String(100), nullable=True)
+    os_build = Column(String(100), nullable=True)
+    os_architecture = Column(String(100), nullable=True)
+    os_manufacturer = Column(String(255), nullable=True)
+    device_timezone = Column(String(100), nullable=True)
+    
+    # Network Information
+    ip_addresses = Column(Text, nullable=True)
+    ipv4_addresses = Column(Text, nullable=True)
+    ipv6_addresses = Column(Text, nullable=True)
+    mac_addresses = Column(Text, nullable=True)
+    public_ip = Column(String(45), nullable=True)
+    
+    # Hardware Information
+    system_manufacturer = Column(String(255), nullable=True)
+    system_model = Column(String(255), nullable=True)
+    cpu_model = Column(String(255), nullable=True)
+    cpu_cores = Column(Integer, nullable=True)
+    cpu_threads = Column(Integer, nullable=True)
+    cpu_speed_mhz = Column(Integer, nullable=True)
+    memory_gib = Column(BigInteger, nullable=True)  # Using BigInteger for large memory values
+    memory_bytes = Column(BigInteger, nullable=True)
+    volumes = Column(Text, nullable=True)
+    bios_serial = Column(String(255), nullable=True)
+    
+    # Timestamps
+    last_online = Column(TIMESTAMP(timezone=True), nullable=True)
+    last_update = Column(TIMESTAMP(timezone=True), nullable=True)
+    last_boot_time = Column(TIMESTAMP(timezone=True), nullable=True)
+    agent_install_timestamp = Column(TIMESTAMP(timezone=True), nullable=True)
+    
+    # Security Information
+    has_tpm = Column(Boolean, nullable=True)
+    tpm_enabled = Column(Boolean, nullable=True)
+    tpm_version = Column(String(50), nullable=True)
+    secure_boot_available = Column(Boolean, nullable=True)
+    secure_boot_enabled = Column(Boolean, nullable=True)
+    
+    # Monitoring and Health
+    health_state = Column(String(100), nullable=True)
+    antivirus_status = Column(Text, nullable=True)
+    
+    # Metadata
+    tags = Column(Text, nullable=True)
+    notes = Column(Text, nullable=True)
+    approval_status = Column(String(100), nullable=True)
+    node_class = Column(String(100), nullable=True)
+    system_domain = Column(String(255), nullable=True)
     
     # Unique constraint on snapshot_date, vendor_id, and device_identity_id
     __table_args__ = (
@@ -156,7 +210,15 @@ class DeviceSnapshot(Base):
         Index('idx_device_snapshot_billing_status_id', 'billing_status_id'),
         Index('idx_device_snapshot_hostname', 'hostname'),
         Index('idx_device_snapshot_serial_number', 'serial_number'),
-        Index('idx_device_snapshot_content_hash', 'content_hash'),
+        # New indexes for commonly queried fields
+        Index('idx_device_snapshot_organization_name', 'organization_name'),
+        Index('idx_device_snapshot_location_name', 'location_name'),
+        Index('idx_device_snapshot_system_name', 'system_name'),
+        Index('idx_device_snapshot_display_name', 'display_name'),
+        Index('idx_device_snapshot_device_status', 'device_status'),
+        Index('idx_device_snapshot_last_online', 'last_online'),
+        Index('idx_device_snapshot_last_update', 'last_update'),
+        Index('idx_device_snapshot_public_ip', 'public_ip'),
     )
     
     # Relationships

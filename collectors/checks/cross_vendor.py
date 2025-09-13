@@ -95,8 +95,7 @@ def check_missing_ninja(session: Session, vendor_ids: Dict[str, int], snapshot_d
     Uses canonical TL key: LOWER(LEFT(SPLIT_PART(hostname,'.',1),15))
     Uses canonical Ninja keys (ANY match true):
     1) LOWER(LEFT(SPLIT_PART(ds.hostname,'.',1),15))
-    2) LOWER(LEFT(SPLIT_PART(COALESCE(ds.raw->>'system_name', ds.raw->>'SystemName', ds.raw->>'systemName',''),'.',1),15))
-    3) LOWER(LEFT(SPLIT_PART(SPLIT_PART(COALESCE(ds.raw->>'display_name', ds.raw->>'DisplayName', ds.raw->>'displayName',''),'|',1),'.',1),15))
+    2) LOWER(LEFT(SPLIT_PART(COALESCE(ds.display_name,''),'.',1),15))
     
     Args:
         session: Database session
@@ -123,8 +122,7 @@ def check_missing_ninja(session: Session, vendor_ids: Dict[str, int], snapshot_d
     # Canonical TL key: LOWER(LEFT(SPLIT_PART(hostname,'.',1),15))
     # Canonical Ninja keys (ANY match true):
     # 1) LOWER(LEFT(SPLIT_PART(ds.hostname,'.',1),15))
-    # 2) LOWER(LEFT(SPLIT_PART(COALESCE(ds.raw->>'system_name', ds.raw->>'SystemName', ds.raw->>'systemName',''),'.',1),15))
-    # 3) LOWER(LEFT(SPLIT_PART(SPLIT_PART(COALESCE(ds.raw->>'display_name', ds.raw->>'DisplayName', ds.raw->>'displayName',''),'|',1),'.',1),15))
+    # 2) LOWER(LEFT(SPLIT_PART(COALESCE(ds.display_name,''),'.',1),15))
     
     # Add safeguard log line to confirm correct table name
     print("Cross-vendor checks running against table device_snapshot")
@@ -134,7 +132,6 @@ def check_missing_ninja(session: Session, vendor_ids: Dict[str, int], snapshot_d
             SELECT 
                 ds.id,
                 ds.hostname,
-                ds.raw,
                 LOWER(LEFT(SPLIT_PART(ds.hostname,'.',1),15)) as canonical_key
             FROM device_snapshot ds
             WHERE ds.snapshot_date = :snapshot_date
@@ -152,25 +149,16 @@ def check_missing_ninja(session: Session, vendor_ids: Dict[str, int], snapshot_d
             UNION
             
             SELECT DISTINCT
-                LOWER(LEFT(SPLIT_PART(COALESCE(ds.raw->>'system_name', ds.raw->>'SystemName', ds.raw->>'systemName',''),'.',1),15)) as canonical_key
+                LOWER(LEFT(SPLIT_PART(COALESCE(ds.display_name,''),'.',1),15)) as canonical_key
             FROM device_snapshot ds
             WHERE ds.snapshot_date = :snapshot_date
               AND ds.vendor_id = :ninja_vendor_id
-              AND COALESCE(ds.raw->>'system_name', ds.raw->>'SystemName', ds.raw->>'systemName','') != ''
-            
-            UNION
-            
-            SELECT DISTINCT
-                LOWER(LEFT(SPLIT_PART(SPLIT_PART(COALESCE(ds.raw->>'display_name', ds.raw->>'DisplayName', ds.raw->>'displayName',''),'|',1),'.',1),15)) as canonical_key
-            FROM device_snapshot ds
-            WHERE ds.snapshot_date = :snapshot_date
-              AND ds.vendor_id = :ninja_vendor_id
-              AND COALESCE(ds.raw->>'display_name', ds.raw->>'DisplayName', ds.raw->>'displayName','') != ''
+              AND ds.display_name IS NOT NULL
+              AND ds.display_name != ''
         )
         SELECT 
             tl.id,
             tl.hostname,
-            tl.raw,
             tl.canonical_key
         FROM tl_canonical tl
         LEFT JOIN ninja_canonical nc ON tl.canonical_key = nc.canonical_key
@@ -190,14 +178,12 @@ def check_missing_ninja(session: Session, vendor_ids: Dict[str, int], snapshot_d
         tl_site_name = None
         tl_org_name = None
         
-        # Get site name from relationship
+        # Get site name and org name from device snapshot
         tl_device = session.query(DeviceSnapshot).filter(DeviceSnapshot.id == row.id).first()
-        if tl_device and tl_device.site:
-            tl_site_name = tl_device.site.name
-        
-        # Get org name from raw data
-        if isinstance(row.raw, dict):
-            tl_org_name = row.raw.get('rootOrganization')
+        if tl_device:
+            if tl_device.site:
+                tl_site_name = tl_device.site.name
+            tl_org_name = tl_device.organization_name
         
         details = {
             'tl_hostname': row.hostname,
@@ -356,8 +342,8 @@ def check_site_mismatch(session: Session, vendor_ids: Dict[str, int], snapshot_d
                     'ninja_hostname': ninja_host.hostname,
                     'tl_site': tl_site,
                     'ninja_site': ninja_site,
-                    'tl_org': tl_host.raw.get('rootOrganization') if isinstance(tl_host.raw, dict) else None,
-                    'ninja_org': ninja_host.raw.get('organization') if isinstance(ninja_host.raw, dict) else None
+                    'tl_org': tl_host.organization_name,
+                    'ninja_org': ninja_host.organization_name
                 }
                 
                 if insert_exception(session, 'SITE_MISMATCH', tl_host.hostname, details, snapshot_date):

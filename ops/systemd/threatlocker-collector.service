@@ -11,4 +11,3 @@ EnvironmentFile=/opt/dashboard-project/es-dashboards/.env
 ExecStart=/bin/bash -lc '/opt/es-inventory-hub/scripts/run_threatlocker_daily.sh'
 Restart=on-failure
 RestartSec=30s
-]

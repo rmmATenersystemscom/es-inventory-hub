@@ -136,67 +136,30 @@ class DeviceSnapshot(Base):
     device_type_id = Column(Integer, ForeignKey('device_type.id'), nullable=True)
     billing_status_id = Column(Integer, ForeignKey('billing_status.id'), nullable=True)
     hostname = Column(String(255), nullable=True)
-    serial_number = Column(String(255), nullable=True)
     os_name = Column(String(255), nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow)
     
     # Core Device Information
     organization_name = Column(String(255), nullable=True)
-    location_name = Column(String(255), nullable=True)
-    system_name = Column(String(255), nullable=True)
     display_name = Column(String(255), nullable=True)
     device_status = Column(String(100), nullable=True)
-    last_logged_in_user = Column(String(255), nullable=True)
-    
-    # OS Information
-    os_release_id = Column(String(100), nullable=True)
-    os_build = Column(String(100), nullable=True)
-    os_architecture = Column(String(100), nullable=True)
-    os_manufacturer = Column(String(255), nullable=True)
-    device_timezone = Column(String(100), nullable=True)
-    
-    # Network Information
-    ip_addresses = Column(Text, nullable=True)
-    ipv4_addresses = Column(Text, nullable=True)
-    ipv6_addresses = Column(Text, nullable=True)
-    mac_addresses = Column(Text, nullable=True)
-    public_ip = Column(String(45), nullable=True)
-    
-    # Hardware Information
-    system_manufacturer = Column(String(255), nullable=True)
-    system_model = Column(String(255), nullable=True)
-    cpu_model = Column(String(255), nullable=True)
-    cpu_cores = Column(Integer, nullable=True)
-    cpu_threads = Column(Integer, nullable=True)
-    cpu_speed_mhz = Column(Integer, nullable=True)
-    memory_gib = Column(BigInteger, nullable=True)  # Using BigInteger for large memory values
-    memory_bytes = Column(BigInteger, nullable=True)
-    volumes = Column(Text, nullable=True)
-    bios_serial = Column(String(255), nullable=True)
     
     # Timestamps
     last_online = Column(TIMESTAMP(timezone=True), nullable=True)
-    last_update = Column(TIMESTAMP(timezone=True), nullable=True)
-    last_boot_time = Column(TIMESTAMP(timezone=True), nullable=True)
     agent_install_timestamp = Column(TIMESTAMP(timezone=True), nullable=True)
     
-    # Security Information
-    has_tpm = Column(Boolean, nullable=True)
-    tpm_enabled = Column(Boolean, nullable=True)
-    tpm_version = Column(String(50), nullable=True)
-    secure_boot_available = Column(Boolean, nullable=True)
-    secure_boot_enabled = Column(Boolean, nullable=True)
-    
-    # Monitoring and Health
-    health_state = Column(String(100), nullable=True)
-    antivirus_status = Column(Text, nullable=True)
-    
-    # Metadata
-    tags = Column(Text, nullable=True)
-    notes = Column(Text, nullable=True)
-    approval_status = Column(String(100), nullable=True)
-    node_class = Column(String(100), nullable=True)
-    system_domain = Column(String(255), nullable=True)
+    # ThreatLocker-specific fields
+    organization_id = Column(String(255), nullable=True)
+    computer_group = Column(String(255), nullable=True)
+    security_mode = Column(String(100), nullable=True)
+    deny_count_1d = Column(Integer, nullable=True)
+    deny_count_3d = Column(Integer, nullable=True)
+    deny_count_7d = Column(Integer, nullable=True)
+    install_date = Column(TIMESTAMP(timezone=True), nullable=True)
+    is_locked_out = Column(Boolean, nullable=True)
+    is_isolated = Column(Boolean, nullable=True)
+    agent_version = Column(String(100), nullable=True)
+    has_checked_in = Column(Boolean, nullable=True)
     
     # Unique constraint on snapshot_date, vendor_id, and device_identity_id
     __table_args__ = (
@@ -209,16 +172,19 @@ class DeviceSnapshot(Base):
         Index('idx_device_snapshot_device_type_id', 'device_type_id'),
         Index('idx_device_snapshot_billing_status_id', 'billing_status_id'),
         Index('idx_device_snapshot_hostname', 'hostname'),
-        Index('idx_device_snapshot_serial_number', 'serial_number'),
-        # New indexes for commonly queried fields
         Index('idx_device_snapshot_organization_name', 'organization_name'),
-        Index('idx_device_snapshot_location_name', 'location_name'),
-        Index('idx_device_snapshot_system_name', 'system_name'),
         Index('idx_device_snapshot_display_name', 'display_name'),
         Index('idx_device_snapshot_device_status', 'device_status'),
         Index('idx_device_snapshot_last_online', 'last_online'),
-        Index('idx_device_snapshot_last_update', 'last_update'),
-        Index('idx_device_snapshot_public_ip', 'public_ip'),
+        Index('idx_device_snapshot_agent_install_timestamp', 'agent_install_timestamp'),
+        # ThreatLocker-specific indexes
+        Index('idx_device_snapshot_organization_id', 'organization_id'),
+        Index('idx_device_snapshot_computer_group', 'computer_group'),
+        Index('idx_device_snapshot_security_mode', 'security_mode'),
+        Index('idx_device_snapshot_deny_count_7d', 'deny_count_7d'),
+        Index('idx_device_snapshot_install_date', 'install_date'),
+        Index('idx_device_snapshot_is_locked_out', 'is_locked_out'),
+        Index('idx_device_snapshot_is_isolated', 'is_isolated'),
     )
     
     # Relationships

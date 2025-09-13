@@ -24,146 +24,128 @@ def normalize_threatlocker_device(raw: Dict[str, Any]) -> Dict[str, Any]:
         ''
     )
     
-    # Get serial number (ThreatLocker doesn't provide serial numbers in the API)
-    serial_number = ''
-    
     # Get OS name
     os_name = raw.get('operatingSystem', '') or raw.get('osName', '')
     
-    # Get TPM status
-    tpm_status = _get_tpm_status(raw)
+    # Get organization name
+    organization_name = raw.get('organizationName', '') or raw.get('organization', '')
     
-    # Resolve site information
-    site_name = _get_site_name(raw)
+    # Get display name (use computer name as display name)
+    display_name = raw.get('computerName', '') or hostname
     
-    # Classify device type
-    device_type = _classify_device_type(raw)
+    # Get device status
+    device_status = _get_device_status(raw)
     
-    # Prepare raw data for JSONB storage (ensure it's JSON serializable)
-    raw_jsonb = _prepare_raw_for_jsonb(raw)
+    # Get last online timestamp
+    last_online = _parse_timestamp(raw.get('lastCheckin'))
+    
+    # Get agent install timestamp
+    agent_install_timestamp = _parse_timestamp(raw.get('installDate'))
+    
+    # ThreatLocker-specific fields
+    organization_id = str(raw.get('organizationId', '')) if raw.get('organizationId') else None
+    computer_group = raw.get('group', '') or None
+    security_mode = raw.get('mode', '') or None
+    deny_count_1d = _safe_int(raw.get('denyCountOneDay'))
+    deny_count_3d = _safe_int(raw.get('denyCountThreeDays'))
+    deny_count_7d = _safe_int(raw.get('denyCountSevenDays'))
+    install_date = _parse_timestamp(raw.get('installDate'))
+    is_locked_out = _safe_bool(raw.get('isLockedOut'))
+    is_isolated = _safe_bool(raw.get('isIsolated'))
+    agent_version = raw.get('threatLockerVersion', '') or None
+    has_checked_in = _safe_bool(raw.get('hasAtLeastOneCheckin'))
     
     return {
         'vendor_device_key': vendor_device_key,
         'hostname': hostname,
-        'serial_number': serial_number,
         'os_name': os_name,
-        'tpm_status': tpm_status,
-        'site_name': site_name,
-        'device_type': device_type,
-        'raw': raw_jsonb
+        'organization_name': organization_name,
+        'display_name': display_name,
+        'device_status': device_status,
+        'last_online': last_online,
+        'agent_install_timestamp': agent_install_timestamp,
+        'organization_id': organization_id,
+        'computer_group': computer_group,
+        'security_mode': security_mode,
+        'deny_count_1d': deny_count_1d,
+        'deny_count_3d': deny_count_3d,
+        'deny_count_7d': deny_count_7d,
+        'install_date': install_date,
+        'is_locked_out': is_locked_out,
+        'is_isolated': is_isolated,
+        'agent_version': agent_version,
+        'has_checked_in': has_checked_in
     }
 
 
-def _get_tpm_status(device: Dict[str, Any]) -> str:
-    """Extract TPM status from device data."""
-    # Check for TPM-related fields in ThreatLocker data
-    tpm_status = device.get('tpmStatus', '')
+def _get_device_status(device: Dict[str, Any]) -> str:
+    """Extract device status from ThreatLocker data."""
+    # Check for various status fields
+    status = device.get('status', '') or device.get('deviceStatus', '')
     
-    if not tpm_status:
-        # Try alternative field names
-        tpm_status = device.get('tpm', '') or device.get('trustedPlatformModule', '')
-    
-    # Normalize TPM status values
-    if tpm_status:
-        tpm_lower = tpm_status.lower()
-        if any(status in tpm_lower for status in ['enabled', 'active', 'true', 'yes']):
-            return 'enabled'
-        elif any(status in tpm_lower for status in ['disabled', 'inactive', 'false', 'no']):
-            return 'disabled'
+    if status:
+        status_lower = status.lower()
+        if any(active_status in status_lower for active_status in ['active', 'online', 'connected']):
+            return 'active'
+        elif any(inactive_status in status_lower for inactive_status in ['inactive', 'offline', 'disconnected']):
+            return 'inactive'
         else:
-            return tpm_status
+            return status
     
-    return ''
+    # Default to active if no status found
+    return 'active'
 
 
-def _get_site_name(device: Dict[str, Any]) -> Optional[str]:
-    """Extract site name from device data."""
-    # Check for organization/location fields
-    site_name = device.get('group') or device.get('organizationName') or device.get('locationName')
+def _parse_timestamp(timestamp_str: Any) -> Optional[str]:
+    """Parse timestamp string to ISO format."""
+    if not timestamp_str:
+        return None
     
-    if site_name:
-        return site_name
+    try:
+        from datetime import datetime
+        import dateutil.parser
+        
+        # Try to parse the timestamp
+        if isinstance(timestamp_str, str):
+            dt = dateutil.parser.parse(timestamp_str)
+            return dt.isoformat()
+        elif isinstance(timestamp_str, (int, float)):
+            # Handle Unix timestamp
+            dt = datetime.fromtimestamp(timestamp_str)
+            return dt.isoformat()
+        else:
+            return None
+    except Exception:
+        return None
+
+
+def _safe_int(value: Any) -> Optional[int]:
+    """Safely convert value to integer."""
+    if value is None or value == '':
+        return None
     
-    # Check if organization is embedded (object)
-    if isinstance(device.get("organization"), dict):
-        site_name = device.get("organization", {}).get("name")
-        if site_name:
-            return site_name
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return None
+
+
+def _safe_bool(value: Any) -> Optional[bool]:
+    """Safely convert value to boolean."""
+    if value is None or value == '':
+        return None
     
-    # If we still don't have a site name, return None (will be resolved later)
+    if isinstance(value, bool):
+        return value
+    
+    if isinstance(value, str):
+        value_lower = value.lower()
+        if value_lower in ['true', 'yes', '1', 'enabled', 'active']:
+            return True
+        elif value_lower in ['false', 'no', '0', 'disabled', 'inactive']:
+            return False
+    
+    if isinstance(value, (int, float)):
+        return bool(value)
+    
     return None
-
-
-def _classify_device_type(device: Dict[str, Any]) -> str:
-    """
-    Classify device as server, workstation, or unknown.
-    
-    Based on the logic from the dashboard project and ThreatLocker-specific fields.
-    """
-    try:
-        # Get device information
-        computer_name = (device.get('computerName') or '').lower()
-        os_name = (device.get('operatingSystem') or '').lower()
-        group = (device.get('group') or '').lower()
-        
-        # Check for virtualization devices first
-        if 'vm' in group or 'virtual' in group:
-            return 'unknown'  # VM Guests are not classified as servers/workstations
-        
-        # Define specific device types
-        server_types = [
-            'windows server', 'linux server', 'virtual server',
-            'server', 'srv', 'dc', 'domain controller', 'sql', 'web', 'app'
-        ]
-        
-        workstation_types = [
-            'windows desktop', 'windows laptop', 'macos desktop', 'macos laptop',
-            'desktop', 'laptop', 'workstation', 'pc', 'windows 10', 'windows 11'
-        ]
-        
-        # Check OS information first (most reliable)
-        if any(server_os in os_name for server_os in ['windows server', 'linux server', 'server']):
-            return 'server'
-        elif any(workstation_os in os_name for workstation_os in ['windows', 'macos', 'linux desktop']):
-            return 'workstation'
-        
-        # Check group field
-        if any(server_type in group for server_type in server_types):
-            return 'server'
-        elif any(workstation_type in group for workstation_type in workstation_types):
-            return 'workstation'
-        
-        # Check computer name patterns as fallback
-        if any(server_pattern in computer_name for server_pattern in ['server', 'srv', 'dc', 'sql', 'web', 'app']):
-            return 'server'
-        elif any(workstation_pattern in computer_name for workstation_pattern in ['pc', 'laptop', 'desktop', 'workstation', 'ws']):
-            return 'workstation'
-        
-        # If we can't classify it, return 'unknown'
-        return 'unknown'
-        
-    except Exception:
-        return 'unknown'  # Safe default
-
-
-def _prepare_raw_for_jsonb(raw: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Prepare raw device data for JSONB storage.
-    
-    Ensures the data is JSON serializable by handling any problematic types.
-    """
-    import json
-    
-    try:
-        # Try to serialize and deserialize to ensure it's JSON-safe
-        json_str = json.dumps(raw, default=str)  # Convert non-serializable to string
-        return json.loads(json_str)
-    except Exception:
-        # If there are still issues, return a minimal safe version
-        return {
-            'computerId': raw.get('computerId'),
-            'computerName': raw.get('computerName'),
-            'operatingSystem': raw.get('operatingSystem'),
-            'organizationName': raw.get('organizationName'),
-            'error': 'Failed to serialize raw data'
-        }

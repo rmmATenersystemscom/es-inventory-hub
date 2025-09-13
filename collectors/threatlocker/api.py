@@ -39,6 +39,7 @@ class ThreatLockerAPI:
         self.logger = get_logger(__name__)
         self.api_key = os.getenv('THREATLOCKER_API_KEY')
         self.base_url = os.getenv('THREATLOCKER_API_BASE_URL')
+        self.organization_id = os.getenv('THREATLOCKER_ORGANIZATION_ID')
         
         # Check for required credentials
         if not self.api_key:
@@ -51,13 +52,17 @@ class ThreatLockerAPI:
                 "Missing required ThreatLocker environment variable: THREATLOCKER_API_BASE_URL"
             )
         
-        # Initialize session with headers
+        # Initialize session with headers (matching working dashboard)
         self.session = requests.Session()
         self.session.headers.update({
             "authorization": self.api_key,
             "content-type": "application/json",
             "Accept": "application/json"
         })
+        
+        # Add managedorganizationid header if organization ID is provided (like working dashboard)
+        if self.organization_id:
+            self.session.headers["managedorganizationid"] = self.organization_id
     
     def fetch_devices(self, limit: Optional[int] = None, since: Optional[str] = None) -> List[Dict[str, Any]]:
         """
@@ -85,7 +90,7 @@ class ThreatLockerAPI:
                     "pageNumber": page_number,
                     "searchText": "",
                     "orderBy": "lastcheckin",
-                    "childOrganizations": True,  # Get all computers from all child organizations
+                    "childOrganizations": False,  # Get computers from main organization only (like working dashboard)
                     "showLastCheckIn": True
                 }
                 

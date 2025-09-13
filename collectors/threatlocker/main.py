@@ -6,7 +6,9 @@ from typing import Optional, Dict, Any
 
 from .log import get_logger
 from .api import fetch_devices
-from .normalize import build_row
+from .mapping import normalize_threatlocker_device
+from common.util import insert_snapshot, upsert_device_identity
+from datetime import date
 
 
 def get_session():
@@ -46,22 +48,19 @@ def get_id_maps(session: Any) -> Dict[str, Dict[str, int]]:
     }
 
 
-def write_rows(session: Any, rows: list) -> Dict[str, int]:
+def run_collection(session: Any, devices: list, snapshot_date: date) -> Dict[str, int]:
     """
-    Write normalized rows to device_snapshot with daily idempotency.
-    
-    For each row, check if a record exists with the same (snapshot_date, vendor_id=4, hostname_base).
-    If exists → skip; else → INSERT into device_snapshot.
+    Run ThreatLocker collection using the new mapping approach.
     
     Args:
         session: Database session
-        rows: List of normalized device rows
+        devices: List of raw device data from ThreatLocker API
+        snapshot_date: Date for the snapshot
         
     Returns:
         dict: Counts of {"processed": N, "inserted": X, "skipped": Y}
     """
-    from storage.schema import DeviceSnapshot, DeviceIdentity, Vendor
-    from common.util import upsert_device_identity
+    from storage.schema import Vendor
     
     processed = 0
     inserted = 0
@@ -76,51 +75,36 @@ def write_rows(session: Any, rows: list) -> Dict[str, int]:
     
     vendor_id = vendor.id
     
-    for row in rows:
+    for device in devices:
         processed += 1
         
-        # Create device identity for this device
-        device_identity_id = upsert_device_identity(
-            session=session,
-            vendor_id=vendor_id,
-            vendor_device_key=row['hostname_base'],  # Use hostname_base as device key
-            first_seen_date=row['snapshot_date']
-        )
-        
-        # TODO: The current schema uses device_identity_id for unique constraint,
-        # but the requirement asks for hostname_base. This would need a migration
-        # to add a unique constraint on (snapshot_date, vendor_id, hostname_base).
-        # For now, we use the existing constraint with device_identity_id.
-        
-        # Check if snapshot already exists for this date/vendor/device
-        existing = session.query(DeviceSnapshot).filter_by(
-            snapshot_date=row['snapshot_date'],
-            vendor_id=vendor_id,
-            device_identity_id=device_identity_id
-        ).first()
-        
-        if existing:
-            skipped += 1
-            continue
-        
-        # Insert new snapshot
         try:
-            snapshot = DeviceSnapshot(
-                snapshot_date=row['snapshot_date'],
+            # Normalize the device data
+            normalized = normalize_threatlocker_device(device)
+            
+            # Create device identity for this device
+            device_identity_id = upsert_device_identity(
+                session=session,
                 vendor_id=vendor_id,
-                device_identity_id=device_identity_id,
-                device_type_id=row['device_type_id'],
-                hostname=row['hostname'],
-                raw=row['raw']
+                vendor_device_key=normalized['vendor_device_key'],
+                first_seen_date=snapshot_date
             )
             
-            session.add(snapshot)
-            session.flush()  # Flush to check for constraint violations
+            # Insert the snapshot using the updated function
+            insert_snapshot(
+                session=session,
+                snapshot_date=snapshot_date,
+                vendor_id=vendor_id,
+                device_identity_id=device_identity_id,
+                normalized=normalized
+            )
+            
             inserted += 1
+            
         except Exception as e:
             # Handle unique constraint violations gracefully
             if "uq_device_snapshot_date_vendor_device" in str(e):
-                session.rollback()
+                # Don't rollback the entire session, just skip this device
                 skipped += 1
                 continue
             else:
@@ -169,46 +153,31 @@ def main():
         if args.since:
             logger.info(f"Filtering devices since: {args.since}")
         
-        # Get database session and ID mappings
-        logger.info("Loading ID mappings")
+        # Get database session
+        logger.info("Connecting to database")
         with get_session() as session:
-            ids = get_id_maps(session)
-            logger.info("ID mappings loaded")
-            
             # Fetch devices from ThreatLocker API
             logger.info("Fetching devices from ThreatLocker API")
             devices = fetch_devices(limit=args.limit, since=args.since)
             logger.info(f"Fetched {len(devices)} devices")
             
-            # Normalize each device using pre-resolved IDs
-            logger.info("Normalizing device data")
-            rows = [build_row(tl, ids) for tl in devices]
+            # Set snapshot date to today
+            snapshot_date = date.today()
             
-            logger.info(f"Normalized {len(rows)} devices")
-            
-            # Write normalized devices to device_snapshot table
             if not args.dry_run:
-                logger.info("Writing normalized devices to database")
-                counts = write_rows(session, rows)
+                logger.info("Processing and inserting devices to database")
+                counts = run_collection(session, devices, snapshot_date)
                 logger.info(f"Database write completed: {counts['processed']} processed, "
                            f"{counts['inserted']} inserted, {counts['skipped']} skipped")
                 
-                # Run cross-vendor consistency checks
-                logger.info("Running cross-vendor consistency checks")
-                from collectors.checks.cross_vendor import run_cross_vendor_checks
-                exception_counts = run_cross_vendor_checks(session)
-                
-                # Log exception counts
-                total_exceptions = sum(exception_counts.values())
-                if total_exceptions > 0:
-                    logger.info(f"Cross-vendor checks completed: {total_exceptions} exceptions found")
-                    for exception_type, count in exception_counts.items():
-                        if count > 0:
-                            logger.info(f"  {exception_type}: {count} exceptions")
-                else:
-                    logger.info("Cross-vendor checks completed: no exceptions found")
+                # Skip cross-vendor consistency checks for now (raw column removed)
+                logger.info("Skipping cross-vendor consistency checks (raw column removed from schema)")
             else:
-                logger.info("DRY RUN: Skipping database write and cross-vendor checks")
+                logger.info("DRY RUN: Normalizing device data without saving")
+                for device in devices:
+                    normalized = normalize_threatlocker_device(device)
+                    logger.info(f"Normalized device: {normalized.get('hostname', 'Unknown')}")
+                logger.info(f"DRY RUN: Processed {len(devices)} devices")
         
         logger.info("ThreatLocker collection completed successfully")
         

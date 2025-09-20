@@ -177,6 +177,13 @@ def insert_snapshot(
         'is_isolated': normalized.get('is_isolated'),
         'agent_version': normalized.get('agent_version'),
         'has_checked_in': normalized.get('has_checked_in'),
+        
+        # TPM and SecureBoot fields (Ninja-specific)
+        'has_tpm': normalized.get('has_tpm'),
+        'tpm_enabled': normalized.get('tpm_enabled'),
+        'tpm_version': normalized.get('tpm_version'),
+        'secure_boot_available': normalized.get('secure_boot_available'),
+        'secure_boot_enabled': normalized.get('secure_boot_enabled'),
     }
     
     # Perform PostgreSQL upsert
@@ -212,6 +219,13 @@ def insert_snapshot(
         'is_isolated': stmt.excluded.is_isolated,
         'agent_version': stmt.excluded.agent_version,
         'has_checked_in': stmt.excluded.has_checked_in,
+        
+        # TPM and SecureBoot fields (Ninja-specific)
+        'has_tpm': stmt.excluded.has_tpm,
+        'tpm_enabled': stmt.excluded.tpm_enabled,
+        'tpm_version': stmt.excluded.tpm_version,
+        'secure_boot_available': stmt.excluded.secure_boot_available,
+        'secure_boot_enabled': stmt.excluded.secure_boot_enabled,
     }
     
     # Add ON CONFLICT clause for the unique constraint

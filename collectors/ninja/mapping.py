@@ -417,9 +417,9 @@ def _get_security_fields(raw: Dict[str, Any], ninja_api=None) -> Dict[str, Any]:
 
 
 def _interpret_boolean_field(value: str) -> Optional[bool]:
-    """Interpret boolean custom field values."""
+    """Interpret boolean custom field values according to new specifications."""
     if not value or value == '':
-        return None  # Not checked
+        return None  # Not checked (PowerShell script not run)
     
     value_lower = value.lower()
     if value_lower == 'true':
@@ -431,9 +431,9 @@ def _interpret_boolean_field(value: str) -> Optional[bool]:
 
 
 def _interpret_tpm_version(value: str) -> str:
-    """Interpret TPM version custom field values."""
+    """Interpret TPM version custom field values according to new specifications."""
     if not value or value == '':
-        return ''  # Not checked
+        return ''  # Not checked (PowerShell script not run)
     
     if value == '0.0':
         return 'No TPM'

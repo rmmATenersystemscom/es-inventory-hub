@@ -19,11 +19,26 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Remove fields that are not in the Ninja modal
-    op.drop_column('device_snapshot', 'tpm_status')
-    op.drop_column('device_snapshot', 'raw')
-    op.drop_column('device_snapshot', 'attrs')
-    op.drop_column('device_snapshot', 'content_hash')
+    # Remove fields that are not in the Ninja modal (if they exist)
+    try:
+        op.drop_column('device_snapshot', 'tpm_status')
+    except Exception:
+        pass  # Column doesn't exist, skip
+    
+    try:
+        op.drop_column('device_snapshot', 'raw')
+    except Exception:
+        pass  # Column doesn't exist, skip
+        
+    try:
+        op.drop_column('device_snapshot', 'attrs')
+    except Exception:
+        pass  # Column doesn't exist, skip
+        
+    try:
+        op.drop_column('device_snapshot', 'content_hash')
+    except Exception:
+        pass  # Column doesn't exist, skip
     
     # Drop the index for content_hash since we're removing the column (if it exists)
     try:

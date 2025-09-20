@@ -161,6 +161,13 @@ class DeviceSnapshot(Base):
     agent_version = Column(String(100), nullable=True)
     has_checked_in = Column(Boolean, nullable=True)
     
+    # TPM and SecureBoot fields (Ninja-specific)
+    has_tpm = Column(Boolean, nullable=True)
+    tpm_enabled = Column(Boolean, nullable=True)
+    tpm_version = Column(String(100), nullable=True)
+    secure_boot_available = Column(Boolean, nullable=True)
+    secure_boot_enabled = Column(Boolean, nullable=True)
+    
     # Unique constraint on snapshot_date, vendor_id, and device_identity_id
     __table_args__ = (
         UniqueConstraint('snapshot_date', 'vendor_id', 'device_identity_id', 
@@ -185,6 +192,12 @@ class DeviceSnapshot(Base):
         Index('idx_device_snapshot_install_date', 'install_date'),
         Index('idx_device_snapshot_is_locked_out', 'is_locked_out'),
         Index('idx_device_snapshot_is_isolated', 'is_isolated'),
+        # TPM and SecureBoot indexes
+        Index('idx_device_snapshot_has_tpm', 'has_tpm'),
+        Index('idx_device_snapshot_tpm_enabled', 'tpm_enabled'),
+        Index('idx_device_snapshot_tpm_version', 'tpm_version'),
+        Index('idx_device_snapshot_secure_boot_available', 'secure_boot_available'),
+        Index('idx_device_snapshot_secure_boot_enabled', 'secure_boot_enabled'),
     )
     
     # Relationships

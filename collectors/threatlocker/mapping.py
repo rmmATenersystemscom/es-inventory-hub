@@ -16,13 +16,14 @@ def normalize_threatlocker_device(raw: Dict[str, Any]) -> Dict[str, Any]:
     # Get vendor device key (use computer ID as unique identifier)
     vendor_device_key = str(raw.get('computerId', ''))
     
-    # Get hostname (try multiple fields)
-    hostname = (
-        raw.get('computerName') or 
-        raw.get('hostname') or 
-        raw.get('name') or 
-        ''
-    )
+    # Get hostname (hostname field is required - no fallbacks)
+    # Note: computerName contains pipe symbols like "CHI-4YHKJL3 | Keith Oneil" so it's not used
+    hostname = raw.get('hostname', '')
+    
+    # Validate that hostname is present - this is critical for device matching
+    if not hostname or not hostname.strip():
+        computer_id = raw.get('computerId', 'Unknown')
+        raise ValueError(f"ThreatLocker device {computer_id} is missing hostname field - cannot continue without hostname for device matching")
     
     # Get OS name
     os_name = raw.get('operatingSystem', '') or raw.get('osName', '')
@@ -30,8 +31,8 @@ def normalize_threatlocker_device(raw: Dict[str, Any]) -> Dict[str, Any]:
     # Get organization name
     organization_name = raw.get('organizationName', '') or raw.get('organization', '')
     
-    # Get display name (use computer name as display name)
-    display_name = raw.get('computerName', '') or hostname
+    # Get display name (use hostname as display name)
+    display_name = hostname
     
     # Get device status
     device_status = _get_device_status(raw)

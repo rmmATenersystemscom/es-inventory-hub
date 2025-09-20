@@ -58,9 +58,14 @@ def build_row(tl: Dict[str, Any], ids: Dict[str, Dict[str, int]]) -> Dict[str, A
     Returns:
         dict: Normalized device data ready for DB insert
     """
-    # Extract hostname
-    hn = (tl.get("hostname") or tl.get("hostName") or tl.get("computerName") or "").strip()
-    hostname = hn
+    # Extract hostname (hostname field is required - no fallbacks)
+    # Note: computerName contains pipe symbols like "CHI-4YHKJL3 | Keith Oneil" so it's not used
+    hostname = (tl.get("hostname") or "").strip()
+    
+    # Validate that hostname is present - this is critical for device matching
+    if not hostname:
+        computer_id = tl.get("computerId", "Unknown")
+        raise ValueError(f"ThreatLocker device {computer_id} is missing hostname field - cannot continue without hostname for device matching")
     
     # Get base hostname
     hostname_base = to_base(hostname)

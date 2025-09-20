@@ -614,9 +614,11 @@ psql -h localhost -U postgres -d es_inventory_hub -c "SELECT schemaname,tablenam
 - **Database Utils**: `/opt/es-inventory-hub/common/db.py`
 - **Configuration**: `/opt/es-inventory-hub/common/config.py`
 - **Cross-vendor Checks**: `/opt/es-inventory-hub/collectors/checks/cross_vendor.py`
+- **Device Matching Logic**: [DEVICE_MATCHING_LOGIC.md](./DEVICE_MATCHING_LOGIC.md)
 
 ### **Documentation**
 - **Main README**: `/opt/es-inventory-hub/README.md`
+- **Device Matching Logic**: [DEVICE_MATCHING_LOGIC.md](./DEVICE_MATCHING_LOGIC.md) - **CRITICAL for variance reporting**
 - **API Guide**: `/opt/dashboard-project/docs/THREATLOCKER_API_GUIDE.md`
 - **Database Migrations**: `/opt/es-inventory-hub/storage/alembic/versions/`
 

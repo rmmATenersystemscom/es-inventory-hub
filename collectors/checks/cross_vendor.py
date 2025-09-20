@@ -120,9 +120,8 @@ def check_missing_ninja(session: Session, vendor_ids: Dict[str, int], snapshot_d
     
     # Use SQL to find ThreatLocker hosts with no matching Ninja host using robust anchors
     # Canonical TL key: LOWER(LEFT(SPLIT_PART(hostname,'.',1),15))
-    # Canonical Ninja keys (ANY match true):
-    # 1) LOWER(LEFT(SPLIT_PART(ds.hostname,'.',1),15))
-    # 2) LOWER(LEFT(SPLIT_PART(COALESCE(ds.display_name,''),'.',1),15))
+    # Canonical Ninja key: LOWER(LEFT(SPLIT_PART(ds.hostname,'.',1),15))
+    # Note: display_name is never used as anchor for device matching
     
     # Add safeguard log line to confirm correct table name
     print("Cross-vendor checks running against table device_snapshot")
@@ -145,16 +144,6 @@ def check_missing_ninja(session: Session, vendor_ids: Dict[str, int], snapshot_d
             WHERE ds.snapshot_date = :snapshot_date
               AND ds.vendor_id = :ninja_vendor_id
               AND ds.hostname IS NOT NULL
-            
-            UNION
-            
-            SELECT DISTINCT
-                LOWER(LEFT(SPLIT_PART(COALESCE(ds.display_name,''),'.',1),15)) as canonical_key
-            FROM device_snapshot ds
-            WHERE ds.snapshot_date = :snapshot_date
-              AND ds.vendor_id = :ninja_vendor_id
-              AND ds.display_name IS NOT NULL
-              AND ds.display_name != ''
         )
         SELECT 
             tl.id,

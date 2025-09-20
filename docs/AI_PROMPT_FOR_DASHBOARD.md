@@ -19,6 +19,19 @@ This file contains **ALL** the information you need including:
 - Essential database queries
 - Security and deployment considerations
 
+### **Device Matching Logic (CRITICAL for Variance Reporting)**
+**ESSENTIAL**: You must also read the device matching logic document:
+```
+/opt/es-inventory-hub/docs/DEVICE_MATCHING_LOGIC.md
+```
+
+This document explains how devices are matched between Ninja and ThreatLocker vendors, including:
+- Canonical key generation algorithms
+- Cross-vendor matching processes
+- Variance check types (MISSING_NINJA, DUPLICATE_TL, SITE_MISMATCH, SPARE_MISMATCH)
+- Essential SQL queries for device matching
+- Implementation details and usage examples
+
 ### **Current System Status**
 - **Database**: PostgreSQL with 1,140+ devices (758 Ninja + 382 ThreatLocker)
 - **Active Exceptions**: 41 variance issues requiring attention
@@ -49,11 +62,12 @@ Create your dashboard project at:
 
 ### **Your Approach**
 1. **Start by reading** `/opt/es-inventory-hub/DATABASE_ACCESS_GUIDE.md` completely
-2. **Follow the setup instructions** in the guide to create your project
-3. **Use the provided code templates** as your foundation
-4. **Test the database connection** using the provided test script
-5. **Build the dashboard** using the schema and query examples
-6. **Implement the UI/UX** based on the separate layout instructions you'll receive
+2. **Read the device matching logic** in `/opt/es-inventory-hub/docs/DEVICE_MATCHING_LOGIC.md`
+3. **Follow the setup instructions** in the guide to create your project
+4. **Use the provided code templates** as your foundation
+5. **Test the database connection** using the provided test script
+6. **Build the dashboard** using the schema and query examples
+7. **Implement the UI/UX** based on the separate layout instructions you'll receive
 
 ### **Success Criteria**
 - ✅ Dashboard successfully connects to ES Inventory Hub database
@@ -64,19 +78,21 @@ Create your dashboard project at:
 - ✅ Responsive, professional user interface
 
 ### **Important Notes**
-- The database access guide contains **everything** you need - no additional database information is required
+- The database access guide contains **everything** you need for database connection and setup
+- The device matching logic document contains **everything** you need for understanding variance reporting
 - Focus on the variance data in the `exceptions` table as your primary data source
 - Use the existing ES Inventory Hub database - do not create a new database
 - Follow the project structure and naming conventions outlined in the guide
-- The guide includes complete code examples and templates to get you started
+- Both guides include complete code examples and templates to get you started
 
 ### **Next Steps**
 1. Read the complete DATABASE_ACCESS_GUIDE.md file
-2. Set up your project following the guide's instructions
-3. Test the database connection
-4. Build the dashboard using the provided templates and examples
-5. Implement the UI based on the separate layout instructions you'll receive
+2. Read the DEVICE_MATCHING_LOGIC.md file to understand variance reporting
+3. Set up your project following the guide's instructions
+4. Test the database connection
+5. Build the dashboard using the provided templates and examples
+6. Implement the UI based on the separate layout instructions you'll receive
 
-**Remember**: The DATABASE_ACCESS_GUIDE.md file is your complete reference - it contains all the technical details, code examples, and setup instructions you need to successfully build this dashboard.
+**Remember**: The DATABASE_ACCESS_GUIDE.md file is your complete reference for database connection and setup. The DEVICE_MATCHING_LOGIC.md file is your complete reference for understanding how devices are matched and how variance reporting works. Both documents contain all the technical details, code examples, and setup instructions you need to successfully build this dashboard.
 
 

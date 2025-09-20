@@ -22,14 +22,14 @@ def normalize_ninja_device(raw: Dict[str, Any], ninja_api=None) -> Dict[str, Any
     # Get vendor device key (use device ID as unique identifier)
     vendor_device_key = str(raw.get('id', ''))
     
-    # Get hostname (try multiple fields)
-    hostname = (
-        raw.get('systemName') or 
-        raw.get('hostname') or 
-        raw.get('deviceName') or 
-        raw.get('dnsName') or 
-        ''
-    )
+    # Get hostname (only use systemName field - this is analogous to ThreatLocker's hostname)
+    # Note: displayName should never be used as anchor for device matching
+    hostname = raw.get('systemName', '')
+    
+    # Validate that hostname is present - this is critical for device matching
+    if not hostname or not hostname.strip():
+        device_id = raw.get('id', 'Unknown')
+        raise ValueError(f"Ninja device {device_id} is missing systemName field - cannot continue without systemName for device matching")
     
     # Get serial number
     serial_number = sys_obj.get('serialNumber', '') or sys_obj.get('biosSerialNumber', '')

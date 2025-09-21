@@ -310,3 +310,19 @@ git tag --sort=-version:refname
 # View latest tag details
 git show $(git tag --sort=-version:refname | head -1)
 ```
+
+---
+
+## 📚 Documentation
+
+**Complete documentation is available in the `docs/` directory:**
+
+- **[docs/README.md](docs/README.md)** - **Complete documentation index and quick start guide**
+- **[docs/DASHBOARD_INTEGRATION_GUIDE.md](docs/DASHBOARD_INTEGRATION_GUIDE.md)** - **Dashboard integration guide with API endpoints**
+- **[docs/DATABASE_ACCESS_GUIDE.md](docs/DATABASE_ACCESS_GUIDE.md)** - Database connection and schema information
+- **[docs/DEVICE_MATCHING_LOGIC.md](docs/DEVICE_MATCHING_LOGIC.md)** - Device matching algorithms and variance detection
+- **[docs/SYSTEMD.md](docs/SYSTEMD.md)** - Systemd service configuration
+- **[docs/CRON.md](docs/CRON.md)** - Cron job setup (alternative to systemd)
+
+**🚀 For Dashboard Developers:** Start with `docs/DASHBOARD_INTEGRATION_GUIDE.md`
+**🔧 For API Integration:** See `docs/API_QUICK_REFERENCE.md` and `docs/api_server.py`

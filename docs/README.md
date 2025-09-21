@@ -1,67 +1,202 @@
 # ES Inventory Hub Documentation
 
-This directory contains all project documentation for the ES Inventory Hub.
-
-## 📚 Documentation Index
-
-### **API Documentation**
-- **[Ninja API Documentation](NINJA_API_DOCUMENTATION.md)** - Comprehensive NinjaRMM API guide including TPM/SecureBoot collection
-- **[ThreatLocker API Guide](THREATLOCKER_API_GUIDE.md)** - Comprehensive ThreatLocker API integration documentation
-
-### **Database Documentation**
-- **[Database Access Guide](DATABASE_ACCESS_GUIDE.md)** - Connection details and database management
-- **[Schema Update Summary](SCHEMA_UPDATE_SUMMARY.md)** - Database schema changes and migrations
-- **[Migration Completed](MIGRATION_COMPLETED.md)** - Migration status and completion details
-
-### **Operational Documentation**
-- **[Systemd Service Configuration](SYSTEMD.md)** - System service setup and management
-- **[Cron Job Configuration](CRON.md)** - Scheduled task setup and maintenance
-
-### **Development Documentation**
-- **[AI Prompt for Dashboard](AI_PROMPT_FOR_DASHBOARD.md)** - AI assistant prompts for dashboard development
-- **[Check-In Process](CHECK_IN_PROCESS.md)** - Git workflow and versioning process
-
-## 🗂️ Documentation Structure
-
-```
-docs/
-├── README.md                           # This index file
-├── NINJA_API_DOCUMENTATION.md         # Comprehensive NinjaRMM API guide (symbolic link)
-├── THREATLOCKER_API_GUIDE.md          # ThreatLocker API integration
-├── DATABASE_ACCESS_GUIDE.md           # Database connection and management
-├── SCHEMA_UPDATE_SUMMARY.md           # Database schema documentation
-├── MIGRATION_COMPLETED.md             # Migration status tracking
-├── SYSTEMD.md                         # System service configuration
-├── CRON.md                           # Scheduled task configuration
-├── AI_PROMPT_FOR_DASHBOARD.md        # Development prompts
-└── CHECK_IN_PROCESS.md               # Git workflow (symbolic link)
-```
-
-## 🔍 Quick Reference
-
-### **For Developers**
-- Start with [Database Access Guide](DATABASE_ACCESS_GUIDE.md) for setup
-- Review [Schema Update Summary](SCHEMA_UPDATE_SUMMARY.md) for database structure
-- Use [Check-In Process](CHECK_IN_PROCESS.md) for versioning workflow
-
-### **For Operations**
-- Configure services with [Systemd Service Configuration](SYSTEMD.md)
-- Set up scheduled tasks with [Cron Job Configuration](CRON.md)
-- Monitor with [Database Access Guide](DATABASE_ACCESS_GUIDE.md)
-
-### **For API Integration**
-- Ninja integration: [Ninja API Documentation](NINJA_API_DOCUMENTATION.md)
-- ThreatLocker integration: [ThreatLocker API Guide](THREATLOCKER_API_GUIDE.md)
-
-## 📝 Documentation Standards
-
-- All documentation files use Markdown format
-- Include clear headings and table of contents
-- Provide code examples where applicable
-- Keep documentation up-to-date with code changes
-- Use consistent formatting and structure
+**Complete documentation for the ES Inventory Hub system - a cross-vendor device inventory management platform.**
 
 ---
 
-*Last updated: September 20, 2025*
-*ES Inventory Hub v1.1.1*
+## 📚 **Documentation Overview**
+
+This directory contains comprehensive documentation for the ES Inventory Hub system, which collects and analyzes device inventory data from NinjaRMM and ThreatLocker to identify discrepancies and maintain data consistency.
+
+---
+
+## 🚀 **Quick Start Guides**
+
+### **For Dashboard Developers**
+- **[DASHBOARD_INTEGRATION_GUIDE.md](./DASHBOARD_INTEGRATION_GUIDE.md)** - Complete integration guide for building variance dashboards
+- **[AI_PROMPT_FOR_DASHBOARD.md](./AI_PROMPT_FOR_DASHBOARD.md)** - AI prompt for dashboard development
+- **[VARIANCE_DASHBOARD_PROMPT.md](../VARIANCE_DASHBOARD_PROMPT.md)** - Detailed dashboard requirements and specifications
+
+### **For Database Access**
+- **[DATABASE_ACCESS_GUIDE.md](./DATABASE_ACCESS_GUIDE.md)** - Complete database connection guide with schemas and queries
+- **[DEVICE_MATCHING_LOGIC.md](./DEVICE_MATCHING_LOGIC.md)** - How devices are matched between vendors
+
+### **For API Integration**
+- **[api_server.py](./api_server.py)** - REST API server for variance data and collector management
+- **[API_QUICK_REFERENCE.md](./API_QUICK_REFERENCE.md)** - Quick reference for API endpoints and usage
+- **[requirements-api.txt](./requirements-api.txt)** - Python dependencies for API server
+- **[test_api.py](./test_api.py)** - API testing script
+
+---
+
+## 🔧 **System Administration**
+
+### **Service Management**
+- **[SYSTEMD.md](./SYSTEMD.md)** - Systemd service setup and management
+- **[CRON.md](./CRON.md)** - Cron job configuration (alternative to systemd)
+
+### **Data Collection**
+- **[NINJA_API_DOCUMENTATION.md](./NINJA_API_DOCUMENTATION.md)** - NinjaRMM API integration details
+- **[THREATLOCKER_API_GUIDE.md](./THREATLOCKER_API_GUIDE.md)** - ThreatLocker API integration details
+
+### **Migration & Updates**
+- **[MIGRATION_COMPLETED.md](./MIGRATION_COMPLETED.md)** - Database migration summary
+- **[SCHEMA_UPDATE_SUMMARY.md](./SCHEMA_UPDATE_SUMMARY.md)** - Recent schema changes
+- **[CHECK_IN_PROCESS.md](./CHECK_IN_PROCESS.md)** - Data collection process details
+
+---
+
+## 📊 **System Architecture**
+
+### **Core Components**
+1. **Data Collectors** - Automated daily collection from NinjaRMM and ThreatLocker
+2. **Cross-Vendor Analysis** - Identifies discrepancies between vendor inventories
+3. **Variance Reporting** - Tracks and manages inventory inconsistencies
+4. **REST API** - Provides programmatic access to variance data
+5. **Dashboard Integration** - Web interface for variance management
+
+### **Data Flow**
+```
+NinjaRMM (02:10 AM) → Database → Cross-Vendor Analysis → Variance Report
+ThreatLocker (02:31 AM) → Database → Cross-Vendor Analysis → Variance Report
+```
+
+### **Variance Types**
+- **MISSING_NINJA** - Devices in ThreatLocker but not in NinjaRMM
+- **DUPLICATE_TL** - Duplicate hostnames in ThreatLocker
+- **SITE_MISMATCH** - Same device assigned to different sites
+- **SPARE_MISMATCH** - Devices marked as spare in Ninja but still in ThreatLocker
+
+---
+
+## 🔗 **API Endpoints**
+
+### **System Status**
+- `GET /api/health` - Health check
+- `GET /api/status` - Overall system status
+- `GET /api/collectors/status` - Collector service status
+
+### **Variance Reports**
+- `GET /api/variance-report/latest` - Latest variance report
+- `GET /api/variance-report/{date}` - Specific date variance report
+- `GET /api/exceptions` - Exception data with filtering
+
+### **Collector Management**
+- `POST /api/collectors/run` - Trigger collector runs
+- `POST /api/exceptions/{id}/resolve` - Mark exceptions as resolved
+
+---
+
+## 🗄️ **Database Schema**
+
+### **Primary Tables**
+- **`exceptions`** - Variance data and cross-vendor discrepancies
+- **`device_snapshot`** - Device inventory from both vendors
+- **`vendor`** - Vendor information (Ninja, ThreatLocker)
+- **`device_identity`** - Unique device identifiers
+- **`device_type`** - Device type classifications
+
+### **Connection Details**
+```
+Host: localhost
+Port: 5432
+Database: es_inventory_hub
+Username: postgres
+Password: Xat162gT2Qsg4WDlO5r
+```
+
+---
+
+## 📈 **Current System Status**
+
+- **Total Devices**: 1,140+ (758 Ninja + 382 ThreatLocker)
+- **Active Exceptions**: 100+ variance issues
+- **Collection Schedule**: Daily at 02:10 AM (Ninja) and 02:31 AM (ThreatLocker)
+- **Data Freshness**: Real-time variance detection
+- **API Status**: Fully operational
+
+---
+
+## 🛠️ **Getting Started**
+
+### **1. For Dashboard Developers**
+```bash
+# Read the integration guide
+cat docs/DASHBOARD_INTEGRATION_GUIDE.md
+
+# Start the API server
+cd /opt/es-inventory-hub
+python3 docs/api_server.py
+
+# Test the API
+python3 docs/test_api.py
+```
+
+### **2. For System Administrators**
+```bash
+# Check service status
+systemctl status ninja-collector.service
+systemctl status threatlocker-collector@rene.service
+
+# View logs
+journalctl -u ninja-collector.service
+journalctl -u threatlocker-collector@rene.service
+```
+
+### **3. For Database Access**
+```bash
+# Connect to database
+psql postgresql://postgres:Xat162gT2Qsg4WDlO5r@localhost:5432/es_inventory_hub
+
+# Run variance queries (see DATABASE_ACCESS_GUIDE.md)
+```
+
+---
+
+## 📞 **Support & Troubleshooting**
+
+### **Common Issues**
+1. **Collectors not running** - Check systemd service status
+2. **No variance data** - Verify both vendors have data for the same date
+3. **API connection issues** - Ensure API server is running on port 5000
+4. **Database connection** - Verify PostgreSQL is running and accessible
+
+### **Log Locations**
+- **Systemd logs**: `journalctl -u <service-name>`
+- **Application logs**: `/var/log/es-inventory-hub/`
+- **API server logs**: Console output when running `api_server.py`
+
+### **Useful Commands**
+```bash
+# Check collector status
+systemctl list-timers | grep -E "(ninja|threatlocker)"
+
+# View recent exceptions
+psql -d es_inventory_hub -c "SELECT * FROM exceptions ORDER BY date_found DESC LIMIT 10;"
+
+# Test API endpoints
+curl http://localhost:5000/api/health
+curl http://localhost:5000/api/variance-report/latest
+```
+
+---
+
+## 📝 **Documentation Maintenance**
+
+This documentation is maintained as part of the ES Inventory Hub project. When making changes:
+
+1. **Update relevant documentation files**
+2. **Test API endpoints** using `test_api.py`
+3. **Verify database queries** in the access guide
+4. **Update this README** if adding new documentation
+
+---
+
+## 🎯 **Next Steps**
+
+- **Dashboard Development** - Use the integration guide to build variance dashboards
+- **API Integration** - Implement REST API endpoints in your applications
+- **Monitoring** - Set up alerts for collector failures and data quality issues
+- **Automation** - Implement automated exception resolution workflows
+
+**The ES Inventory Hub system is fully operational and ready for integration!** 🚀

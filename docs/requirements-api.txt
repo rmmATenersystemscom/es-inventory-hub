@@ -1,0 +1,6 @@
+# ES Inventory Hub API Server Requirements
+Flask==2.3.3
+Flask-CORS==4.0.0
+SQLAlchemy==2.0.21
+psycopg2-binary==2.9.7
+python-dotenv==1.0.0

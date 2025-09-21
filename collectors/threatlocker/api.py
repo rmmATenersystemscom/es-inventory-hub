@@ -90,7 +90,7 @@ class ThreatLockerAPI:
                     "pageNumber": page_number,
                     "searchText": "",
                     "orderBy": "lastcheckin",
-                    "childOrganizations": False,  # Get computers from main organization only (like working dashboard)
+                    "childOrganizations": True,  # Get computers from all child organizations (full dataset)
                     "showLastCheckIn": True
                 }
                 

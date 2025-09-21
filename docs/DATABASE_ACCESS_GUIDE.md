@@ -331,13 +331,18 @@ GROUP BY organization_name
 ORDER BY device_count DESC;
 ```
 
-### **Variance Analysis Queries**
+### **Variance Analysis Queries (Updated for Clean Hostnames)**
 ```sql
 -- Get missing Ninja devices (ThreatLocker devices not in Ninja)
-SELECT tl.hostname, tl.organization_name, tl.snapshot_date
+-- Note: Uses clean hostname extraction to handle pipe symbols
+SELECT 
+    LOWER(LEFT(SPLIT_PART(SPLIT_PART(tl.hostname,'|',1),'.',1),15)) as clean_hostname,
+    tl.organization_name, 
+    tl.snapshot_date
 FROM device_snapshot tl
 LEFT JOIN device_snapshot ninja ON (
-    LOWER(SPLIT_PART(tl.hostname, '.', 1)) = LOWER(SPLIT_PART(ninja.hostname, '.', 1))
+    LOWER(LEFT(SPLIT_PART(SPLIT_PART(tl.hostname,'|',1),'.',1),15)) = 
+    LOWER(LEFT(SPLIT_PART(ninja.hostname,'.',1),15))
     AND ninja.vendor_id = 3
     AND ninja.snapshot_date = tl.snapshot_date
 )
@@ -346,16 +351,30 @@ AND tl.snapshot_date = CURRENT_DATE
 AND ninja.id IS NULL;
 
 -- Get spare devices still in ThreatLocker
-SELECT tl.hostname, ninja.display_name, ninja.billing_status_id
+SELECT 
+    LOWER(LEFT(SPLIT_PART(SPLIT_PART(tl.hostname,'|',1),'.',1),15)) as clean_tl_hostname,
+    LOWER(LEFT(SPLIT_PART(ninja.hostname,'.',1),15)) as clean_ninja_hostname,
+    ninja.display_name, 
+    ninja.billing_status_id
 FROM device_snapshot tl
 JOIN device_snapshot ninja ON (
-    LOWER(SPLIT_PART(tl.hostname, '.', 1)) = LOWER(SPLIT_PART(ninja.hostname, '.', 1))
+    LOWER(LEFT(SPLIT_PART(SPLIT_PART(tl.hostname,'|',1),'.',1),15)) = 
+    LOWER(LEFT(SPLIT_PART(ninja.hostname,'.',1),15))
     AND ninja.vendor_id = 3
     AND ninja.snapshot_date = tl.snapshot_date
 )
 WHERE tl.vendor_id = 4
 AND tl.snapshot_date = CURRENT_DATE
 AND ninja.billing_status_id = 2; -- 2 = spare
+
+-- Check for data quality issues (pipe symbols in hostnames)
+SELECT 
+    vendor_id,
+    COUNT(*) as devices_with_pipe_symbols
+FROM device_snapshot 
+WHERE snapshot_date = CURRENT_DATE 
+  AND hostname LIKE '%|%'
+GROUP BY vendor_id;
 ```
 
 ---
@@ -418,17 +437,23 @@ python test_connection.py
 
 ## 📊 Current Data Status
 
-### **Latest Collection Results**
-- **Ninja Devices**: 758 devices (vendor_id = 3)
-- **ThreatLocker Devices**: 382 devices (vendor_id = 4)
-- **Total Devices**: 1,140+ devices
-- **Active Exceptions**: 41 exceptions
+### **Latest Collection Results (Updated September 20, 2025)**
+- **Ninja Devices**: 766 devices (vendor_id = 3)
+- **ThreatLocker Devices**: 396 devices (vendor_id = 4) - *Updated with full dataset*
+- **Total Devices**: 1,162+ devices
+- **Active Exceptions**: Varies daily based on cross-vendor checks
 
-### **Exception Breakdown**
-- **MISSING_NINJA**: 17 devices (ThreatLocker devices not in Ninja)
-- **SPARE_MISMATCH**: 23 devices (spare devices still in ThreatLocker)
-- **DUPLICATE_TL**: 1 device (duplicate ThreatLocker entries)
-- **SITE_MISMATCH**: 0 devices (no site mismatches)
+### **Exception Breakdown (Current)**
+- **MISSING_NINJA**: ThreatLocker devices not found in Ninja
+- **SPARE_MISMATCH**: Devices marked as spare in Ninja but still in ThreatLocker
+- **DUPLICATE_TL**: Duplicate ThreatLocker entries
+- **SITE_MISMATCH**: Devices with mismatched site assignments between vendors
+
+### **Data Quality Improvements (September 20, 2025)**
+- ✅ **Fixed Cross-Vendor Field Mapping**: All exception hostnames now display clean (no pipe symbols)
+- ✅ **Updated ThreatLocker API**: Now collects from all child organizations (396 vs 44 devices)
+- ✅ **Enhanced Data Validation**: Added monitoring for field mapping violations
+- ✅ **Improved Error Handling**: Better logging and data quality reporting
 
 ---
 

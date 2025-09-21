@@ -25,6 +25,92 @@ def to_base(hostname: str) -> str:
     return hostname.lower().split('.')[0]
 
 
+def validate_data_quality(session: Session, vendor_ids: Dict[str, int], snapshot_date: date) -> Dict[str, int]:
+    """
+    Validate data quality by checking for field mapping violations.
+    
+    This function detects when wrong fields are being used:
+    - ThreatLocker: pipe symbols in hostname indicate computerName field usage
+    - Ninja: missing systemName field indicates wrong field mapping
+    
+    Args:
+        session: Database session
+        vendor_ids: Mapping of vendor names to IDs
+        snapshot_date: Date to check
+        
+    Returns:
+        dict: Count of data quality issues found by vendor
+    """
+    from sqlalchemy import text
+    
+    issues_found = {'ThreatLocker': 0, 'Ninja': 0}
+    
+    # Check ThreatLocker data quality
+    if 'ThreatLocker' in vendor_ids:
+        tl_query = text("""
+            SELECT COUNT(*) as count
+            FROM device_snapshot ds
+            WHERE ds.snapshot_date = :snapshot_date
+              AND ds.vendor_id = :tl_vendor_id
+              AND ds.hostname IS NOT NULL
+              AND ds.hostname LIKE '%|%'
+        """)
+        
+        result = session.execute(tl_query, {
+            'snapshot_date': snapshot_date,
+            'tl_vendor_id': vendor_ids['ThreatLocker']
+        })
+        
+        tl_issues = result.scalar()
+        issues_found['ThreatLocker'] = tl_issues
+        
+        if tl_issues > 0:
+            print(f"WARNING: Found {tl_issues} ThreatLocker devices with pipe symbols in hostname")
+            print("  This indicates computerName field was used instead of hostname field")
+            print("  These devices need to be re-collected with correct field mapping")
+    
+    # Check Ninja data quality
+    if 'Ninja' in vendor_ids:
+        ninja_query = text("""
+            SELECT COUNT(*) as count
+            FROM device_snapshot ds
+            WHERE ds.snapshot_date = :snapshot_date
+              AND ds.vendor_id = :ninja_vendor_id
+              AND (ds.hostname IS NULL OR ds.hostname = '')
+        """)
+        
+        result = session.execute(ninja_query, {
+            'snapshot_date': snapshot_date,
+            'ninja_vendor_id': vendor_ids['Ninja']
+        })
+        
+        ninja_issues = result.scalar()
+        issues_found['Ninja'] = ninja_issues
+        
+        if ninja_issues > 0:
+            print(f"WARNING: Found {ninja_issues} Ninja devices with missing hostname")
+            print("  This indicates systemName field was not properly mapped")
+            print("  These devices need to be re-collected with correct field mapping")
+    
+    return issues_found
+
+
+def extract_clean_hostname(stored_hostname: str, canonical_key: str) -> str:
+    """
+    Extract clean hostname from stored data, handling data quality issues.
+    
+    Args:
+        stored_hostname: Hostname as stored in database (may contain pipe symbols)
+        canonical_key: Clean canonical key from SQL normalization (already cleaned)
+        
+    Returns:
+        str: Clean hostname for display
+    """
+    # The canonical_key is already clean (extracted from SQL with pipe symbol handling)
+    # Use it as the clean hostname for display
+    return canonical_key
+
+
 def get_vendor_ids(session: Session) -> Dict[str, int]:
     """
     Get vendor IDs for Ninja and ThreatLocker.
@@ -131,7 +217,8 @@ def check_missing_ninja(session: Session, vendor_ids: Dict[str, int], snapshot_d
             SELECT 
                 ds.id,
                 ds.hostname,
-                LOWER(LEFT(SPLIT_PART(ds.hostname,'.',1),15)) as canonical_key
+                -- Extract clean hostname: take first part before pipe symbol, then first part before dot, then first 15 chars
+                LOWER(LEFT(SPLIT_PART(SPLIT_PART(ds.hostname,'|',1),'.',1),15)) as canonical_key
             FROM device_snapshot ds
             WHERE ds.snapshot_date = :snapshot_date
               AND ds.vendor_id = :tl_vendor_id
@@ -163,6 +250,19 @@ def check_missing_ninja(session: Session, vendor_ids: Dict[str, int], snapshot_d
     exceptions_inserted = 0
     
     for row in result:
+        # Extract clean hostname from canonical key to avoid pipe symbols
+        # The canonical_key is the clean hostname (e.g., "chi-1p397h2")
+        clean_hostname = row.canonical_key
+        
+        # Validate data quality - check if stored hostname contains pipe symbols
+        # This indicates the wrong field (computerName) was used instead of hostname
+        data_quality_issue = False
+        if row.hostname and '|' in row.hostname:
+            data_quality_issue = True
+            print(f"WARNING: Data quality issue detected - ThreatLocker device {row.id} has pipe symbols in hostname: '{row.hostname}'")
+            print(f"  This indicates computerName field was used instead of hostname field")
+            print(f"  Using clean hostname from canonical key: '{clean_hostname}'")
+        
         # Get site information
         tl_site_name = None
         tl_org_name = None
@@ -175,13 +275,15 @@ def check_missing_ninja(session: Session, vendor_ids: Dict[str, int], snapshot_d
             tl_org_name = tl_device.organization_name
         
         details = {
-            'tl_hostname': row.hostname,
+            'tl_hostname': clean_hostname,  # Use clean hostname instead of potentially corrupted row.hostname
             'tl_canonical_key': row.canonical_key,
             'tl_site_name': tl_site_name,
-            'tl_org_name': tl_org_name
+            'tl_org_name': tl_org_name,
+            'data_quality_issue': data_quality_issue,
+            'original_stored_hostname': row.hostname if data_quality_issue else None
         }
         
-        if insert_exception(session, 'MISSING_NINJA', row.hostname, details, snapshot_date):
+        if insert_exception(session, 'MISSING_NINJA', clean_hostname, details, snapshot_date):
             exceptions_inserted += 1
     
     # Log the inserted count
@@ -242,17 +344,23 @@ def check_duplicate_tl(session: Session, vendor_ids: Dict[str, int], snapshot_da
             )
         ).all()
         
-        # Create details with all duplicate hostnames
-        hostnames = [host.hostname for host in tl_hosts if host.hostname]
+        # Create details with all duplicate hostnames (use clean hostnames)
+        clean_hostnames = []
+        for host in tl_hosts:
+            if host.hostname:
+                # Extract clean hostname, handling data quality issues
+                clean_hostname = extract_clean_hostname(host.hostname, hostname_base)
+                clean_hostnames.append(clean_hostname)
+        
         details = {
             'hostname_base': hostname_base,
             'count': duplicate.count,
-            'duplicate_hostnames': hostnames,
+            'duplicate_hostnames': clean_hostnames,
             'sites': [host.site.name if host.site else None for host in tl_hosts]
         }
         
-        # Insert exception for the first hostname (representative)
-        if hostnames and insert_exception(session, 'DUPLICATE_TL', hostnames[0], details, snapshot_date):
+        # Insert exception for the first clean hostname (representative)
+        if clean_hostnames and insert_exception(session, 'DUPLICATE_TL', clean_hostnames[0], details, snapshot_date):
             exceptions_inserted += 1
     
     return exceptions_inserted
@@ -325,17 +433,21 @@ def check_site_mismatch(session: Session, vendor_ids: Dict[str, int], snapshot_d
             
             # Check for site mismatch
             if tl_site != ninja_site:
+                # Extract clean hostnames for display
+                tl_clean_hostname = extract_clean_hostname(tl_host.hostname, tl_normalized)
+                ninja_clean_hostname = extract_clean_hostname(ninja_host.hostname, tl_normalized)
+                
                 details = {
                     'hostname_base': tl_normalized,
-                    'tl_hostname': tl_host.hostname,
-                    'ninja_hostname': ninja_host.hostname,
+                    'tl_hostname': tl_clean_hostname,
+                    'ninja_hostname': ninja_clean_hostname,
                     'tl_site': tl_site,
                     'ninja_site': ninja_site,
                     'tl_org': tl_host.organization_name,
                     'ninja_org': ninja_host.organization_name
                 }
                 
-                if insert_exception(session, 'SITE_MISMATCH', tl_host.hostname, details, snapshot_date):
+                if insert_exception(session, 'SITE_MISMATCH', tl_clean_hostname, details, snapshot_date):
                     exceptions_inserted += 1
     
     return exceptions_inserted
@@ -414,17 +526,21 @@ def check_spare_mismatch(session: Session, vendor_ids: Dict[str, int], snapshot_
             
             # If Ninja marks as spare, this may indicate a cleanup opportunity
             if is_ninja_spare:
+                # Extract clean hostnames for display
+                tl_clean_hostname = extract_clean_hostname(tl_host.hostname, tl_normalized)
+                ninja_clean_hostname = extract_clean_hostname(ninja_host.hostname, tl_normalized)
+                
                 details = {
                     'hostname_base': tl_normalized,
-                    'tl_hostname': tl_host.hostname,
-                    'ninja_hostname': ninja_host.hostname,
+                    'tl_hostname': tl_clean_hostname,
+                    'ninja_hostname': ninja_clean_hostname,
                     'ninja_billing_status': ninja_host.billing_status.code if ninja_host.billing_status else None,
                     'tl_site': tl_host.site.name if tl_host.site else None,
                     'ninja_site': ninja_host.site.name if ninja_host.site else None,
                     'note': 'Device marked as spare in Ninja - consider if ThreatLocker cleanup needed'
                 }
                 
-                if insert_exception(session, 'SPARE_MISMATCH', tl_host.hostname, details, snapshot_date):
+                if insert_exception(session, 'SPARE_MISMATCH', tl_clean_hostname, details, snapshot_date):
                     exceptions_inserted += 1
     
     return exceptions_inserted
@@ -447,6 +563,14 @@ def run_cross_vendor_checks(session: Session, snapshot_date: Optional[date] = No
     # Get vendor IDs
     vendor_ids = get_vendor_ids(session)
     
+    # Validate data quality first
+    print("Validating data quality...")
+    data_quality_issues = validate_data_quality(session, vendor_ids, snapshot_date)
+    
+    if data_quality_issues['ThreatLocker'] > 0 or data_quality_issues['Ninja'] > 0:
+        print(f"Data quality issues found: {data_quality_issues}")
+        print("Consider re-running data collection to fix field mapping issues")
+    
     # Clear today's exceptions for idempotency
     clear_todays_exceptions(session, snapshot_date)
     
@@ -457,5 +581,8 @@ def run_cross_vendor_checks(session: Session, snapshot_date: Optional[date] = No
     results['DUPLICATE_TL'] = check_duplicate_tl(session, vendor_ids, snapshot_date)
     results['SITE_MISMATCH'] = check_site_mismatch(session, vendor_ids, snapshot_date)
     results['SPARE_MISMATCH'] = check_spare_mismatch(session, vendor_ids, snapshot_date)
+    
+    # Add data quality summary to results
+    results['DATA_QUALITY_ISSUES'] = data_quality_issues
     
     return results

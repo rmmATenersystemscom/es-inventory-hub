@@ -48,7 +48,8 @@ try:
         results.get('MISSING_NINJA', 0),
         results.get('DUPLICATE_TL', 0), 
         results.get('SITE_MISMATCH', 0),
-        results.get('SPARE_MISMATCH', 0)
+        results.get('SPARE_MISMATCH', 0),
+        results.get('DISPLAY_NAME_MISMATCH', 0)
     ])
     print(f'Cross-vendor checks completed: {total_variances} variances found')
     session.close()

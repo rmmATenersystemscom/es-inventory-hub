@@ -546,6 +546,109 @@ def check_spare_mismatch(session: Session, vendor_ids: Dict[str, int], snapshot_
     return exceptions_inserted
 
 
+def check_display_name_mismatch(session: Session, vendor_ids: Dict[str, int], snapshot_date: date) -> int:
+    """
+    Check for devices that exist in both Ninja and ThreatLocker with the same hostname 
+    but different display names.
+    
+    Args:
+        session: Database session
+        vendor_ids: Mapping of vendor names to IDs
+        snapshot_date: Date to check
+        
+    Returns:
+        int: Number of display name mismatch exceptions inserted
+    """
+    from sqlalchemy import text
+    
+    exceptions_inserted = 0
+    
+    # Get vendor IDs
+    ninja_id = vendor_ids.get('Ninja')
+    tl_id = vendor_ids.get('ThreatLocker')
+    
+    if not ninja_id or not tl_id:
+        print("Warning: Missing vendor IDs for display name mismatch check")
+        return 0
+    
+    # Query to find devices with matching hostnames but different display names
+    query = text("""
+        WITH matched_devices AS (
+            SELECT 
+                LOWER(LEFT(SPLIT_PART(SPLIT_PART(tl.hostname,'|',1),'.',1),15)) as clean_tl_hostname,
+                LOWER(LEFT(SPLIT_PART(ninja.hostname,'.',1),15)) as clean_ninja_hostname,
+                tl.hostname as tl_hostname,
+                ninja.hostname as ninja_hostname,
+                tl.display_name as tl_display_name,
+                ninja.display_name as ninja_display_name,
+                tl.organization_name as tl_org_name,
+                ninja.organization_name as ninja_org_name
+            FROM device_snapshot tl
+            JOIN device_snapshot ninja ON (
+                LOWER(LEFT(SPLIT_PART(SPLIT_PART(tl.hostname,'|',1),'.',1),15)) = 
+                LOWER(LEFT(SPLIT_PART(ninja.hostname,'.',1),15))
+                AND ninja.vendor_id = :ninja_id
+                AND ninja.snapshot_date = :snapshot_date
+            )
+            WHERE tl.vendor_id = :tl_id
+            AND tl.snapshot_date = :snapshot_date
+            AND tl.display_name IS NOT NULL
+            AND ninja.display_name IS NOT NULL
+            AND tl.display_name != ninja.display_name
+            AND LOWER(TRIM(tl.display_name)) != LOWER(TRIM(ninja.display_name))
+        )
+        SELECT 
+            clean_tl_hostname,
+            tl_hostname,
+            ninja_hostname,
+            tl_display_name,
+            ninja_display_name,
+            tl_org_name,
+            ninja_org_name
+        FROM matched_devices
+        ORDER BY clean_tl_hostname
+    """)
+    
+    results = session.execute(query, {
+        'ninja_id': ninja_id,
+        'tl_id': tl_id,
+        'snapshot_date': snapshot_date
+    }).fetchall()
+    
+    for row in results:
+        clean_hostname, tl_hostname, ninja_hostname, tl_display_name, ninja_display_name, tl_org_name, ninja_org_name = row
+        
+        # Create exception details
+        details = {
+            'tl_hostname': tl_hostname,
+            'ninja_hostname': ninja_hostname,
+            'tl_display_name': tl_display_name,
+            'ninja_display_name': ninja_display_name,
+            'tl_org_name': tl_org_name,
+            'ninja_org_name': ninja_org_name,
+            'hostname_base': clean_hostname,
+            'note': 'Device exists in both systems with same hostname but different display names - consider standardizing display names'
+        }
+        
+        # Insert exception
+        exception = Exceptions(
+            date_found=snapshot_date,
+            type='DISPLAY_NAME_MISMATCH',
+            hostname=clean_hostname,
+            details=details,
+            resolved=False
+        )
+        
+        session.add(exception)
+        exceptions_inserted += 1
+    
+    if exceptions_inserted > 0:
+        session.commit()
+        print(f"DISPLAY_NAME_MISMATCH: Inserted {exceptions_inserted} exceptions for {snapshot_date}")
+    
+    return exceptions_inserted
+
+
 def run_cross_vendor_checks(session: Session, snapshot_date: Optional[date] = None) -> Dict[str, int]:
     """
     Run all cross-vendor consistency checks between Ninja and ThreatLocker.
@@ -581,6 +684,7 @@ def run_cross_vendor_checks(session: Session, snapshot_date: Optional[date] = No
     results['DUPLICATE_TL'] = check_duplicate_tl(session, vendor_ids, snapshot_date)
     results['SITE_MISMATCH'] = check_site_mismatch(session, vendor_ids, snapshot_date)
     results['SPARE_MISMATCH'] = check_spare_mismatch(session, vendor_ids, snapshot_date)
+    results['DISPLAY_NAME_MISMATCH'] = check_display_name_mismatch(session, vendor_ids, snapshot_date)
     
     # Add data quality summary to results
     results['DATA_QUALITY_ISSUES'] = data_quality_issues

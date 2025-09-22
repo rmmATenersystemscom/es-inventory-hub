@@ -112,6 +112,7 @@ GROUP BY v.name;
 - `DUPLICATE_TL` - Duplicate hostnames in ThreatLocker
 - `SITE_MISMATCH` - Same device assigned to different sites
 - `SPARE_MISMATCH` - Devices marked as spare in Ninja but still in ThreatLocker
+- `DISPLAY_NAME_MISMATCH` - Same hostname but different display names between vendors
 
 ### **Sample API Response:**
 ```json

@@ -4,7 +4,7 @@
 
 **Last Updated**: September 13, 2025  
 **Database Version**: PostgreSQL  
-**ES Inventory Hub Version**: v1.0.4
+**ES Inventory Hub Version**: v1.5.0
 
 ---
 
@@ -438,9 +438,9 @@ python test_connection.py
 ## 📊 Current Data Status
 
 ### **Latest Collection Results (Updated September 20, 2025)**
-- **Ninja Devices**: 766 devices (vendor_id = 3)
-- **ThreatLocker Devices**: 396 devices (vendor_id = 4) - *Updated with full dataset*
-- **Total Devices**: 1,162+ devices
+- **Ninja Devices**: ~750+ devices (vendor_id = 3, updated daily at 02:10 AM)
+- **ThreatLocker Devices**: ~400+ devices (vendor_id = 4, updated daily at 02:31 AM)
+- **Live Device Count**: 1,100+ devices (updated daily at 02:10 AM and 02:31 AM)
 - **Active Exceptions**: Varies daily based on cross-vendor checks
 
 ### **Exception Breakdown (Current)**

@@ -8,6 +8,17 @@
 
 This directory contains comprehensive documentation for the ES Inventory Hub system, which collects and analyzes device inventory data from NinjaRMM and ThreatLocker to identify discrepancies and maintain data consistency.
 
+### **🔗 Shared Documentation (Symbolic Links)**
+
+**Important**: Some files in this directory are **symbolic links** to shared documentation across multiple projects. These files serve as a **single source of truth** and should **never be copied** or edited directly.
+
+**Shared Files:**
+- **`CHECK_IN_PROCESS.md`** → `/opt/dashboard-project/docs/CHECK_IN_PROCESS.md`
+- **`NINJA_API_DOCUMENTATION.md`** → `/opt/dashboard-project/docs/NINJA_API_DOCUMENTATION.md`
+- **`THREATLOCKER_API_GUIDE.md`** → `/opt/dashboard-project/docs/THREATLOCKER_API_GUIDE.md`
+
+**⚠️ To modify shared documentation**: Edit the source files in `/opt/dashboard-project/docs/` - changes will automatically appear in all projects.
+
 ---
 
 ## 🚀 **Quick Start Guides**
@@ -15,17 +26,16 @@ This directory contains comprehensive documentation for the ES Inventory Hub sys
 ### **For Dashboard Developers**
 - **[DASHBOARD_INTEGRATION_GUIDE.md](./DASHBOARD_INTEGRATION_GUIDE.md)** - Complete integration guide for building variance dashboards
 - **[AI_PROMPT_FOR_DASHBOARD.md](./AI_PROMPT_FOR_DASHBOARD.md)** - AI prompt for dashboard development
-- **[VARIANCE_DASHBOARD_PROMPT.md](../VARIANCE_DASHBOARD_PROMPT.md)** - Detailed dashboard requirements and specifications
 
 ### **For Database Access**
 - **[DATABASE_ACCESS_GUIDE.md](./DATABASE_ACCESS_GUIDE.md)** - Complete database connection guide with schemas and queries
 - **[DEVICE_MATCHING_LOGIC.md](./DEVICE_MATCHING_LOGIC.md)** - How devices are matched between vendors
 
 ### **For API Integration**
-- **[api_server.py](./api_server.py)** - REST API server for variance data and collector management
 - **[API_QUICK_REFERENCE.md](./API_QUICK_REFERENCE.md)** - Quick reference for API endpoints and usage
-- **[requirements-api.txt](./requirements-api.txt)** - Python dependencies for API server
-- **[test_api.py](./test_api.py)** - API testing script
+- **[../api/README.md](../api/README.md)** - API server and testing utilities
+- **[../api/api_server.py](../api/api_server.py)** - REST API server for variance data and collector management
+- **[../api/test_api.py](../api/test_api.py)** - API testing script
 
 ---
 
@@ -35,6 +45,11 @@ This directory contains comprehensive documentation for the ES Inventory Hub sys
 - **[SYSTEMD.md](./SYSTEMD.md)** - Systemd service setup and management
 - **[CRON.md](./CRON.md)** - Cron job configuration (alternative to systemd)
 
+### **Network Configuration**
+- **Port Range**: ES Inventory Hub uses ports 5500-5599
+- **Dashboard Project**: Reserved ports 5000-5499
+- **API Server**: Currently running on port 5500
+
 ### **Data Collection**
 - **[NINJA_API_DOCUMENTATION.md](./NINJA_API_DOCUMENTATION.md)** - NinjaRMM API integration details
 - **[THREATLOCKER_API_GUIDE.md](./THREATLOCKER_API_GUIDE.md)** - ThreatLocker API integration details
@@ -43,6 +58,12 @@ This directory contains comprehensive documentation for the ES Inventory Hub sys
 - **[MIGRATION_COMPLETED.md](./MIGRATION_COMPLETED.md)** - Database migration summary
 - **[SCHEMA_UPDATE_SUMMARY.md](./SCHEMA_UPDATE_SUMMARY.md)** - Recent schema changes
 - **[CHECK_IN_PROCESS.md](./CHECK_IN_PROCESS.md)** - Data collection process details
+
+### **System Configuration**
+- **[SYSTEM_BACKUPS.md](./SYSTEM_BACKUPS.md)** - System backup files and configuration management
+- **[SHARED_DOCUMENTATION.md](./SHARED_DOCUMENTATION.md)** - Guide to symbolic links and shared documentation
+- **[PORT_CONFIGURATION.md](./PORT_CONFIGURATION.md)** - Network port allocation and management
+- **[ENVIRONMENT_CONFIGURATION.md](./ENVIRONMENT_CONFIGURATION.md)** - Environment variable management and troubleshooting
 
 ---
 
@@ -109,7 +130,7 @@ Password: Xat162gT2Qsg4WDlO5r
 
 ## 📈 **Current System Status**
 
-- **Total Devices**: 1,140+ (758 Ninja + 382 ThreatLocker)
+- **Live Device Count**: 1,100+ devices (updated daily at 02:10 AM and 02:31 AM)
 - **Active Exceptions**: 100+ variance issues
 - **Collection Schedule**: Daily at 02:10 AM (Ninja) and 02:31 AM (ThreatLocker)
 - **Data Freshness**: Real-time variance detection
@@ -126,10 +147,10 @@ cat docs/DASHBOARD_INTEGRATION_GUIDE.md
 
 # Start the API server
 cd /opt/es-inventory-hub
-python3 docs/api_server.py
+python3 api/api_server.py
 
 # Test the API
-python3 docs/test_api.py
+python3 api/test_api.py
 ```
 
 ### **2. For System Administrators**
@@ -175,8 +196,8 @@ systemctl list-timers | grep -E "(ninja|threatlocker)"
 psql -d es_inventory_hub -c "SELECT * FROM exceptions ORDER BY date_found DESC LIMIT 10;"
 
 # Test API endpoints
-curl http://localhost:5000/api/health
-curl http://localhost:5000/api/variance-report/latest
+curl http://localhost:5500/api/health
+curl http://localhost:5500/api/variance-report/latest
 ```
 
 ---

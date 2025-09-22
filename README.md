@@ -41,10 +41,62 @@ This release includes the complete implementation of both Ninja and ThreatLocker
 
 ## Environment Configuration
 
-**Note:** The `.env` file is symlinked and not managed in this repository. Please ensure your environment variables are properly configured in the linked location.
+### **Environment Variable Sources**
+
+The ES Inventory Hub system uses environment variables from multiple sources:
+
+#### **Primary Source: Dashboard Project**
+- **Location**: `/opt/dashboard-project/es-dashboards/.env` (symlink to `/opt/shared-secrets/api-secrets.env`)
+- **Used By**: Systemd services, daily collection scripts
+- **Contains**: NinjaRMM and ThreatLocker API credentials
+
+#### **Local Source: ES Inventory Hub**
+- **Location**: `/opt/es-inventory-hub/.env`
+- **Contains**: Local configuration and ConnectWise credentials
+- **Note**: Some API credentials may be duplicated here
+
+### **Required Environment Variables**
+
+#### **For Ninja Collector:**
+```bash
+NINJA_CLIENT_ID=amRqddIagVDindNeMH9j5JiQd2A
+NINJA_CLIENT_SECRET=6Ak8J2P4_H3JpBfh0qpPaoK1lsUoTJbXK8o_heUy7uSnUDHZaHQxCg
+NINJA_REFRESH_TOKEN=ebb3f730-ea7e-4103-b40e-16baf6b1cd41.YiBFmmCW_fNCIvAwllY446MZboP5MlU9vIGG_KlsSN8
+```
+
+#### **For Database Connection:**
+```bash
+DB_DSN=postgresql://postgres:password@localhost:5432/es_inventory_hub
+```
+
+### **Manual Testing Commands**
+
+When testing collectors manually, use the dashboard project's environment file:
+
+```bash
+# Source environment variables from dashboard project
+source /opt/dashboard-project/es-dashboards/.env
+
+# Run collectors with proper environment
+python3 -m collectors.ninja.main --limit 5
+python3 -m collectors.threatlocker.main --limit 5
+```
+
+## 🔌 **Port Configuration**
+
+### **Port Range Allocation**
+- **Dashboard Project**: Ports 5000-5499 (reserved)
+- **ES Inventory Hub**: Ports 5500-5599 (available for use)
+- **Current API Server**: Port 5500
+
+### **Port Usage**
+- **API Server**: Port 5500 (REST API for variance data and collector management)
+- **Future Services**: Ports 5501-5599 available for additional services
+- **Conflict Prevention**: Clear separation from dashboard project port range
 
 ## Project Structure
 
+- `api/` - REST API server and testing utilities
 - `collectors/` - Data collection modules for various sources
 - `storage/` - Database models and migration scripts
 - `dashboard_diffs/` - Dashboard comparison and diff utilities
@@ -53,6 +105,28 @@ This release includes the complete implementation of both Ninja and ThreatLocker
 - `tests/` - Test suite
 - `scripts/` - Utility scripts and automation tools
 - `ops/` - Operations and deployment scripts
+- `system-backups/` - Backup copies of system configuration files (see [docs/SYSTEM_BACKUPS.md](docs/SYSTEM_BACKUPS.md))
+
+## 📚 **Shared Documentation (Symbolic Links)**
+
+**Important**: Some documentation files in the `docs/` directory are **symbolic links** to shared documentation across multiple projects. These files serve as a **single source of truth** and should **never be copied** into this project.
+
+### **Shared Documentation Files:**
+- **`docs/CHECK_IN_PROCESS.md`** → `/opt/dashboard-project/docs/CHECK_IN_PROCESS.md`
+- **`docs/NINJA_API_DOCUMENTATION.md`** → `/opt/dashboard-project/docs/NINJA_API_DOCUMENTATION.md`
+- **`docs/THREATLOCKER_API_GUIDE.md`** → `/opt/dashboard-project/docs/THREATLOCKER_API_GUIDE.md`
+
+### **Why Symbolic Links?**
+- **Single Source of Truth**: Changes to these documents are automatically reflected across all projects
+- **Consistency**: Ensures all projects use the same version of shared documentation
+- **Maintenance**: Updates only need to be made in one location
+- **Cross-Project Integration**: Facilitates shared knowledge between ES Inventory Hub and Dashboard projects
+
+### **⚠️ Important Notes:**
+- **DO NOT COPY** these files - they are shared across multiple projects
+- **DO NOT EDIT** these files directly - edit the source files in `/opt/dashboard-project/docs/`
+- **DO NOT DELETE** these symbolic links - they are essential for project integration
+- If you need to modify shared documentation, edit the source files in the dashboard project
 
 ## Exception Handling Rules
 
@@ -218,98 +292,9 @@ WHERE tl.snapshot_date = CURRENT_DATE
 
 ## 🔄 CHECK-IN Process
 
-### **Purpose**
-The CHECK-IN process is a complete Git commit and tag workflow that preserves all changes made to the ES Inventory Hub project with comprehensive version control and documentation.
+**For complete CHECK-IN process documentation, see:** **[docs/CHECK_IN_PROCESS.md](docs/CHECK_IN_PROCESS.md)**
 
-### **When to Use CHECK-IN**
-- When you want to save all current changes to the project
-- After completing a set of related modifications
-- Before making major changes that might need to be reverted
-- When you want to create a versioned snapshot of the current state
-
-### **Usage**
-To trigger the CHECK-IN process, simply run:
-```bash
-/opt/es-inventory-hub/scripts/checkin.sh
-```
-
-Or when working with an AI assistant, use the command:
-```
-CHECK-IN!
-```
-
-### **What Happens During CHECK-IN**
-
-#### **1. Git Add**
-- All changes are automatically staged for commit
-- No manual `git add` commands needed
-
-#### **2. Git Commit**
-- Changes are committed with a detailed, descriptive message
-- The commit message describes all modifications made
-
-#### **3. Git Tag**
-- A version tag is created with a comprehensive descriptive message
-- Tag format: `vX.Y.Z` (e.g., v1.0.0, v1.1.0, v2.0.0)
-- Tag message contains detailed notes about all changes
-
-#### **4. Version Number Update**
-- Updates the version number in main README.md to match the new tag
-- Updates line: `**Current Version**: vX.Y.Z (stable)`
-- Updates line: `## Current Version (vX.Y.Z)`
-
-#### **5. Git Push**
-- Both commit and tag are pushed to the remote repository
-- Ensures all changes are backed up and available to other team members
-
-### **Version Strategy**
-- **Patch Updates**: `vX.Y.Z+1` (e.g., v1.0.0 → v1.0.1) for bug fixes and minor changes
-- **Minor Features**: `vX.Y+1.0` (e.g., v1.0.1 → v1.1.0) for new features
-- **Major Changes**: `vX+1.0.0` (e.g., v1.5.2 → v2.0.0) for significant architectural changes
-
-### **Example CHECK-IN Output**
-```
-CHECK-IN COMPLETE! ✅
-
-Tag Used: v1.1.0
-
-Changes Committed:
-Changes detected:
-  + New file: scripts/run_ninja_daily.sh
-  + New file: ops/CRON.md
-  ~ Modified: README.md
-
-Files Modified:
-- scripts/run_ninja_daily.sh
-- ops/CRON.md  
-- README.md
-
-The changes have been successfully committed and pushed to the remote repository
-All detailed revision notes are preserved in Git tag messages and commit history
-```
-
-### **Key Benefits**
-- **Complete Traceability**: Every change is documented and versioned
-- **Rollback Capability**: Can revert to any previous version if needed
-- **Team Collaboration**: All changes are available to other team members
-- **Production Safety**: Versioned releases ensure stable deployments
-- **Change Documentation**: Comprehensive notes about what was modified and why
-
-### **Manual Commands**
-If you prefer manual control, you can also use these commands:
-```bash
-# Check current status
-git status
-
-# View existing tags
-git tag --sort=-version:refname
-
-# Run CHECK-IN process
-./scripts/checkin.sh
-
-# View latest tag details
-git show $(git tag --sort=-version:refname | head -1)
-```
+The CHECK-IN process is a complete Git commit and tag workflow that preserves all changes with comprehensive version control. To trigger the process, use the command `CHECK-IN!` when working with an AI assistant, or run the automated script.
 
 ---
 
@@ -325,4 +310,4 @@ git show $(git tag --sort=-version:refname | head -1)
 - **[docs/CRON.md](docs/CRON.md)** - Cron job setup (alternative to systemd)
 
 **🚀 For Dashboard Developers:** Start with `docs/DASHBOARD_INTEGRATION_GUIDE.md`
-**🔧 For API Integration:** See `docs/API_QUICK_REFERENCE.md` and `docs/api_server.py`
+**🔧 For API Integration:** See `docs/API_QUICK_REFERENCE.md` and `api/api_server.py`

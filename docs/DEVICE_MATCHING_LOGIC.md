@@ -446,7 +446,7 @@ LIMIT 10;
 
 ### **System Status**
 - ✅ **Cross-Vendor Field Mapping**: Resolved - All hostnames display clean (no pipe symbols)
-- ✅ **ThreatLocker API**: Configured for full dataset collection (396 devices)
+- ✅ **ThreatLocker API**: Configured for full dataset collection (~400+ devices, updated daily at 02:31 AM)
 - ✅ **Data Quality Monitoring**: Active validation and reporting
 - ✅ **Variance Dashboard**: Displays professional, clean hostnames
 

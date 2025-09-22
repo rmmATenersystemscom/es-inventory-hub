@@ -238,6 +238,6 @@ EOF
 ## Security Considerations
 
 - Services run with the privileges of the specified user
-- Environment variables are loaded from `/opt/dashboard-project/es-dashboards/.env`
+- Environment variables are loaded from `/opt/dashboard-project/es-dashboards/.env` (shared with dashboard project)
 - Log files may contain sensitive information; restrict access appropriately
 - Consider running as dedicated service users rather than personal accounts

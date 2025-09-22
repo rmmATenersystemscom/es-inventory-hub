@@ -9,7 +9,7 @@ Provides REST API endpoints for:
 
 Usage:
     python3 api_server.py
-    # Server runs on http://localhost:5000
+    # Server runs on http://localhost:5500
 """
 
 import os
@@ -423,6 +423,6 @@ if __name__ == '__main__':
     print("  GET  /api/exceptions - Get exceptions with filtering")
     print("  POST /api/exceptions/{id}/resolve - Resolve an exception")
     print()
-    print("Server will run on http://localhost:5000")
+    print("Server will run on http://localhost:5500")
     
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5500, debug=True)

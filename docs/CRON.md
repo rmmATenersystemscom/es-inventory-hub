@@ -112,7 +112,7 @@ EOF
    - Check that the log directory is writable: `ls -ld /var/log/es-inventory-hub`
 
 2. **Environment Variables Not Found**
-   - Verify the .env file exists: `ls -la /opt/dashboard-project/es-dashboards/.env`
+   - Verify the .env file exists: `ls -la /opt/es-inventory-hub/.env`
    - Check that required variables are set in the environment file
 
 3. **Virtual Environment Issues**
@@ -140,7 +140,7 @@ grep CRON /var/log/cron | grep ninja
 
 The `run_ninja_daily.sh` script performs the following steps:
 
-1. **Environment Setup**: Sources the shared .env file from `/opt/dashboard-project/es-dashboards/.env`
+1. **Environment Setup**: Sources the .env file from `/opt/es-inventory-hub/.env`
 2. **Virtual Environment**: Activates the repository's Python virtual environment
 3. **Logging**: Creates timestamped log entries for tracking and debugging
 4. **Collection**: Executes the Ninja collector without any device limits
@@ -194,7 +194,7 @@ Found cron line:
 Last 10 lines of log file:
 ----------------------------------------
   2025-09-01 02:10:01 === Starting Ninja daily collection ===
-  2025-09-01 02:10:01 Sourcing environment from /opt/dashboard-project/es-dashboards/.env
+  2025-09-01 02:10:01 Sourcing environment from /opt/es-inventory-hub/.env
   2025-09-01 02:10:01 Activating virtual environment: /opt/es-inventory-hub/.venv
   2025-09-01 02:10:01 Starting Ninja collector...
   2025-09-01 02:10:15 Ninja collector completed successfully

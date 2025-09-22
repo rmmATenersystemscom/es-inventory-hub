@@ -15,11 +15,11 @@ The ES Inventory Hub now includes a REST API server that provides clean endpoint
 **Start the API Server:**
 ```bash
 cd /opt/es-inventory-hub
-pip install -r requirements-api.txt
-python3 api_server.py
+pip install -r api/requirements-api.txt
+python3 api/api_server.py
 ```
 
-**API Base URL:** `http://localhost:5000`
+**API Base URL:** `http://localhost:5500`
 
 ### **Option 2: Direct Database Access**
 
@@ -157,12 +157,12 @@ GROUP BY v.name;
 ### **Via API:**
 ```bash
 # Run both collectors and cross-vendor checks
-curl -X POST http://localhost:5000/api/collectors/run \
+curl -X POST http://localhost:5500/api/collectors/run \
   -H "Content-Type: application/json" \
   -d '{"collector": "both", "run_cross_vendor": true}'
 
 # Run only Ninja collector
-curl -X POST http://localhost:5000/api/collectors/run \
+curl -X POST http://localhost:5500/api/collectors/run \
   -H "Content-Type: application/json" \
   -d '{"collector": "ninja", "run_cross_vendor": false}'
 ```
@@ -182,12 +182,12 @@ sudo systemctl start threatlocker-collector@rene.service
 
 **Essential Documentation:**
 - `/opt/es-inventory-hub/docs/DATABASE_ACCESS_GUIDE.md` - Complete database guide
-- `/opt/es-inventory-hub/VARIANCE_DASHBOARD_PROMPT.md` - Dashboard requirements
+- `/opt/es-inventory-hub/docs/DASHBOARD_INTEGRATION_GUIDE.md` - Dashboard requirements
 - `/opt/es-inventory-hub/docs/DEVICE_MATCHING_LOGIC.md` - Device matching logic
 
 **API Server:**
-- `/opt/es-inventory-hub/api_server.py` - REST API server
-- `/opt/es-inventory-hub/requirements-api.txt` - Python dependencies
+- `/opt/es-inventory-hub/api/api_server.py` - REST API server
+- `/opt/es-inventory-hub/api/requirements-api.txt` - Python dependencies
 
 **Database Schema:**
 - `/opt/es-inventory-hub/storage/schema.py` - SQLAlchemy models
@@ -222,26 +222,26 @@ sudo systemctl start threatlocker-collector@rene.service
 ### **1. Install Dependencies:**
 ```bash
 cd /opt/es-inventory-hub
-pip install -r requirements-api.txt
+pip install -r api/requirements-api.txt
 ```
 
 ### **2. Start API Server:**
 ```bash
-python3 api_server.py
+python3 api/api_server.py
 ```
 
 ### **3. Test API:**
 ```bash
-curl http://localhost:5000/api/health
-curl http://localhost:5000/api/status
-curl http://localhost:5000/api/variance-report/latest
+curl http://localhost:5500/api/health
+curl http://localhost:5500/api/status
+curl http://localhost:5500/api/variance-report/latest
 ```
 
 ### **4. Build Dashboard:**
 - Use Flask or your preferred web framework
-- Connect to `http://localhost:5000` for API endpoints
+- Connect to `http://localhost:5500` for API endpoints
 - Or connect directly to PostgreSQL database
-- Follow the design guidelines in `VARIANCE_DASHBOARD_PROMPT.md`
+- Follow the design guidelines in this integration guide
 
 ---
 

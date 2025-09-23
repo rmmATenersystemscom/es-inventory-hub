@@ -1,8 +1,8 @@
 [Unit]
-Description=Run ThreatLocker collector daily at 02:31 AM Central Time
+Description=Run ThreatLocker collector daily at 02:10 AM Central Time
 
 [Timer]
-OnCalendar=*-*-* 08:31:00
+OnCalendar=*-*-* 02:10:00 America/Chicago
 Persistent=true
 AccuracySec=1m
 Unit=threatlocker-collector@%i.service

@@ -356,11 +356,140 @@ def get_variance_data(session: Session, snapshot_date: date):
 
 ## 🚨 Important Considerations
 
+### **Critical Hostname Truncation Issue**
+**⚠️ MAJOR LIMITATION**: Ninja truncates hostnames to 15 characters, while ThreatLocker stores full hostnames (up to 20 characters). This creates several problems:
+
+1. **Search/Lookup Issues**: Users searching with Ninja hostnames won't find corresponding ThreatLocker devices
+   - Example: Search for `AEC-02739619435` (Ninja) won't find `AEC-027396194353` (ThreatLocker)
+2. **Data Loss**: Information beyond 15 characters is permanently lost in Ninja data
+3. **False Matches**: Devices that differ only in characters 16+ will incorrectly match
+
+**Impact on User Experience**:
+- Dashboard searches may fail to find devices
+- Manual lookups between vendors will be problematic
+- Users need to know the full hostname to search ThreatLocker data
+
+### **Solutions for Hostname Truncation Issues**
+
+#### **1. Enhanced Search Functionality**
+Implement fuzzy search that handles truncated hostnames:
+
+```sql
+-- Search for devices with partial hostname matching
+SELECT 
+    v.name as vendor,
+    ds.hostname,
+    ds.display_name,
+    ds.organization_name
+FROM device_snapshot ds
+JOIN vendor v ON ds.vendor_id = v.id
+WHERE ds.snapshot_date = CURRENT_DATE
+  AND (
+    ds.hostname ILIKE :search_term || '%'  -- Exact prefix match
+    OR ds.hostname ILIKE '%' || :search_term || '%'  -- Contains match
+    OR LEFT(ds.hostname, 15) = LEFT(:search_term, 15)  -- Truncated match
+  )
+ORDER BY v.name, ds.hostname;
+```
+
+#### **2. Cross-Vendor Device Lookup**
+Create a function to find matching devices across vendors:
+
+```sql
+-- Find all vendors for a given canonical hostname
+CREATE OR REPLACE FUNCTION find_device_across_vendors(search_hostname TEXT)
+RETURNS TABLE (
+    vendor_name TEXT,
+    full_hostname TEXT,
+    canonical_key TEXT,
+    display_name TEXT
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        v.name as vendor_name,
+        ds.hostname as full_hostname,
+        LOWER(LEFT(SPLIT_PART(SPLIT_PART(ds.hostname,'|',1),'.',1),15)) as canonical_key,
+        ds.display_name
+    FROM device_snapshot ds
+    JOIN vendor v ON ds.vendor_id = v.id
+    WHERE ds.snapshot_date = CURRENT_DATE
+      AND ds.hostname IS NOT NULL
+      AND (
+        -- Exact match
+        ds.hostname ILIKE search_hostname || '%'
+        -- Or canonical key match (handles truncation)
+        OR LOWER(LEFT(SPLIT_PART(SPLIT_PART(ds.hostname,'|',1),'.',1),15)) = 
+           LOWER(LEFT(SPLIT_PART(search_hostname,'.',1),15))
+      )
+    ORDER BY v.name, ds.hostname;
+END;
+$$ LANGUAGE plpgsql;
+```
+
+#### **3. Dashboard Search Recommendations**
+- **Primary Search**: Use canonical key matching (first 15 characters)
+- **Secondary Search**: Show all devices with matching canonical keys
+- **User Education**: Display warnings when hostnames are truncated
+- **Suggestion System**: When searching with truncated hostname, suggest full hostnames from other vendors
+
+#### **4. API Implementation**
+The ES Inventory Hub now includes a dedicated search endpoint that handles hostname truncation:
+
+```bash
+GET /api/devices/search?q={hostname}&vendor={ninja|threatlocker}&limit={number}
+```
+
+**Features:**
+- **Multi-strategy search**: Exact match, contains match, canonical key match, prefix match
+- **Cross-vendor grouping**: Results grouped by canonical key to show related devices
+- **Truncation detection**: Indicates when hostnames are truncated
+- **Vendor filtering**: Optional vendor-specific searches
+- **Performance optimized**: Capped at 200 results with efficient queries
+
+**Example Usage:**
+```bash
+# Search for device using Ninja hostname (truncated)
+curl "http://localhost:5500/api/devices/search?q=AEC-02739619435"
+
+# Search for device using ThreatLocker hostname (full)
+curl "http://localhost:5500/api/devices/search?q=AEC-027396194353"
+
+# Search only in Ninja
+curl "http://localhost:5500/api/devices/search?q=AEC-02739619435&vendor=ninja"
+```
+
+**Response Format:**
+```json
+{
+  "search_term": "AEC-02739619435",
+  "total_results": 2,
+  "vendors_found": ["Ninja", "ThreatLocker"],
+  "truncated_hostnames": 1,
+  "grouped_by_canonical_key": {
+    "aec-02739619435": [
+      {
+        "vendor": "Ninja",
+        "hostname": "AEC-02739619435",
+        "is_truncated": true
+      },
+      {
+        "vendor": "ThreatLocker", 
+        "hostname": "AEC-027396194353",
+        "is_truncated": false
+      }
+    ]
+  },
+  "warning": "Some hostnames may be truncated due to Ninja 15-character limit"
+}
+```
+
 ### **Data Quality Requirements**
 1. **Hostnames must be present** - devices without hostnames cannot be matched
 2. **Consistent naming** - devices should use consistent naming conventions
 3. **Regular collection** - data must be collected daily for accurate matching
-4. **Field mapping requirements** - The system maps vendor fields as follows:
+4. **Hostname truncation awareness** - Users must understand Ninja truncation limitations
+5. **Field mapping requirements** - The system maps vendor fields as follows:
    
    **ThreatLocker**:
    - `hostname` → `hostname` (required field, no fallbacks)

@@ -1,8 +1,8 @@
 [Unit]
-Description=Run Ninja collector daily at 02:10 AM Central Time
+Description=Run Ninja collector daily at 02:30 AM Central Time
 
 [Timer]
-OnCalendar=*-*-* 08:10:00
+OnCalendar=*-*-* 02:30:00 America/Chicago
 Persistent=true
 AccuracySec=1m
 Unit=ninja-collector.service

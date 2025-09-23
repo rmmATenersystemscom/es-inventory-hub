@@ -62,6 +62,75 @@ GET /api/exceptions?type=MISSING_NINJA&resolved=false&limit=50
 POST /api/exceptions/123/resolve
 # Mark an exception as resolved
 # Body: {"resolved_by": "username", "notes": "Fixed in Ninja"}
+
+POST /api/exceptions/123/mark-manually-fixed
+# Mark an exception as manually fixed (NEW - Critical for variance management)
+# Body: {
+#   "updated_by": "dashboard_user",
+#   "update_type": "display_name",
+#   "old_value": {"display_name": "OLD_NAME"},
+#   "new_value": {"display_name": "NEW_NAME"},
+#   "notes": "Fixed display name mismatch"
+# }
+
+POST /api/exceptions/bulk-update
+# Bulk exception operations (NEW - Efficient for multiple exceptions)
+# Body: {
+#   "exception_ids": [123, 124, 125],
+#   "action": "mark_manually_fixed",
+#   "updated_by": "dashboard_user",
+#   "notes": "Bulk fix for display names"
+# }
+
+GET /api/exceptions/status-summary
+# Get exception status summary with variance tracking (NEW)
+# Returns: status counts, recent manual updates, variance status breakdown
+```
+
+### **Device Search (NEW - Handles Hostname Truncation)**
+```bash
+GET /api/devices/search?q=AEC-02739619435
+# Search for devices across vendors with hostname truncation handling
+# Query parameters:
+#   - q: Search term (required)
+#   - vendor: Optional filter ('ninja' or 'threatlocker')
+#   - limit: Maximum results (default 50, max 200)
+
+GET /api/devices/search?q=AEC-027396194353&vendor=threatlocker
+# Search only in ThreatLocker for full hostname
+```
+
+### **Variance Management System (NEW - Critical Feature)**
+```bash
+# Mark device as manually fixed (solves the critical gap where dashboard updates
+# ThreatLocker but database doesn't know about manual fixes)
+POST /api/exceptions/{id}/mark-manually-fixed
+# Body: {
+#   "updated_by": "dashboard_user",
+#   "update_type": "display_name",
+#   "old_value": {"display_name": "AEC-02739619435"},
+#   "new_value": {"display_name": "AEC-02739619435 | Updated"},
+#   "notes": "Fixed display name mismatch"
+# }
+
+# Bulk operations for efficiency
+POST /api/exceptions/bulk-update
+# Body: {
+#   "exception_ids": [123, 124, 125],
+#   "action": "mark_manually_fixed",  # or "resolve", "reset_status"
+#   "updated_by": "dashboard_user"
+# }
+
+# Get real-time variance status summary
+GET /api/exceptions/status-summary
+# Returns: {
+#   "status_summary": {
+#     "active": {"DISPLAY_NAME_MISMATCH": {"total": 972, "unresolved": 972}},
+#     "manually_fixed": {"DISPLAY_NAME_MISMATCH": {"total": 5, "resolved": 5}}
+#   },
+#   "recent_manual_updates": [...],
+#   "generated_at": "2025-09-23T02:33:08.654872"
+# }
 ```
 
 ---
@@ -76,9 +145,17 @@ postgresql://postgres:Xat162gT2Qsg4WDlO5r@localhost:5432/es_inventory_hub
 ```
 
 **Key Tables:**
-- `exceptions` - Variance data and cross-vendor discrepancies
+- `exceptions` - Variance data and cross-vendor discrepancies (ENHANCED with variance tracking)
 - `device_snapshot` - Device inventory from both vendors
 - `vendor` - Vendor information (Ninja, ThreatLocker)
+
+**Enhanced Exceptions Table (NEW):**
+- `manually_updated_at` - Timestamp when manually fixed
+- `manually_updated_by` - User who performed the fix
+- `update_type` - Type of update (display_name, hostname, etc.)
+- `old_value` - JSONB of old values before fix
+- `new_value` - JSONB of new values after fix
+- `variance_status` - Status: 'active', 'manually_fixed', 'collector_verified', 'stale'
 
 **Essential Queries:**
 ```sql
@@ -101,6 +178,42 @@ FROM device_snapshot ds
 JOIN vendor v ON ds.vendor_id = v.id
 WHERE ds.snapshot_date = CURRENT_DATE
 GROUP BY v.name;
+
+-- NEW: Get variance status summary
+SELECT 
+    COALESCE(variance_status, 'active') as status,
+    type,
+    COUNT(*) as count,
+    COUNT(CASE WHEN resolved = true THEN 1 END) as resolved_count
+FROM exceptions
+WHERE date_found >= CURRENT_DATE - INTERVAL '7 days'
+GROUP BY variance_status, type
+ORDER BY status, type;
+
+-- NEW: Get recent manual updates
+SELECT 
+    hostname,
+    type,
+    manually_updated_by,
+    manually_updated_at,
+    update_type,
+    old_value,
+    new_value
+FROM exceptions
+WHERE manually_updated_at >= CURRENT_DATE - INTERVAL '24 hours'
+ORDER BY manually_updated_at DESC;
+
+-- NEW: Search devices with hostname truncation handling
+SELECT 
+    v.name as vendor,
+    ds.hostname,
+    ds.display_name,
+    LOWER(LEFT(SPLIT_PART(SPLIT_PART(ds.hostname,'|',1),'.',1),15)) as canonical_key
+FROM device_snapshot ds
+JOIN vendor v ON ds.vendor_id = v.id
+WHERE ds.snapshot_date = CURRENT_DATE
+  AND ds.hostname ILIKE 'AEC-02739619435%'
+ORDER BY v.name, ds.hostname;
 ```
 
 ---
@@ -202,6 +315,10 @@ sudo systemctl start threatlocker-collector@rene.service
 3. **Data Freshness** - Display data status (current/stale/out_of_sync)
 4. **Collector Controls** - Trigger manual collection runs
 5. **Historical Analysis** - View variance reports for specific dates
+6. **NEW: Real-time Variance Management** - Mark exceptions as manually fixed
+7. **NEW: Bulk Operations** - Handle multiple exceptions efficiently
+8. **NEW: Variance Status Tracking** - Show fix status and audit trail
+9. **NEW: Hostname Truncation Search** - Find devices across vendors despite truncation
 
 ### **Data Status Handling:**
 - **Current** (`status: "current"`) - Data is ≤1 day old, show normal report
@@ -214,6 +331,34 @@ sudo systemctl start threatlocker-collector@rene.service
 - Resolve exceptions
 - Export reports
 - Historical date selection
+- **NEW: Mark exceptions as manually fixed** (critical for real-time variance management)
+- **NEW: Bulk mark multiple exceptions as fixed**
+- **NEW: Search devices with hostname truncation handling**
+- **NEW: View variance status and audit trail**
+- **NEW: Monitor recent manual updates**
+
+---
+
+## **🚨 Critical Hostname Truncation Issue (RESOLVED)**
+
+### **Problem:**
+- **Ninja**: Truncates hostnames to 15 characters (e.g., `AEC-02739619435`)
+- **ThreatLocker**: Stores full hostnames up to 20 characters (e.g., `AEC-027396194353`)
+- **Impact**: Users searching with Ninja hostnames couldn't find corresponding ThreatLocker devices
+
+### **Solution:**
+The new `/api/devices/search` endpoint handles this automatically:
+- **Multi-strategy search**: Exact match, contains match, canonical key match, prefix match
+- **Cross-vendor grouping**: Results grouped by canonical key to show related devices
+- **Truncation detection**: Indicates when hostnames are truncated
+- **Vendor filtering**: Optional vendor-specific searches
+
+### **Usage:**
+```bash
+# Both of these will find the same device in both vendors:
+GET /api/devices/search?q=AEC-02739619435      # Ninja format (truncated)
+GET /api/devices/search?q=AEC-027396194353     # ThreatLocker format (full)
+```
 
 ---
 
@@ -232,9 +377,19 @@ python3 api/api_server.py
 
 ### **3. Test API:**
 ```bash
+# Basic endpoints
 curl http://localhost:5500/api/health
 curl http://localhost:5500/api/status
 curl http://localhost:5500/api/variance-report/latest
+
+# NEW: Test variance management endpoints
+curl http://localhost:5500/api/exceptions/status-summary
+curl "http://localhost:5500/api/devices/search?q=AEC-02739619435"
+
+# NEW: Test manual fix endpoint (replace 123 with actual exception ID)
+curl -X POST http://localhost:5500/api/exceptions/123/mark-manually-fixed \
+  -H "Content-Type: application/json" \
+  -d '{"updated_by": "test_user", "update_type": "display_name"}'
 ```
 
 ### **4. Build Dashboard:**

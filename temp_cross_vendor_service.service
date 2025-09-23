@@ -1,0 +1,28 @@
+[Unit]
+Description=ES Inventory Hub Cross-Vendor Consistency Checks
+Documentation=https://github.com/your-org/es-inventory-hub
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=oneshot
+User=rene
+Group=rene
+WorkingDirectory=/opt/es-inventory-hub
+ExecStart=/opt/es-inventory-hub/scripts/run_cross_vendor_checks.sh
+StandardOutput=journal
+StandardError=journal
+Environment=DB_DSN=postgresql+psycopg2://postgres:Xat162gT2Qsg4WDlO5r@localhost:5432/es_inventory_hub
+
+# Restart policy
+Restart=no
+RestartSec=0
+
+# Security settings
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/es-inventory-hub /opt/es-inventory-hub
+
+[Install]
+WantedBy=multi-user.target

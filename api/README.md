@@ -16,12 +16,12 @@
 - **Size**: 429 lines
 - **Dependencies**: Flask, SQLAlchemy, project modules
 - **Usage**: `python3 api_server.py`
-- **Port**: Runs on http://localhost:5500
+- **Port**: Runs on http://localhost:5400
 
 ### **Port Configuration**
-- **ES Inventory Hub Port Range**: 5500-5599
+- **ES Inventory Hub Port Range**: 5400-5499
 - **Dashboard Project Port Range**: 5000-5499 (reserved)
-- **Current API Server Port**: 5500
+- **Current API Server Port**: 5400
 
 #### **test_api.py**
 - **Purpose**: Testing script for the API server
@@ -78,18 +78,18 @@ python3 api/test_api.py
 
 ### **Port Range Allocation**
 - **Dashboard Project**: Ports 5000-5499 (reserved)
-- **ES Inventory Hub**: Ports 5500-5599 (available for use)
-- **Current API Server**: Port 5500
+- **ES Inventory Hub**: Ports 5400-5499 (available for use)
+- **Current API Server**: Port 5400
 
 ### **Port Selection Rationale**
-- **Port 5500**: Primary API server port
-- **Future Expansion**: Additional services can use ports 5501-5599
+- **Port 5400**: Primary API server port
+- **Future Expansion**: Additional services can use ports 5401-5499
 - **Conflict Avoidance**: Clear separation from dashboard project ports
-- **Firewall Considerations**: Ensure ports 5500-5599 are accessible if needed
+- **Firewall Considerations**: Ensure ports 5400-5499 are accessible if needed
 
 ### **Changing Ports**
 To change the API server port, update the following:
-1. **API Server**: Modify `port=5500` in `api_server.py`
+1. **API Server**: Modify `port=5400` in `api_server.py`
 2. **Test Script**: Update `API_BASE` in `test_api.py`
 3. **Documentation**: Update all references to the new port
 4. **Firewall**: Update firewall rules if applicable
@@ -127,9 +127,9 @@ To change the API server port, update the following:
 python3 api/test_api.py
 
 # Test specific endpoint (manual)
-curl http://localhost:5500/api/health
-curl http://localhost:5500/api/status
-curl http://localhost:5500/api/variance-report/latest
+curl http://localhost:5400/api/health
+curl http://localhost:5400/api/status
+curl http://localhost:5400/api/variance-report/latest
 ```
 
 ---
@@ -137,7 +137,7 @@ curl http://localhost:5500/api/variance-report/latest
 ## 📚 **Integration**
 
 ### **For Dashboard Developers**
-- **API Base URL**: `http://localhost:5500`
+- **API Base URL**: `http://localhost:5400`
 - **Documentation**: See `docs/API_QUICK_REFERENCE.md`
 - **Integration Guide**: See `docs/DASHBOARD_INTEGRATION_GUIDE.md`
 
@@ -196,7 +196,7 @@ curl http://localhost:5500/api/variance-report/latest
    python3 api/api_server.py
    
    # Check endpoint URLs
-   curl http://localhost:5500/api/health
+   curl http://localhost:5400/api/health
    ```
 
 3. **Database Connection Issues**

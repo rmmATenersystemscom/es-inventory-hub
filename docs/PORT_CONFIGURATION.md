@@ -12,12 +12,12 @@
 
 | Project | Port Range | Status | Purpose |
 |---------|------------|--------|---------|
-| **Dashboard Project** | 5000-5499 | **ACTIVE** | Dashboard services, web interfaces, and related APIs |
-| **ES Inventory Hub** | 5500-5599 | **ACTIVE** | Data collection, API services, and system utilities |
+| **Dashboard Project** | 5000-5399 | **ACTIVE** | Dashboard services, web interfaces, and related APIs |
+| **ES Inventory Hub** | 5400-5499 | **ACTIVE** | Data collection, API services, and system utilities |
 
 ### **Current Port Usage - All 24 Dashboards**
 
-#### **Dashboard Project (5000-5499)**
+#### **Dashboard Project (5000-5399)**
 | Service | Host Port | Container Port | Protocol | Purpose | Status |
 |---------|-----------|----------------|----------|---------|--------|
 | **Hub Dashboard** | 5000 | 5000 | HTTP | Main dashboard hub and navigation | Active |
@@ -47,11 +47,17 @@
 | **Technician KPI Wall** | 5025 | 5011 | HTTP | Technician performance metrics | Active |
 | **Nginx Reverse Proxy** | 80, 443 | - | HTTP/HTTPS | Web server and SSL termination | Active |
 
-#### **ES Inventory Hub (5500-5599)**
+#### **ES Inventory Hub (5400-5499)**
 | Service | Port | Protocol | Purpose | Status |
 |---------|------|----------|---------|--------|
-| **API Server** | 5500 | HTTP | REST API for variance data and collector management | Active |
-| **Future Services** | 5501-5599 | TBD | Available for additional services | Available |
+| **API Server** | 5400 | HTTP | REST API for variance data and collector management | Active |
+| **Cross-Vendor Checks** | N/A | Systemd | Daily variance analysis at 3:00 AM Central | Active |
+| **Future Services** | 5401-5431, 5433-5499 | TBD | Available for additional services | Available |
+
+#### **Database Services**
+| Service | Port | Protocol | Purpose | Status |
+|---------|------|----------|---------|--------|
+| **PostgreSQL** | 5432 | TCP | Database for both Dashboard and ES Inventory Hub projects | Active |
 
 ---
 
@@ -92,7 +98,7 @@ app.run(host='0.0.0.0', port=5011, debug=False)
 ### **ES Inventory Hub Configuration**
 ```python
 # api/api_server.py
-app.run(host='0.0.0.0', port=5500, debug=True)
+app.run(host='0.0.0.0', port=5400, debug=True)
 ```
 
 ### **Nginx Configuration**
@@ -109,7 +115,7 @@ server {
 
 ## 🚀 **Future Port Planning**
 
-### **Dashboard Project Available Ports (5002-5499)**
+### **Dashboard Project Available Ports (5002-5399)**
 - **5002-5010**: Additional dashboard services
 - **5012-5020**: Specialized dashboards
 - **5021-5030**: API services
@@ -117,15 +123,16 @@ server {
 - **5041-5050**: Background processing services
 - **5051-5060**: Monitoring and health check services
 - **5061-5070**: Development and testing services
-- **5071-5499**: Reserved for future expansion
+- **5071-5399**: Reserved for future expansion
 
-### **ES Inventory Hub Available Ports (5501-5599)**
-- **5501-5510**: Additional API services
-- **5511-5520**: WebSocket services
-- **5521-5530**: Background processing services
-- **5531-5540**: Monitoring and health check services
-- **5541-5550**: Development and testing services
-- **5551-5599**: Reserved for future expansion
+### **ES Inventory Hub Available Ports (5401-5431, 5433-5499)**
+- **5401-5410**: Additional API services
+- **5411-5420**: WebSocket services
+- **5421-5430**: Background processing services
+- **5431**: Monitoring and health check services
+- **5433-5440**: Monitoring and health check services (continued)
+- **5441-5450**: Development and testing services
+- **5451-5499**: Reserved for future expansion
 
 ### **Port Assignment Guidelines**
 1. **Sequential Assignment**: Use ports in order within each project range
@@ -142,15 +149,16 @@ server {
 ### **Firewall Configuration**
 ```bash
 # Allow Dashboard Project ports
-sudo ufw allow 5000:5499/tcp
+sudo ufw allow 5000:5399/tcp
 
 # Allow ES Inventory Hub ports
-sudo ufw allow 5500:5599/tcp
+sudo ufw allow 5400:5499/tcp
 
 # Allow specific services
 sudo ufw allow 5000/tcp  # Most dashboards
 sudo ufw allow 5001/tcp  # Variances dashboard
-sudo ufw allow 5500/tcp  # ES Inventory Hub API
+sudo ufw allow 5400/tcp  # ES Inventory Hub API
+sudo ufw allow 5432/tcp  # PostgreSQL database
 ```
 
 ### **Network Security**
@@ -266,21 +274,22 @@ ss -tlnp | grep -E ":(55[0-9][0-9])"
 ## 🔄 **Cross-Project Communication**
 
 ### **Port Coordination**
-- **Dashboard Project**: Manages ports 5000-5499
-- **ES Inventory Hub**: Manages ports 5500-5599
-- **Communication**: API calls from dashboard to ES Inventory Hub on port 5500
+- **Dashboard Project**: Manages ports 5000-5399
+- **ES Inventory Hub**: Manages ports 5400-5499
+- **PostgreSQL Database**: Port 5432 (shared by both projects)
+- **Communication**: API calls from dashboard to ES Inventory Hub on port 5400
 - **No Conflicts**: Clear separation prevents port conflicts
 
 ### **Cross-Project Communication**
 ```javascript
 // Dashboard project calling ES Inventory Hub API
-const response = await fetch('http://localhost:5500/api/variance-report/latest');
+const response = await fetch('http://localhost:5400/api/variance-report/latest');
 ```
 
 ```python
 # Dashboard project calling ES Inventory Hub API
 import requests
-response = requests.get('http://localhost:5500/api/variance-report/latest')
+response = requests.get('http://localhost:5400/api/variance-report/latest')
 ```
 
 ---
@@ -299,9 +308,15 @@ response = requests.get('http://localhost:5500/api/variance-report/latest')
 ### **ES Inventory Hub Port Assignments**
 | Date | Service | Port | Purpose | Status |
 |------|---------|------|---------|--------|
-| 2025-09-22 | API Server | 5500 | REST API for variance data | Active |
-| TBD | Future Service | 5501 | TBD | Available |
-| TBD | Future Service | 5502 | TBD | Available |
+| 2025-09-23 | API Server | 5400 | REST API for variance data and collector management | Active |
+| 2025-09-23 | Cross-Vendor Checks | N/A | Daily variance analysis at 3:00 AM Central | Active |
+| TBD | Future Service | 5401 | TBD | Available |
+| TBD | Future Service | 5402 | TBD | Available |
+
+### **Database Services Port Assignments**
+| Date | Service | Port | Purpose | Status |
+|------|---------|------|---------|--------|
+| 2025-09-23 | PostgreSQL | 5432 | Database for both Dashboard and ES Inventory Hub projects | Active |
 
 ---
 
@@ -346,6 +361,6 @@ The ES Dashboards system uses **TWO networking patterns**:
 
 ---
 
-**Last Updated**: September 22, 2025  
+**Last Updated**: September 23, 2025  
 **Status**: ✅ **ACTIVE** - Port configuration in use  
-**Projects**: Dashboard Project (5000-5499) + ES Inventory Hub (5500-5599)
+**Projects**: Dashboard Project (5000-5399) + ES Inventory Hub (5400-5499) + PostgreSQL (5432)

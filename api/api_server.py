@@ -9,7 +9,7 @@ Provides REST API endpoints for:
 
 Usage:
     python3 api_server.py
-    # Server runs on http://localhost:5500
+    # Server runs on http://localhost:5400
 """
 
 import os
@@ -133,6 +133,9 @@ def get_status():
 @app.route('/api/variance-report/latest', methods=['GET'])
 def get_latest_variance_report():
     """Get the latest variance report."""
+    # Get query parameters
+    include_resolved = request.args.get('include_resolved', 'false').lower() == 'true'
+    
     latest_date = get_latest_matching_date()
     
     if not latest_date:
@@ -142,13 +145,22 @@ def get_latest_variance_report():
         }), 400
     
     with get_session() as session:
-        # Get exceptions for the latest date
-        query = text("""
-            SELECT id, date_found, type, hostname, details, resolved
-            FROM exceptions
-            WHERE date_found = :report_date
-            ORDER BY type, hostname
-        """)
+        # Get exceptions for the latest date (filter resolved by default)
+        if include_resolved:
+            query = text("""
+                SELECT id, date_found, type, hostname, details, resolved
+                FROM exceptions
+                WHERE date_found = :report_date
+                ORDER BY type, hostname
+            """)
+        else:
+            query = text("""
+                SELECT id, date_found, type, hostname, details, resolved
+                FROM exceptions
+                WHERE date_found = :report_date
+                AND resolved = FALSE
+                ORDER BY type, hostname
+            """)
         
         exceptions = session.execute(query, {'report_date': latest_date}).fetchall()
         
@@ -184,6 +196,9 @@ def get_latest_variance_report():
 @app.route('/api/variance-report/<date_str>', methods=['GET'])
 def get_variance_report_by_date(date_str: str):
     """Get variance report for a specific date."""
+    # Get query parameters
+    include_resolved = request.args.get('include_resolved', 'false').lower() == 'true'
+    
     try:
         report_date = datetime.strptime(date_str, '%Y-%m-%d').date()
     except ValueError:
@@ -205,13 +220,22 @@ def get_variance_report_by_date(date_str: str):
                 "status": "insufficient_data"
             }), 400
         
-        # Get exceptions for the date
-        query = text("""
-            SELECT id, date_found, type, hostname, details, resolved
-            FROM exceptions
-            WHERE date_found = :report_date
-            ORDER BY type, hostname
-        """)
+        # Get exceptions for the date (filter resolved by default)
+        if include_resolved:
+            query = text("""
+                SELECT id, date_found, type, hostname, details, resolved
+                FROM exceptions
+                WHERE date_found = :report_date
+                ORDER BY type, hostname
+            """)
+        else:
+            query = text("""
+                SELECT id, date_found, type, hostname, details, resolved
+                FROM exceptions
+                WHERE date_found = :report_date
+                AND resolved = FALSE
+                ORDER BY type, hostname
+            """)
         
         exceptions = session.execute(query, {'report_date': report_date}).fetchall()
         
@@ -468,6 +492,112 @@ def mark_exception_manually_fixed(exception_id: int):
             'updated_at': datetime.now().isoformat()
         })
 
+@app.route('/api/exceptions/mark-fixed-by-hostname', methods=['POST'])
+def mark_exception_fixed_by_hostname():
+    """
+    Mark exceptions as manually fixed by hostname and exception type.
+    
+    This endpoint allows the dashboard to mark exceptions as fixed when
+    they update ThreatLocker display names, without needing to know
+    the specific exception ID.
+    
+    FIXED: Now handles both unresolved and already-resolved exceptions
+    to provide proper feedback to the dashboard.
+    """
+    data = request.get_json() or {}
+    hostname = data.get('hostname')
+    exception_type = data.get('type', 'DISPLAY_NAME_MISMATCH')
+    updated_by = data.get('updated_by', 'dashboard_user')
+    update_type = data.get('update_type', 'display_name_update')
+    old_value = data.get('old_value', {})
+    new_value = data.get('new_value', {})
+    notes = data.get('notes', '')
+    
+    if not hostname:
+        return jsonify({'error': 'Hostname is required'}), 400
+    
+    with get_session() as session:
+        # First, check if ANY exceptions exist for this hostname (resolved or unresolved)
+        check_query = text("""
+            SELECT id, hostname, type, resolved, manually_updated_at, manually_updated_by
+            FROM exceptions 
+            WHERE hostname = :hostname 
+            AND type = :exception_type
+            AND date_found = CURRENT_DATE
+            ORDER BY id DESC
+        """)
+        
+        all_exceptions = session.execute(check_query, {
+            'hostname': hostname,
+            'exception_type': exception_type
+        }).fetchall()
+        
+        if not all_exceptions:
+            return jsonify({
+                'success': False,
+                'message': f'No {exception_type} exceptions found for hostname {hostname}',
+                'hostname': hostname,
+                'type': exception_type,
+                'status': 'not_found'
+            }), 404
+        
+        # Check if any are unresolved
+        unresolved_exceptions = [exc for exc in all_exceptions if not exc[3]]  # resolved is index 3
+        
+        if unresolved_exceptions:
+            # Update unresolved exceptions
+            update_query = text("""
+                UPDATE exceptions
+                SET 
+                    resolved = TRUE,
+                    manually_updated_at = CURRENT_TIMESTAMP,
+                    manually_updated_by = :updated_by,
+                    update_type = :update_type,
+                    old_value = :old_value,
+                    new_value = :new_value,
+                    variance_status = 'manually_fixed'
+                WHERE hostname = :hostname 
+                AND type = :exception_type
+                AND resolved = FALSE
+                AND date_found = CURRENT_DATE
+            """)
+            
+            result = session.execute(update_query, {
+                'hostname': hostname,
+                'exception_type': exception_type,
+                'updated_by': updated_by,
+                'update_type': update_type,
+                'old_value': json.dumps(old_value),
+                'new_value': json.dumps(new_value)
+            })
+            
+            session.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': f'Marked {result.rowcount} exceptions as manually fixed',
+                'hostname': hostname,
+                'type': exception_type,
+                'exceptions_updated': result.rowcount,
+                'updated_by': updated_by,
+                'updated_at': datetime.now().isoformat(),
+                'status': 'updated'
+            })
+        else:
+            # All exceptions are already resolved - return success with info
+            latest_exception = all_exceptions[0]  # Most recent
+            return jsonify({
+                'success': True,
+                'message': f'Exception already resolved for hostname {hostname}',
+                'hostname': hostname,
+                'type': exception_type,
+                'exceptions_updated': 0,
+                'status': 'already_resolved',
+                'last_updated_by': latest_exception[5],  # manually_updated_by
+                'last_updated_at': latest_exception[4].isoformat() if latest_exception[4] else None,  # manually_updated_at
+                'updated_at': datetime.now().isoformat()
+            })
+
 @app.route('/api/exceptions/bulk-update', methods=['POST'])
 def bulk_update_exceptions():
     """
@@ -531,6 +661,215 @@ def bulk_update_exceptions():
             'updated_count': result.rowcount,
             'exception_ids': exception_ids,
             'updated_by': updated_by
+        })
+
+@app.route('/api/variance-report/filtered', methods=['GET'])
+def get_filtered_variance_report():
+    """
+    Get filtered variance report for dashboard integration.
+    
+    This endpoint provides the same data format as the Variances dashboard
+    but uses Database AI's filtered exception data (only unresolved exceptions).
+    This ensures both systems use the same authoritative data source.
+    """
+    latest_date = get_latest_matching_date()
+    
+    if not latest_date:
+        return jsonify({
+            "error": "No matching data found between vendors",
+            "status": "out_of_sync"
+        }), 400
+    
+    with get_session() as session:
+        # Get device counts by vendor
+        device_counts_query = text("""
+            SELECT v.name as vendor, COUNT(*) as count
+            FROM device_snapshot ds
+            JOIN vendor v ON ds.vendor_id = v.id
+            WHERE ds.snapshot_date = :report_date
+            GROUP BY v.name
+        """)
+        
+        device_counts = session.execute(device_counts_query, {'report_date': latest_date}).fetchall()
+        device_counts_dict = {row[0]: row[1] for row in device_counts}
+        
+        # Get only unresolved exceptions (filtered data)
+        exceptions_query = text("""
+            SELECT id, type, hostname, details
+            FROM exceptions
+            WHERE date_found = :report_date
+            AND resolved = FALSE
+            ORDER BY type, hostname
+        """)
+        
+        exceptions = session.execute(exceptions_query, {'report_date': latest_date}).fetchall()
+        
+        # Group exceptions by type and organization
+        by_type = {}
+        by_organization = {}
+        
+        for exc in exceptions:
+            exc_type = exc[1]
+            hostname = exc[2]
+            details = exc[3]
+            
+            # Initialize type group
+            if exc_type not in by_type:
+                by_type[exc_type] = []
+            
+            # Get organization from details
+            org_name = details.get('tl_org_name', details.get('ninja_org_name', 'Unknown'))
+            if org_name not in by_organization:
+                by_organization[org_name] = []
+            
+            # Format exception data for dashboard
+            exception_data = {
+                "hostname": hostname,
+                "details": details,
+                "action": _get_action_for_exception_type(exc_type)
+            }
+            
+            # Add type-specific fields
+            if exc_type == 'DISPLAY_NAME_MISMATCH':
+                exception_data.update({
+                    "ninja_display_name": details.get('ninja_display_name', ''),
+                    "threatlocker_computer_name": details.get('tl_display_name', ''),
+                    "organization": org_name
+                })
+            elif exc_type == 'MISSING_NINJA':
+                exception_data.update({
+                    "threatlocker_hostname": details.get('tl_hostname', ''),
+                    "organization": org_name
+                })
+            
+            by_type[exc_type].append(exception_data)
+            by_organization[org_name].append(exception_data)
+        
+        # Calculate totals
+        total_variances = len(exceptions)
+        
+        # Build response in dashboard format
+        response = {
+            "analysis_date": latest_date.isoformat(),
+            "total_devices": {
+                "ninja": device_counts_dict.get('Ninja', 0),
+                "threatlocker": device_counts_dict.get('ThreatLocker', 0)
+            },
+            "total_variances": total_variances,
+            "data_status": get_data_status(),
+            "status": "current"
+        }
+        
+        # Add exception data by type
+        if 'DISPLAY_NAME_MISMATCH' in by_type:
+            response["display_name_mismatches"] = {
+                "total_count": len(by_type['DISPLAY_NAME_MISMATCH']),
+                "by_organization": _group_by_organization(by_type['DISPLAY_NAME_MISMATCH'])
+            }
+        
+        if 'MISSING_NINJA' in by_type:
+            response["missing_in_ninja"] = {
+                "total_count": len(by_type['MISSING_NINJA']),
+                "by_organization": _group_by_organization(by_type['MISSING_NINJA'])
+            }
+        
+        if 'DUPLICATE_TL' in by_type:
+            response["threatlocker_duplicates"] = {
+                "total_count": len(by_type['DUPLICATE_TL']),
+                "devices": by_type['DUPLICATE_TL']
+            }
+        
+        if 'SPARE_MISMATCH' in by_type:
+            response["ninja_duplicates"] = {
+                "total_count": len(by_type['SPARE_MISMATCH']),
+                "by_organization": _group_by_organization(by_type['SPARE_MISMATCH'])
+            }
+        
+        # Add actionable insights
+        response["actionable_insights"] = _generate_actionable_insights(by_type)
+        
+        # Add collection info
+        response["collection_info"] = {
+            "last_collection": latest_date.isoformat(),
+            "data_freshness": "current" if (datetime.now().date() - latest_date).days <= 1 else "stale"
+        }
+        
+        # Add data quality indicators
+        response["data_quality"] = {
+            "total_exceptions": total_variances,
+            "exception_types": list(by_type.keys()),
+            "organizations_affected": len(by_organization)
+        }
+        
+        return jsonify(response)
+
+def _get_action_for_exception_type(exc_type: str) -> str:
+    """Get recommended action for exception type."""
+    actions = {
+        'DISPLAY_NAME_MISMATCH': 'Investigate - Reconcile naming differences',
+        'MISSING_NINJA': 'Add device to Ninja or remove from ThreatLocker',
+        'DUPLICATE_TL': 'Remove duplicate ThreatLocker entries',
+        'SPARE_MISMATCH': 'Update billing status or remove from ThreatLocker',
+        'SITE_MISMATCH': 'Reconcile site assignments between vendors'
+    }
+    return actions.get(exc_type, 'Investigate and resolve')
+
+def _group_by_organization(exceptions: list) -> dict:
+    """Group exceptions by organization."""
+    by_org = {}
+    for exc in exceptions:
+        org = exc.get('organization', 'Unknown')
+        if org not in by_org:
+            by_org[org] = []
+        by_org[org].append(exc)
+    return by_org
+
+def _generate_actionable_insights(by_type: dict) -> dict:
+    """Generate actionable insights based on exception data."""
+    insights = {
+        "priority_actions": [],
+        "summary": {}
+    }
+    
+    for exc_type, exceptions in by_type.items():
+        count = len(exceptions)
+        if count > 0:
+            insights["summary"][exc_type] = count
+            
+            if exc_type == 'DISPLAY_NAME_MISMATCH' and count > 50:
+                insights["priority_actions"].append(f"High priority: {count} display name mismatches need attention")
+            elif exc_type == 'MISSING_NINJA' and count > 20:
+                insights["priority_actions"].append(f"Critical: {count} devices missing from Ninja")
+    
+    return insights
+
+@app.route('/api/exceptions/count', methods=['GET'])
+def get_exceptions_count():
+    """
+    Get count of unresolved exceptions by type for today.
+    
+    This endpoint helps the dashboard get accurate counts for display.
+    """
+    exception_type = request.args.get('type', 'DISPLAY_NAME_MISMATCH')
+    
+    with get_session() as session:
+        count_query = text("""
+            SELECT COUNT(*) as total_count
+            FROM exceptions 
+            WHERE type = :exception_type
+            AND resolved = FALSE
+            AND date_found = CURRENT_DATE
+        """)
+        
+        total_count = session.execute(count_query, {
+            'exception_type': exception_type
+        }).scalar()
+        
+        return jsonify({
+            'success': True,
+            'type': exception_type,
+            'unresolved_count': total_count,
+            'date': datetime.now().date().isoformat()
         })
 
 @app.route('/api/exceptions/status-summary', methods=['GET'])
@@ -732,15 +1071,17 @@ if __name__ == '__main__':
     print("  GET  /api/status - System status")
     print("  GET  /api/variance-report/latest - Latest variance report")
     print("  GET  /api/variance-report/{date} - Variance report for specific date")
+    print("  GET  /api/variance-report/filtered - Filtered variance report for dashboard")
     print("  POST /api/collectors/run - Trigger collector runs")
     print("  GET  /api/collectors/status - Collector service status")
     print("  GET  /api/exceptions - Get exceptions with filtering")
     print("  POST /api/exceptions/{id}/resolve - Resolve an exception")
     print("  POST /api/exceptions/{id}/mark-manually-fixed - Mark as manually fixed (NEW)")
+    print("  POST /api/exceptions/mark-fixed-by-hostname - Mark exceptions fixed by hostname (NEW)")
     print("  POST /api/exceptions/bulk-update - Bulk exception operations (NEW)")
     print("  GET  /api/exceptions/status-summary - Exception status summary (NEW)")
     print("  GET  /api/devices/search?q={hostname} - Search devices (handles hostname truncation)")
     print()
-    print("Server will run on http://localhost:5500")
+    print("Server will run on http://localhost:5400")
     
-    app.run(host='0.0.0.0', port=5500, debug=True)
+    app.run(host='0.0.0.0', port=5400, debug=True)

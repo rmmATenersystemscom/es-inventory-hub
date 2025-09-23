@@ -7,7 +7,7 @@ import requests
 import json
 from datetime import date
 
-API_BASE = "http://localhost:5500"
+API_BASE = "http://localhost:5400"
 
 def test_endpoint(endpoint, method="GET", data=None):
     """Test an API endpoint."""

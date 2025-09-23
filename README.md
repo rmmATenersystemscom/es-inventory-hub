@@ -86,12 +86,12 @@ python3 -m collectors.threatlocker.main --limit 5
 
 ### **Port Range Allocation**
 - **Dashboard Project**: Ports 5000-5499 (reserved)
-- **ES Inventory Hub**: Ports 5500-5599 (available for use)
-- **Current API Server**: Port 5500
+- **ES Inventory Hub**: Ports 5400-5499 (available for use)
+- **Current API Server**: Port 5400
 
 ### **Port Usage**
-- **API Server**: Port 5500 (REST API for variance data and collector management)
-- **Future Services**: Ports 5501-5599 available for additional services
+- **API Server**: Port 5400 (REST API for variance data and collector management)
+- **Future Services**: Ports 5401-5499 available for additional services
 - **Conflict Prevention**: Clear separation from dashboard project port range
 
 ## Project Structure
@@ -190,12 +190,14 @@ The system automatically detects discrepancies between Ninja and ThreatLocker de
 **Automated Daily Collection:**
 - **Ninja Collector**: 02:10 AM Central Time daily
 - **ThreatLocker Collector**: 02:31 AM Central Time daily
+- **Cross-Vendor Checks**: 03:00 AM Central Time daily (NEW)
 - **21-minute stagger**: Prevents conflicts and allows database locks to clear
 
 **Collection Process:**
 1. **Ninja Collection** (02:10 AM Central): Fetches and normalizes all devices
-2. **ThreatLocker Collection** (02:31 AM Central): Fetches devices and runs cross-vendor checks
-3. **Variance Detection**: Automatically identifies discrepancies between vendors
+2. **ThreatLocker Collection** (02:31 AM Central): Fetches devices and stores in database
+3. **Cross-Vendor Checks** (03:00 AM Central): Analyzes data and generates variance reports
+4. **Variance Detection**: Automatically identifies discrepancies between vendors
 
 **Scheduling Methods:**
 - **Primary**: Systemd timers (recommended)
@@ -206,6 +208,9 @@ The system automatically detects discrepancies between Ninja and ThreatLocker de
 # Run collectors on-demand
 systemctl start ninja-collector@${USER}.service
 systemctl start threatlocker-collector@${USER}.service
+
+# Run cross-vendor checks on-demand
+systemctl start es-cross-vendor-checks.service
 ```
 
 ### Device Mapping

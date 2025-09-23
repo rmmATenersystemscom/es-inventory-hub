@@ -17,7 +17,7 @@ def normalize_threatlocker_device(raw: Dict[str, Any]) -> Dict[str, Any]:
     vendor_device_key = str(raw.get('computerId', ''))
     
     # Get hostname (hostname field is required - no fallbacks)
-    # Note: computerName contains pipe symbols like "CHI-4YHKJL3 | Keith Oneil" so it's not used
+    # Note: computerName contains user-friendly names like "CHI-4YHKJL3 | Keith Oneil" and is used for display_name
     hostname = raw.get('hostname', '')
     
     # Validate that hostname is present - this is critical for device matching
@@ -31,8 +31,8 @@ def normalize_threatlocker_device(raw: Dict[str, Any]) -> Dict[str, Any]:
     # Get organization name
     organization_name = raw.get('organizationName', '') or raw.get('organization', '')
     
-    # Get display name (use hostname as display name)
-    display_name = hostname
+    # Get display name (use computerName field which contains user-friendly name)
+    display_name = raw.get('computerName', '') or hostname
     
     # Get device status
     device_status = _get_device_status(raw)

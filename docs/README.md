@@ -46,9 +46,9 @@ This directory contains comprehensive documentation for the ES Inventory Hub sys
 - **[CRON.md](./CRON.md)** - Cron job configuration (alternative to systemd)
 
 ### **Network Configuration**
-- **Port Range**: ES Inventory Hub uses ports 5500-5599
+- **Port Range**: ES Inventory Hub uses ports 5400-5499
 - **Dashboard Project**: Reserved ports 5000-5499
-- **API Server**: Currently running on port 5500
+- **API Server**: Currently running on port 5400
 
 ### **Data Collection**
 - **[NINJA_API_DOCUMENTATION.md](./NINJA_API_DOCUMENTATION.md)** - NinjaRMM API integration details
@@ -196,8 +196,8 @@ systemctl list-timers | grep -E "(ninja|threatlocker)"
 psql -d es_inventory_hub -c "SELECT * FROM exceptions ORDER BY date_found DESC LIMIT 10;"
 
 # Test API endpoints
-curl http://localhost:5500/api/health
-curl http://localhost:5500/api/variance-report/latest
+curl http://localhost:5400/api/health
+curl http://localhost:5400/api/variance-report/latest
 ```
 
 ---

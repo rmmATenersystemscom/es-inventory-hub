@@ -76,17 +76,17 @@ The system uses normalized "canonical keys" to match devices across vendors:
 LOWER(LEFT(SPLIT_PART(SPLIT_PART(hostname,'|',1),'.',1),15))
 ```
 
-**Important**: ThreatLocker has multiple fields, but only the `hostname` field is used:
-- **Required**: `hostname` field (no fallbacks)
-- **Do NOT use**: `computerName` field (contains pipe symbols like "CHI-4YHKJL3 | Keith Oneil")
+**Important**: ThreatLocker has multiple fields with specific usage:
+- **Required for device matching**: `hostname` field (no fallbacks)
+- **Used for display_name**: `computerName` field (contains user-friendly names like "CHI-4YHKJL3 | Keith Oneil")
 - **Do NOT use**: `name` field (no fallbacks allowed)
 
-**⚠️ Data Quality Handling**: The system now extracts clean hostnames by:
-1. Taking the first part before the pipe symbol (`SPLIT_PART(hostname,'|',1)`)
-2. Then taking the first part before the dot (`SPLIT_PART(...,'.',1)`)
-3. Limiting to 15 characters and converting to lowercase
+**⚠️ Data Quality Handling**: The system uses different fields for different purposes:
+1. **Device Matching**: Uses `hostname` field (clean hostname without user info)
+2. **Display Names**: Uses `computerName` field (contains user-friendly names with pipe symbols)
+3. **Canonical Key Generation**: Extracts clean hostnames by taking the first part before the pipe symbol
 
-The system **requires** the `hostname` field and will throw an exception if it's missing, as this indicates a critical data quality issue that prevents device matching.
+The system **requires** the `hostname` field for device matching and will throw an exception if it's missing, as this indicates a critical data quality issue that prevents device matching.
 
 **Examples**: 
 - `SERVER-01.domain.com` → `server-01`
@@ -450,13 +450,13 @@ GET /api/devices/search?q={hostname}&vendor={ninja|threatlocker}&limit={number}
 **Example Usage:**
 ```bash
 # Search for device using Ninja hostname (truncated)
-curl "http://localhost:5500/api/devices/search?q=AEC-02739619435"
+curl "http://localhost:5400/api/devices/search?q=AEC-02739619435"
 
 # Search for device using ThreatLocker hostname (full)
-curl "http://localhost:5500/api/devices/search?q=AEC-027396194353"
+curl "http://localhost:5400/api/devices/search?q=AEC-027396194353"
 
 # Search only in Ninja
-curl "http://localhost:5500/api/devices/search?q=AEC-02739619435&vendor=ninja"
+curl "http://localhost:5400/api/devices/search?q=AEC-02739619435&vendor=ninja"
 ```
 
 **Response Format:**
@@ -492,8 +492,8 @@ curl "http://localhost:5500/api/devices/search?q=AEC-02739619435&vendor=ninja"
 5. **Field mapping requirements** - The system maps vendor fields as follows:
    
    **ThreatLocker**:
-   - `hostname` → `hostname` (required field, no fallbacks)
-   - `computerName` → **NOT USED** (contains pipe symbols like "CHI-4YHKJL3 | Keith Oneil")
+   - `hostname` → `hostname` (required field for device matching, no fallbacks)
+   - `computerName` → `display_name` (contains user-friendly names like "CHI-4YHKJL3 | Keith Oneil")
    - `name` → **NOT USED** (no fallbacks allowed)
    
    **Ninja**:
@@ -501,7 +501,7 @@ curl "http://localhost:5500/api/devices/search?q=AEC-02739619435&vendor=ninja"
    - `displayName` → **NOT USED** (never used as anchor for device matching)
    - `hostname`, `deviceName`, `dnsName` → **NOT USED** (no fallbacks allowed)
    
-   **Critical**: If either `hostname` (ThreatLocker) or `systemName` (Ninja) is missing, the system throws an exception and stops processing.
+   **Critical**: If either `hostname` (ThreatLocker) or `systemName` (Ninja) is missing, the system throws an exception and stops processing. The `computerName` field is used for display purposes but is not required for device matching.
 
 ### **Performance Optimization**
 1. **Indexes are critical** - the system relies on database indexes for performance
@@ -522,7 +522,7 @@ curl "http://localhost:5500/api/devices/search?q=AEC-02739619435&vendor=ninja"
 1. **No matches found** - check if hostnames are present and properly formatted
 2. **Too many exceptions** - verify data collection is working correctly
 3. **Performance issues** - ensure database indexes are present and up-to-date
-4. **Missing hostname exceptions** - if devices are missing their required hostname fields (ThreatLocker: `hostname`, Ninja: `systemName`), this indicates a critical data quality issue that must be resolved
+4. **Missing hostname exceptions** - if devices are missing their required hostname fields (ThreatLocker: `hostname`, Ninja: `systemName`), this indicates a critical data quality issue that must be resolved. Note that `computerName` is used for display purposes but is not required for device matching.
 
 ### **Debug Queries**
 ```sql
@@ -575,6 +575,7 @@ LIMIT 10;
 
 ### **System Status**
 - ✅ **Cross-Vendor Field Mapping**: Resolved - All hostnames display clean (no pipe symbols)
+- ✅ **Display Name Matching**: Fixed - ThreatLocker now uses computerName field for display_name to match Ninja format
 - ✅ **ThreatLocker API**: Configured for full dataset collection (~400+ devices, updated daily at 02:31 AM)
 - ✅ **Data Quality Monitoring**: Active validation and reporting
 - ✅ **Variance Dashboard**: Displays professional, clean hostnames

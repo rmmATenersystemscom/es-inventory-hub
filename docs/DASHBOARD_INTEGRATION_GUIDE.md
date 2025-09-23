@@ -19,7 +19,7 @@ pip install -r api/requirements-api.txt
 python3 api/api_server.py
 ```
 
-**API Base URL:** `http://localhost:5500`
+**API Base URL:** `http://localhost:5400`
 
 ### **Option 2: Direct Database Access**
 
@@ -42,6 +42,11 @@ GET /api/variance-report/latest
 
 GET /api/variance-report/2025-09-21
 # Returns variance report for a specific date (YYYY-MM-DD format)
+
+GET /api/variance-report/filtered
+# Returns filtered variance report in dashboard format (unresolved exceptions only)
+# This endpoint provides the same data format as the Variances dashboard
+# but uses Database AI's authoritative filtered data
 ```
 
 ### **Collector Management**
@@ -270,12 +275,12 @@ ORDER BY v.name, ds.hostname;
 ### **Via API:**
 ```bash
 # Run both collectors and cross-vendor checks
-curl -X POST http://localhost:5500/api/collectors/run \
+curl -X POST http://localhost:5400/api/collectors/run \
   -H "Content-Type: application/json" \
   -d '{"collector": "both", "run_cross_vendor": true}'
 
 # Run only Ninja collector
-curl -X POST http://localhost:5500/api/collectors/run \
+curl -X POST http://localhost:5400/api/collectors/run \
   -H "Content-Type: application/json" \
   -d '{"collector": "ninja", "run_cross_vendor": false}'
 ```
@@ -378,23 +383,23 @@ python3 api/api_server.py
 ### **3. Test API:**
 ```bash
 # Basic endpoints
-curl http://localhost:5500/api/health
-curl http://localhost:5500/api/status
-curl http://localhost:5500/api/variance-report/latest
+curl http://localhost:5400/api/health
+curl http://localhost:5400/api/status
+curl http://localhost:5400/api/variance-report/latest
 
 # NEW: Test variance management endpoints
-curl http://localhost:5500/api/exceptions/status-summary
-curl "http://localhost:5500/api/devices/search?q=AEC-02739619435"
+curl http://localhost:5400/api/exceptions/status-summary
+curl "http://localhost:5400/api/devices/search?q=AEC-02739619435"
 
 # NEW: Test manual fix endpoint (replace 123 with actual exception ID)
-curl -X POST http://localhost:5500/api/exceptions/123/mark-manually-fixed \
+curl -X POST http://localhost:5400/api/exceptions/123/mark-manually-fixed \
   -H "Content-Type: application/json" \
   -d '{"updated_by": "test_user", "update_type": "display_name"}'
 ```
 
 ### **4. Build Dashboard:**
 - Use Flask or your preferred web framework
-- Connect to `http://localhost:5500` for API endpoints
+- Connect to `http://localhost:5400` for API endpoints
 - Or connect directly to PostgreSQL database
 - Follow the design guidelines in this integration guide
 

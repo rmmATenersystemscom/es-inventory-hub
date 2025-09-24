@@ -8,6 +8,7 @@ from .log import get_logger
 from .api import fetch_devices
 from .mapping import normalize_threatlocker_device
 from common.util import insert_snapshot, upsert_device_identity
+from common.job_logging import log_job_start, log_job_completion, log_job_failure
 from datetime import date
 
 
@@ -141,6 +142,11 @@ def main():
     # Set up logging
     logger = get_logger(__name__)
     
+    # Log job start
+    job_run_id = None
+    if not args.dry_run:
+        job_run_id = log_job_start('threatlocker-collector', 'Starting ThreatLocker collection')
+    
     try:
         logger.info("Starting ThreatLocker collection")
         
@@ -181,12 +187,21 @@ def main():
         
         logger.info("ThreatLocker collection completed successfully")
         
+        # Log job completion
+        if job_run_id:
+            log_job_completion(job_run_id, 'completed', 'Collection completed successfully')
+        
         # Exit with 0 on dry-run as specified
         if args.dry_run:
             sys.exit(0)
         
     except Exception as e:
         logger.error(f"ThreatLocker collection failed: {e}")
+        
+        # Log job failure
+        if job_run_id:
+            log_job_failure(job_run_id, str(e))
+        
         sys.exit(1)
 
 

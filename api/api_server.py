@@ -274,7 +274,7 @@ def run_collectors():
     
     try:
         if collector_type in ['ninja', 'both']:
-            # Run Ninja collector
+            # Run Ninja collector (passwordless sudo configured)
             result = subprocess.run([
                 'sudo', 'systemctl', 'start', 'ninja-collector.service'
             ], capture_output=True, text=True, timeout=300)
@@ -286,7 +286,7 @@ def run_collectors():
             }
         
         if collector_type in ['threatlocker', 'both']:
-            # Run ThreatLocker collector
+            # Run ThreatLocker collector (passwordless sudo configured)
             result = subprocess.run([
                 'sudo', 'systemctl', 'start', 'threatlocker-collector@rene.service'
             ], capture_output=True, text=True, timeout=300)
@@ -788,11 +788,9 @@ def get_filtered_variance_report():
         # Add actionable insights
         response["actionable_insights"] = _generate_actionable_insights(by_type)
         
-        # Add collection info
-        response["collection_info"] = {
-            "last_collection": latest_date.isoformat(),
-            "data_freshness": "current" if (datetime.now().date() - latest_date).days <= 1 else "stale"
-        }
+        # Add collection info with timezone-aware timestamps
+        collection_info = _get_collection_timestamps(session, latest_date)
+        response["collection_info"] = collection_info
         
         # Add data quality indicators
         response["data_quality"] = {
@@ -842,6 +840,69 @@ def _generate_actionable_insights(by_type: dict) -> dict:
                 insights["priority_actions"].append(f"Critical: {count} devices missing from Ninja")
     
     return insights
+
+
+def _get_collection_timestamps(session, latest_date: date) -> dict:
+    """Get timezone-aware collection timestamps from JobRuns table."""
+    from sqlalchemy import text
+    
+    # Query for the most recent successful collection runs
+    collection_query = text("""
+        SELECT job_name, started_at, ended_at
+        FROM job_runs 
+        WHERE status = 'completed'
+        AND job_name IN ('ninja-collector', 'threatlocker-collector')
+        AND DATE(started_at) = :collection_date
+        ORDER BY started_at DESC
+    """)
+    
+    results = session.execute(collection_query, {'collection_date': latest_date}).fetchall()
+    
+    # Initialize timestamps
+    ninja_collected = None
+    threatlocker_collected = None
+    last_collection = None
+    
+    # Process results
+    for job_name, started_at, ended_at in results:
+        # Use ended_at if available, otherwise started_at
+        timestamp = ended_at if ended_at else started_at
+        
+        if job_name == 'ninja-collector':
+            ninja_collected = timestamp.isoformat() + 'Z'
+        elif job_name == 'threatlocker-collector':
+            threatlocker_collected = timestamp.isoformat() + 'Z'
+    
+    # Determine the latest collection time
+    timestamps = [t for t in [ninja_collected, threatlocker_collected] if t]
+    if timestamps:
+        # Parse timestamps and find the latest
+        parsed_times = []
+        for ts in timestamps:
+            try:
+                parsed_times.append(datetime.fromisoformat(ts.replace('Z', '+00:00')))
+            except:
+                continue
+        
+        if parsed_times:
+            last_collection = max(parsed_times).isoformat() + 'Z'
+    
+    # Fallback to date if no specific timestamps found
+    if not last_collection:
+        last_collection = latest_date.isoformat()
+    
+    # Determine data freshness
+    today = datetime.now().date()
+    days_old = (today - latest_date).days
+    data_freshness = "current" if days_old <= 1 else "stale"
+    
+    return {
+        "last_collection": last_collection,
+        "ninja_collected": ninja_collected,
+        "threatlocker_collected": threatlocker_collected,
+        "data_freshness": data_freshness
+    }
+
 
 @app.route('/api/exceptions/count', methods=['GET'])
 def get_exceptions_count():

@@ -22,15 +22,16 @@
 |---------|-----------|----------------|----------|---------|--------|
 | **Hub Dashboard** | 5000 | 5000 | HTTP | Main dashboard hub and navigation | Active |
 | **Variances Dashboard** | 5001 | 5001 | HTTP | Device variance analysis (host network) | Active |
-| **Technician Performance** | 5002 | 5000 | HTTP | Individual tech performance | Active |
-| **Re-Opened Tickets** | 5003 | 5000 | HTTP | Reopened ticket tracking | Active |
-| **BottomLeft Dashboard** | 5004 | 5000 | HTTP | ConnectWise ticket metrics | Active |
-| **TopLeft Dashboard** | 5005 | 5000 | HTTP | Executive summary dashboard | Active |
-| **Ninja Seat Count** | 5006 | 5000 | HTTP | NinjaRMM device monitoring | Active |
-| **SmartNumbers** | 5007 | 5000 | HTTP | Key performance indicators | Active |
-| **Veeam Usage** | 5008 | 5000 | HTTP | Veeam storage usage | Active |
-| **ThreatLocker Stats** | 5009 | 5000 | HTTP | ThreatLocker security metrics | Active |
-| **FortiGate Stats** | 5010 | 5000 | HTTP | FortiGate firewall statistics | Active |
+| **Variances Redesigned** | 5002 | 5000 | HTTP | Executive summary with improved UX | Active |
+| **Technician Performance** | 5003 | 5000 | HTTP | Individual tech performance | Active |
+| **Re-Opened Tickets** | 5004 | 5000 | HTTP | Reopened ticket tracking | Active |
+| **BottomLeft Dashboard** | 5005 | 5000 | HTTP | ConnectWise ticket metrics | Active |
+| **TopLeft Dashboard** | 5006 | 5000 | HTTP | Executive summary dashboard | Active |
+| **Ninja Seat Count** | 5007 | 5000 | HTTP | NinjaRMM device monitoring | Active |
+| **SmartNumbers** | 5008 | 5000 | HTTP | Key performance indicators | Active |
+| **Veeam Usage** | 5009 | 5000 | HTTP | Veeam storage usage | Active |
+| **ThreatLocker Stats** | 5010 | 5000 | HTTP | ThreatLocker security metrics | Active |
+| **FortiGate Stats** | 5011 | 5000 | HTTP | FortiGate firewall statistics | Active |
 | **Ticket Statistics** | 5012 | 5000 | HTTP | Overall ticket statistics | Active |
 | **Veeam Backup Job Status** | 5013 | 5000 | HTTP | Veeam backup monitoring | Active |
 | **Tickets Closed Today** | 5014 | 5000 | HTTP | Daily closure metrics | Active |
@@ -301,6 +302,7 @@ response = requests.get('http://localhost:5400/api/variance-report/latest')
 |------|---------|------|---------|--------|
 | 2025-09-22 | Hub Dashboard | 5000 | Main dashboard hub | Active |
 | 2025-09-22 | Variances Dashboard | 5001 | Device variance analysis | Active |
+| 2025-01-27 | Variances Redesigned | 5002 | Executive summary with improved UX | Active |
 | 2025-09-22 | Technician KPI Wall | 5011 | Technician performance metrics | Active |
 | 2025-09-22 | All Other Dashboards | 5000 | Various dashboard services | Active |
 | 2025-09-22 | Nginx Reverse Proxy | 80, 443 | Web server and SSL | Active |

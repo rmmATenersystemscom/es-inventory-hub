@@ -8,6 +8,7 @@ from typing import Optional
 
 from common.logging import get_logger
 from common.util import utcnow, sha256_json, upsert_device_identity, insert_snapshot
+from common.job_logging import log_job_start, log_job_completion, log_job_failure
 
 from .api import NinjaAPI
 from .mapping import normalize_ninja_device
@@ -38,6 +39,11 @@ def main():
     # Set up logging
     logger = get_logger(__name__)
     
+    # Log job start
+    job_run_id = None
+    if not args.dry_run:
+        job_run_id = log_job_start('ninja-collector', f'Starting collection for date: {args.date}')
+    
     try:
         # Parse the date
         snapshot_date = datetime.strptime(args.date, '%Y-%m-%d').date()
@@ -61,8 +67,17 @@ def main():
             
         logger.info("Ninja collection completed successfully")
         
+        # Log job completion
+        if job_run_id:
+            log_job_completion(job_run_id, 'completed', 'Collection completed successfully')
+        
     except Exception as e:
         logger.error(f"Ninja collection failed: {e}")
+        
+        # Log job failure
+        if job_run_id:
+            log_job_failure(job_run_id, str(e))
+        
         sys.exit(1)
 
 

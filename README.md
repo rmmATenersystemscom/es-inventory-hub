@@ -1,6 +1,6 @@
 # ES Inventory Hub
 
-**Current Version**: v1.8.0 (stable)
+**Current Version**: v1.9.0 (stable)
 
 A centralized inventory management system for collecting and storing data from various sources including Ninja and ThreatLocker.
 
@@ -14,7 +14,7 @@ The **ES Inventory Hub** centralizes device inventory data from **NinjaRMM** and
 - Provide dashboards for analysis (seat counts, spares, billing vs non-billing, etc.).
 - Highlight mismatches and exceptions (e.g., ThreatLocker device missing in Ninja).
 
-## Current Version (v1.8.0)
+## Current Version (v1.9.0)
 
 This release includes comprehensive variance management system with real-time exception tracking, hostname truncation handling for cross-vendor device searches, enhanced API endpoints for manual fix tracking and bulk operations, database schema enhancements with variance status tracking, and collector integration framework for variance lifecycle management.
 

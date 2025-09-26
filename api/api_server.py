@@ -181,6 +181,28 @@ def get_latest_variance_report():
         total_exceptions = len(exceptions)
         unresolved_count = sum(1 for exc in exceptions if not exc[5])
         
+        # Create dashboard-compatible format
+        exception_counts = {exc_type: len(devices) for exc_type, devices in by_type.items()}
+        
+        # Map to dashboard expected format
+        dashboard_format = {
+            "missing_in_ninja": {
+                "total_count": exception_counts.get("MISSING_NINJA", 0)
+            },
+            "threatlocker_duplicates": {
+                "total_count": exception_counts.get("DUPLICATE_TL", 0)
+            },
+            "ninja_duplicates": {
+                "total_count": exception_counts.get("SPARE_MISMATCH", 0)
+            },
+            "display_name_mismatches": {
+                "total_count": exception_counts.get("DISPLAY_NAME_MISMATCH", 0)
+            }
+        }
+        
+        # Get collection timestamps
+        collection_info = _get_collection_timestamps(session, latest_date)
+        
         return jsonify({
             "report_date": latest_date.isoformat(),
             "data_status": get_data_status(),
@@ -190,7 +212,16 @@ def get_latest_variance_report():
                 "resolved_count": total_exceptions - unresolved_count
             },
             "exceptions_by_type": by_type,
-            "exception_counts": {exc_type: len(devices) for exc_type, devices in by_type.items()}
+            "exception_counts": exception_counts,
+            # Collection information
+            "collection_info": {
+                "ninja_collected": collection_info["ninja_collected"],
+                "threatlocker_collected": collection_info["threatlocker_collected"],
+                "last_collection": collection_info["last_collection"],
+                "data_freshness": collection_info["data_freshness"]
+            },
+            # Dashboard-compatible format
+            **dashboard_format
         })
 
 @app.route('/api/variance-report/<date_str>', methods=['GET'])

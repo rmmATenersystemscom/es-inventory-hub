@@ -1,0 +1,19 @@
+[Unit]
+Description=ES Inventory Hub API Server
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=rene
+Group=rene
+WorkingDirectory=/opt/es-inventory-hub
+Environment=DB_DSN=postgresql+psycopg2://postgres:Xat162gT2Qsg4WDlO5r@localhost:5432/es_inventory_hub
+ExecStart=/usr/bin/python3 /opt/es-inventory-hub/api/api_server.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

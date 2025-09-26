@@ -19,6 +19,30 @@ This directory contains comprehensive documentation for the ES Inventory Hub sys
 
 **⚠️ To modify shared documentation**: Edit the source files in `/opt/dashboard-project/docs/` - changes will automatically appear in all projects.
 
+## 🚧 **AI Assistant Boundaries**
+
+**IMPORTANT**: This documentation directory has clear boundaries to prevent AI assistants from overstepping their responsibilities:
+
+### **ES Inventory Hub AI (Database AI) Scope:**
+- ✅ **Data Collection**: NinjaRMM and ThreatLocker collectors
+- ✅ **Database Management**: PostgreSQL schema, migrations, queries  
+- ✅ **API Server**: REST API for variance data (see [Port Configuration](PORT_CONFIGURATION.md))
+- ✅ **Systemd Services**: Automated collection scheduling
+- ✅ **Cross-Vendor Checks**: Variance detection and exception handling
+- ✅ **Documentation**: Project-specific documentation in `/docs/`
+
+### **Dashboard Project AI Scope:**
+- ✅ **Web Dashboards**: All dashboard containers (see [Port Configuration](PORT_CONFIGURATION.md))
+- ✅ **Nginx Configuration**: Reverse proxy and SSL termination
+- ✅ **Dashboard UI**: Frontend interfaces and user experience
+- ✅ **Dashboard Integration**: Connecting dashboards to ES Inventory Hub API
+
+### **Boundary Rules:**
+1. **ES Inventory Hub AI** should NOT modify dashboard project files
+2. **Dashboard AI** should NOT modify ES Inventory Hub database or collectors
+3. **Cross-Project Requests**: Use text box requests for inter-project coordination
+4. **Stay in Your Lane**: Focus on your project's core responsibilities
+
 ---
 
 ## 🚀 **Quick Start Guides**
@@ -46,9 +70,8 @@ This directory contains comprehensive documentation for the ES Inventory Hub sys
 - **[CRON.md](./CRON.md)** - Cron job configuration (alternative to systemd)
 
 ### **Network Configuration**
-- **Port Range**: ES Inventory Hub uses ports 5400-5499
-- **Dashboard Project**: Reserved ports 5000-5499
-- **API Server**: Currently running on port 5400
+- **Port Allocation**: See [Port Configuration](PORT_CONFIGURATION.md) for complete port mapping
+- **API Server**: REST API for variance data and collector management
 
 ### **Data Collection**
 - **[NINJA_API_DOCUMENTATION.md](./NINJA_API_DOCUMENTATION.md)** - NinjaRMM API integration details
@@ -60,6 +83,7 @@ This directory contains comprehensive documentation for the ES Inventory Hub sys
 - **[CHECK_IN_PROCESS.md](./CHECK_IN_PROCESS.md)** - Data collection process details
 
 ### **System Configuration**
+- **[AI_BOUNDARIES.md](./AI_BOUNDARIES.md)** - AI assistant boundaries and scope definitions
 - **[SYSTEM_BACKUPS.md](./SYSTEM_BACKUPS.md)** - System backup files and configuration management
 - **[SHARED_DOCUMENTATION.md](./SHARED_DOCUMENTATION.md)** - Guide to symbolic links and shared documentation
 - **[PORT_CONFIGURATION.md](./PORT_CONFIGURATION.md)** - Network port allocation and management
@@ -179,7 +203,7 @@ psql postgresql://postgres:Xat162gT2Qsg4WDlO5r@localhost:5432/es_inventory_hub
 ### **Common Issues**
 1. **Collectors not running** - Check systemd service status
 2. **No variance data** - Verify both vendors have data for the same date
-3. **API connection issues** - Ensure API server is running on port 5000
+3. **API connection issues** - Ensure API server is running (see [Port Configuration](PORT_CONFIGURATION.md))
 4. **Database connection** - Verify PostgreSQL is running and accessible
 
 ### **Log Locations**

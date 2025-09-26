@@ -8,6 +8,36 @@ A centralized inventory management system for collecting and storing data from v
 
 The **ES Inventory Hub** centralizes device inventory data from **NinjaRMM** and **ThreatLocker** into a PostgreSQL database running on Ubuntu. This repository contains the core infrastructure for the ES Inventory Hub, providing data collection, storage, and management capabilities for enterprise security inventory tracking.
 
+## 🚧 **AI Assistant Boundaries**
+
+**IMPORTANT**: This project has clear boundaries to prevent AI assistants from overstepping their responsibilities:
+
+### **ES Inventory Hub AI (Database AI) Scope:**
+- ✅ **Data Collection**: NinjaRMM and ThreatLocker collectors
+- ✅ **Database Management**: PostgreSQL schema, migrations, queries
+- ✅ **API Server**: REST API for variance data (see [Port Configuration](docs/PORT_CONFIGURATION.md))
+- ✅ **Systemd Services**: Automated collection scheduling
+- ✅ **Cross-Vendor Checks**: Variance detection and exception handling
+- ✅ **Documentation**: Project-specific documentation in `/docs/`
+
+### **Dashboard Project AI Scope:**
+- ✅ **Web Dashboards**: All dashboard containers (see [Port Configuration](docs/PORT_CONFIGURATION.md))
+- ✅ **Nginx Configuration**: Reverse proxy and SSL termination
+- ✅ **Dashboard UI**: Frontend interfaces and user experience
+- ✅ **Dashboard Integration**: Connecting dashboards to ES Inventory Hub API
+
+### **Boundary Rules:**
+1. **ES Inventory Hub AI** should NOT modify dashboard project files
+2. **Dashboard AI** should NOT modify ES Inventory Hub database or collectors
+3. **Cross-Project Requests**: Use text box requests for inter-project coordination
+4. **Stay in Your Lane**: Focus on your project's core responsibilities
+
+### **When to Request Dashboard AI Help:**
+```
+If ES Inventory Hub needs dashboard-related changes, put your request in a text box:
+"Dashboard AI: Please update the nginx configuration to add new API endpoint routing for /api/variance-report/latest"
+```
+
 **Goals:**
 - Collect daily device snapshots from NinjaRMM and ThreatLocker.
 - Maintain 65 days of daily data, with monthly rollups for older history.

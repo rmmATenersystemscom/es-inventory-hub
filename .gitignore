@@ -27,6 +27,7 @@ env/
 ENV/
 env.bak/
 venv.bak/
+.venv/
 
 # PyCharm
 .idea/
@@ -76,3 +77,16 @@ logs/
 # Temporary files
 *.tmp
 *.temp
+
+# Migration and backup files
+backups/
+scripts/migration/
+scripts/backup_database.sh
+
+# System backup files
+system-backups/
+
+# Temporary service files
+temp_*.service
+temp_*.timer
+variances-*.service

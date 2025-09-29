@@ -33,7 +33,8 @@ app = Flask(__name__)
 CORS(app)  # Enable CORS for cross-origin requests
 
 # Database connection
-DSN = 'postgresql://postgres:Xat162gT2Qsg4WDlO5r@localhost:5432/es_inventory_hub'
+from common.config import get_dsn
+DSN = get_dsn()
 engine = create_engine(DSN)
 Session = sessionmaker(bind=engine)
 

@@ -1,6 +1,6 @@
 # ES Inventory Hub
 
-**Current Version**: v1.12.0 (stable)
+**Current Version**: v1.14.0 (stable)
 
 A centralized inventory management system for collecting and storing data from various sources including Ninja and ThreatLocker.
 
@@ -44,7 +44,7 @@ If ES Inventory Hub needs dashboard-related changes, put your request in a text 
 - Provide dashboards for analysis (seat counts, spares, billing vs non-billing, etc.).
 - Highlight mismatches and exceptions (e.g., ThreatLocker device missing in Ninja).
 
-## Current Version (v1.12.0)
+## Current Version (v1.14.0)
 
 This release includes enhanced API server functionality with improved error handling and capabilities, comprehensive auto-start services documentation for system administrators, detailed AI API prompt documentation for dashboard integration, systemd service configuration for automated service management, and improved system reliability and maintainability with proper service configuration.
 

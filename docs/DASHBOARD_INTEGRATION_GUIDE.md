@@ -1,16 +1,18 @@
 # ES Inventory Hub - Dashboard Integration Guide
 
-## **For the Dashboard AI**
+**Complete guide for integrating with the ES Inventory Hub system - API endpoints, database access, and Variances Dashboard functionality.**
 
-This guide provides everything the dashboard AI needs to integrate with the ES Inventory Hub system.
+**Last Updated**: January 15, 2025  
+**ES Inventory Hub Version**: v1.12.0  
+**Status**: ✅ **FULLY OPERATIONAL**
 
 ---
 
-## **🚀 Quick Start - Two Options**
+## 🚀 **Quick Start - Two Integration Options**
 
-### **Option 1: Use the New API Server (Recommended)**
+### **Option 1: REST API Server (Recommended)**
 
-The ES Inventory Hub now includes a REST API server that provides clean endpoints for accessing variance data and triggering collectors.
+The ES Inventory Hub includes a comprehensive REST API server with all Variances Dashboard functionality.
 
 **Start the API Server:**
 ```bash
@@ -23,146 +25,244 @@ python3 api/api_server.py
 
 ### **Option 2: Direct Database Access**
 
-Connect directly to the PostgreSQL database using the connection details below.
+Connect directly to the PostgreSQL database for advanced queries.
 
----
-
-## **📊 API Endpoints Reference**
-
-### **System Status**
-```bash
-GET /api/status
-# Returns overall system status, device counts, exception counts
+**Connection Details:**
 ```
-
-### **Variance Reports**
-```bash
-GET /api/variance-report/latest
-# Returns the latest variance report with all exception data
-
-GET /api/variance-report/2025-09-21
-# Returns variance report for a specific date (YYYY-MM-DD format)
-
-GET /api/variance-report/filtered
-# Returns filtered variance report in dashboard format (unresolved exceptions only)
-# This endpoint provides the same data format as the Variances dashboard
-# but uses Database AI's authoritative filtered data
+Host: localhost (or 192.168.99.246 for remote)
+Port: 5432
+Database: es_inventory_hub
+Username: postgres
+Password: Xat162gT2Qsg4WDlO5r
 ```
-
-### **Collector Management**
-```bash
-POST /api/collectors/run
-# Trigger collector runs
-# Body: {"collector": "both|ninja|threatlocker", "run_cross_vendor": true}
-
-GET /api/collectors/status
-# Check status of collector services
-```
-
-### **Exception Management**
-```bash
-GET /api/exceptions?type=MISSING_NINJA&resolved=false&limit=50
-# Get exceptions with filtering options
-
-POST /api/exceptions/123/resolve
-# Mark an exception as resolved
-# Body: {"resolved_by": "username", "notes": "Fixed in Ninja"}
-
-POST /api/exceptions/123/mark-manually-fixed
-# Mark an exception as manually fixed (NEW - Critical for variance management)
-# Body: {
-#   "updated_by": "dashboard_user",
-#   "update_type": "display_name",
-#   "old_value": {"display_name": "OLD_NAME"},
-#   "new_value": {"display_name": "NEW_NAME"},
-#   "notes": "Fixed display name mismatch"
-# }
-
-POST /api/exceptions/bulk-update
-# Bulk exception operations (NEW - Efficient for multiple exceptions)
-# Body: {
-#   "exception_ids": [123, 124, 125],
-#   "action": "mark_manually_fixed",
-#   "updated_by": "dashboard_user",
-#   "notes": "Bulk fix for display names"
-# }
-
-GET /api/exceptions/status-summary
-# Get exception status summary with variance tracking (NEW)
-# Returns: status counts, recent manual updates, variance status breakdown
-```
-
-### **Device Search (NEW - Handles Hostname Truncation)**
-```bash
-GET /api/devices/search?q=AEC-02739619435
-# Search for devices across vendors with hostname truncation handling
-# Query parameters:
-#   - q: Search term (required)
-#   - vendor: Optional filter ('ninja' or 'threatlocker')
-#   - limit: Maximum results (default 50, max 200)
-
-GET /api/devices/search?q=AEC-027396194353&vendor=threatlocker
-# Search only in ThreatLocker for full hostname
-```
-
-### **Variance Management System (NEW - Critical Feature)**
-```bash
-# Mark device as manually fixed (solves the critical gap where dashboard updates
-# ThreatLocker but database doesn't know about manual fixes)
-POST /api/exceptions/{id}/mark-manually-fixed
-# Body: {
-#   "updated_by": "dashboard_user",
-#   "update_type": "display_name",
-#   "old_value": {"display_name": "AEC-02739619435"},
-#   "new_value": {"display_name": "AEC-02739619435 | Updated"},
-#   "notes": "Fixed display name mismatch"
-# }
-
-# Bulk operations for efficiency
-POST /api/exceptions/bulk-update
-# Body: {
-#   "exception_ids": [123, 124, 125],
-#   "action": "mark_manually_fixed",  # or "resolve", "reset_status"
-#   "updated_by": "dashboard_user"
-# }
-
-# Get real-time variance status summary
-GET /api/exceptions/status-summary
-# Returns: {
-#   "status_summary": {
-#     "active": {"DISPLAY_NAME_MISMATCH": {"total": 972, "unresolved": 972}},
-#     "manually_fixed": {"DISPLAY_NAME_MISMATCH": {"total": 5, "resolved": 5}}
-#   },
-#   "recent_manual_updates": [...],
-#   "generated_at": "2025-09-23T02:33:08.654872"
-# }
-```
-
----
-
-## **🔗 Database Connection (Direct Access)**
-
-If you prefer direct database access:
 
 **Connection String:**
 ```
 postgresql://postgres:Xat162gT2Qsg4WDlO5r@localhost:5432/es_inventory_hub
 ```
 
-**Key Tables:**
-- `exceptions` - Variance data and cross-vendor discrepancies (ENHANCED with variance tracking)
-- `device_snapshot` - Device inventory from both vendors
-- `vendor` - Vendor information (Ninja, ThreatLocker)
+---
 
-**Enhanced Exceptions Table (NEW):**
-- `manually_updated_at` - Timestamp when manually fixed
-- `manually_updated_by` - User who performed the fix
-- `update_type` - Type of update (display_name, hostname, etc.)
-- `old_value` - JSONB of old values before fix
-- `new_value` - JSONB of new values after fix
-- `variance_status` - Status: 'active', 'manually_fixed', 'collector_verified', 'stale'
+## 📊 **COMPLETE API ENDPOINTS REFERENCE**
 
-**Essential Queries:**
+### **System Status & Health**
+```bash
+GET /api/health                    # Health check
+GET /api/status                    # Overall system status with device counts
+GET /api/collectors/status         # Collector service status
+GET /api/collectors/history        # Collection history (last 10 runs)
+GET /api/collectors/progress       # Real-time collection progress
+```
+
+### **Variance Reports & Analysis**
+```bash
+GET /api/variance-report/latest    # Latest variance report
+GET /api/variance-report/{date}    # Specific date variance report
+GET /api/variance-report/filtered  # Filtered report for dashboard (unresolved only)
+
+# NEW: Historical Analysis
+GET /api/variances/available-dates # Get available analysis dates
+GET /api/variances/historical/{date} # Historical variance data
+GET /api/variances/trends          # Trend analysis over time
+```
+
+### **Export Functionality (NEW)**
+```bash
+GET /api/variances/export/csv      # Export variance data to CSV
+GET /api/variances/export/pdf      # Export variance data to PDF
+GET /api/variances/export/excel    # Export variance data to Excel
+```
+
+### **Collector Management**
+```bash
+POST /api/collectors/run           # Trigger collector runs
+# Body: {"collector": "both|ninja|threatlocker", "run_cross_vendor": true}
+```
+
+### **Exception Management**
+```bash
+GET /api/exceptions                # Get exceptions with filtering
+GET /api/exceptions/status-summary # Exception status summary
+POST /api/exceptions/{id}/resolve  # Mark exception as resolved
+POST /api/exceptions/{id}/mark-manually-fixed # Mark as manually fixed
+POST /api/exceptions/bulk-update   # Bulk exception operations
+```
+
+### **Device Search (Handles Hostname Truncation)**
+```bash
+GET /api/devices/search?q={hostname} # Search devices across vendors
+```
+
+---
+
+## 🎯 **VARIANCES DASHBOARD FUNCTIONALITY**
+
+### **✅ 1. RUN COLLECTORS BUTTON (⚡ Run Collectors)**
+
+**Status**: ✅ **FULLY IMPLEMENTED**
+
+**API Endpoints:**
+- `POST /api/collectors/run` - Trigger manual data collection
+- `GET /api/collectors/status` - Get real-time collection status  
+- `GET /api/collectors/history` - Get collection history (last 10 runs)
+- `GET /api/collectors/progress` - Get real-time collection progress
+
+**Features:**
+- ✅ Triggers both NinjaRMM and ThreatLocker data collection
+- ✅ Returns collection job ID and estimated completion time
+- ✅ Handles collection conflicts (if already running)
+- ✅ Real-time status updates and progress tracking
+- ✅ Collection history with timestamps and duration
+- ✅ Integration with existing systemd services
+
+**Usage Example:**
+```javascript
+// Trigger collectors
+async function runCollectors() {
+    const response = await fetch('/api/collectors/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            collector: 'both',
+            run_cross_vendor: true
+        })
+    });
+    return await response.json();
+}
+
+// Check status
+async function getCollectorStatus() {
+    const response = await fetch('/api/collectors/status');
+    return await response.json();
+}
+```
+
+### **✅ 2. HISTORICAL VIEW BUTTON (📅 Historical View)**
+
+**Status**: ✅ **FULLY IMPLEMENTED**
+
+**API Endpoints:**
+- `GET /api/variances/available-dates` - Get available analysis dates
+- `GET /api/variances/historical/{date}` - Get variance data for specific date
+- `GET /api/variances/trends` - Get trend analysis over time
+
+**Features:**
+- ✅ List of dates where both Ninja and ThreatLocker have data
+- ✅ Date range (earliest to latest available)
+- ✅ Data quality status for each date
+- ✅ Same structure as latest report but for historical dates
+- ✅ Enhanced trend analysis with custom date ranges
+- ✅ Variance trends over time with type breakdowns
+
+**Usage Example:**
+```javascript
+// Get available dates
+async function getAvailableDates() {
+    const response = await fetch('/api/variances/available-dates');
+    return await response.json();
+}
+
+// Get historical data
+async function getHistoricalData(date) {
+    const response = await fetch(`/api/variances/historical/${date}`);
+    return await response.json();
+}
+
+// Get trends
+async function getTrends(startDate, endDate) {
+    const response = await fetch(`/api/variances/trends?start_date=${startDate}&end_date=${endDate}`);
+    return await response.json();
+}
+```
+
+### **✅ 3. EXPORT REPORT BUTTON (📊 Export Report)**
+
+**Status**: ✅ **FULLY IMPLEMENTED**
+
+**API Endpoints:**
+- `GET /api/variances/export/csv` - Enhanced CSV export
+- `GET /api/variances/export/pdf` - PDF report generation
+- `GET /api/variances/export/excel` - Excel export with multiple sheets
+
+**Features:**
+- ✅ **CSV Export**: All variance data with metadata and filtering
+- ✅ **PDF Export**: Comprehensive reports with executive summary, charts, and professional formatting
+- ✅ **Excel Export**: Multi-sheet workbooks with summary and detailed data
+- ✅ Support for filtering by variance type and date ranges
+- ✅ Include device details and organization info
+- ✅ Export metadata and timestamps
+- ✅ Professional formatting and styling
+
+**Usage Example:**
+```javascript
+// Export to CSV
+async function exportCSV(date = 'latest', includeResolved = false) {
+    const params = new URLSearchParams({
+        date: date,
+        include_resolved: includeResolved
+    });
+    const response = await fetch(`/api/variances/export/csv?${params}`);
+    return await response.blob();
+}
+
+// Export to PDF
+async function exportPDF(date = 'latest') {
+    const response = await fetch(`/api/variances/export/pdf?date=${date}`);
+    return await response.blob();
+}
+
+// Export to Excel
+async function exportExcel(date = 'latest') {
+    const response = await fetch(`/api/variances/export/excel?date=${date}`);
+    return await response.blob();
+}
+```
+
+---
+
+## 🔗 **DATABASE SCHEMA & DIRECT ACCESS**
+
+### **Primary Tables for Dashboard**
+
+#### **`exceptions` Table (Enhanced)**
+```sql
+CREATE TABLE exceptions (
+    id BIGSERIAL PRIMARY KEY,
+    date_found DATE NOT NULL DEFAULT CURRENT_DATE,
+    type VARCHAR(64) NOT NULL,  -- MISSING_NINJA, DUPLICATE_TL, SITE_MISMATCH, SPARE_MISMATCH, DISPLAY_NAME_MISMATCH
+    hostname VARCHAR(255) NOT NULL,
+    details JSONB NOT NULL DEFAULT '{}',
+    resolved BOOLEAN NOT NULL DEFAULT FALSE,
+    resolved_date DATE,
+    resolved_by VARCHAR(255),
+    
+    -- NEW: Enhanced variance tracking
+    manually_updated_at TIMESTAMP WITH TIME ZONE,
+    manually_updated_by VARCHAR(255),
+    update_type VARCHAR(100),
+    old_value JSONB,
+    new_value JSONB,
+    variance_status VARCHAR(50) DEFAULT 'active'
+);
+```
+
+#### **`device_snapshot` Table**
+```sql
+CREATE TABLE device_snapshot (
+    id BIGSERIAL PRIMARY KEY,
+    snapshot_date DATE NOT NULL,
+    vendor_id INTEGER NOT NULL REFERENCES vendor(id),
+    device_identity_id BIGINT NOT NULL REFERENCES device_identity(id),
+    hostname VARCHAR(255),
+    organization_name VARCHAR(255),
+    display_name VARCHAR(255),
+    device_status VARCHAR(100),
+    -- ... additional fields
+);
+```
+
+### **Essential Database Queries**
+
 ```sql
 -- Get latest variance report
 SELECT * FROM exceptions 
@@ -184,7 +284,7 @@ JOIN vendor v ON ds.vendor_id = v.id
 WHERE ds.snapshot_date = CURRENT_DATE
 GROUP BY v.name;
 
--- NEW: Get variance status summary
+-- Get variance status summary (NEW)
 SELECT 
     COALESCE(variance_status, 'active') as status,
     type,
@@ -194,125 +294,99 @@ FROM exceptions
 WHERE date_found >= CURRENT_DATE - INTERVAL '7 days'
 GROUP BY variance_status, type
 ORDER BY status, type;
-
--- NEW: Get recent manual updates
-SELECT 
-    hostname,
-    type,
-    manually_updated_by,
-    manually_updated_at,
-    update_type,
-    old_value,
-    new_value
-FROM exceptions
-WHERE manually_updated_at >= CURRENT_DATE - INTERVAL '24 hours'
-ORDER BY manually_updated_at DESC;
-
--- NEW: Search devices with hostname truncation handling
-SELECT 
-    v.name as vendor,
-    ds.hostname,
-    ds.display_name,
-    LOWER(LEFT(SPLIT_PART(SPLIT_PART(ds.hostname,'|',1),'.',1),15)) as canonical_key
-FROM device_snapshot ds
-JOIN vendor v ON ds.vendor_id = v.id
-WHERE ds.snapshot_date = CURRENT_DATE
-  AND ds.hostname ILIKE 'AEC-02739619435%'
-ORDER BY v.name, ds.hostname;
 ```
 
 ---
 
-## **📋 Variance Report Data Structure**
+## 📋 **RESPONSE EXAMPLES**
 
-### **Exception Types:**
-- `MISSING_NINJA` - Devices in ThreatLocker but not in Ninja
-- `DUPLICATE_TL` - Duplicate hostnames in ThreatLocker
-- `SITE_MISMATCH` - Same device assigned to different sites
-- `SPARE_MISMATCH` - Devices marked as spare in Ninja but still in ThreatLocker
-- `DISPLAY_NAME_MISMATCH` - Same hostname but different display names between vendors
-
-### **Sample API Response:**
+### **System Status Response**
 ```json
 {
-  "report_date": "2025-09-21",
   "data_status": {
     "status": "current",
     "message": "Data is current",
-    "latest_date": "2025-09-21"
+    "latest_date": "2025-01-15"
   },
-  "summary": {
-    "total_exceptions": 100,
-    "unresolved_count": 100,
-    "resolved_count": 0
+  "device_counts": {
+    "Ninja": 750,
+    "ThreatLocker": 400
   },
   "exception_counts": {
     "SPARE_MISMATCH": 73,
     "MISSING_NINJA": 26,
     "DUPLICATE_TL": 1
   },
-  "exceptions_by_type": {
-    "MISSING_NINJA": [
-      {
-        "id": 123,
-        "hostname": "CHI-1P397H2 | SPARE - was Blake Thomas",
-        "details": {
-          "tl_hostname": "CHI-1P397H2 | SPARE - was Blake Thomas",
-          "tl_org_name": "ChillCo",
-          "tl_site_name": null
-        },
-        "resolved": false
-      }
-    ]
+  "total_exceptions": 100
+}
+```
+
+### **Available Dates Response**
+```json
+{
+  "available_dates": [
+    {
+      "date": "2025-01-15",
+      "ninja_devices": 750,
+      "threatlocker_devices": 400,
+      "total_exceptions": 100,
+      "unresolved_exceptions": 85,
+      "data_quality": "current",
+      "days_old": 0
+    }
+  ],
+  "date_range": {
+    "earliest": "2025-01-01",
+    "latest": "2025-01-15"
+  }
+}
+```
+
+### **Collection Status Response**
+```json
+{
+  "ninja": {
+    "status": "active",
+    "last_run": "2025-01-15T02:10:00Z"
+  },
+  "threatlocker": {
+    "status": "active", 
+    "last_run": "2025-01-15T02:31:00Z"
   }
 }
 ```
 
 ---
 
-## **🔄 Triggering Collectors**
+## 🔧 **SETUP INSTRUCTIONS**
 
-### **Via API:**
+### **1. Install Dependencies**
 ```bash
-# Run both collectors and cross-vendor checks
-curl -X POST http://localhost:5400/api/collectors/run \
-  -H "Content-Type: application/json" \
-  -d '{"collector": "both", "run_cross_vendor": true}'
-
-# Run only Ninja collector
-curl -X POST http://localhost:5400/api/collectors/run \
-  -H "Content-Type: application/json" \
-  -d '{"collector": "ninja", "run_cross_vendor": false}'
+cd /opt/es-inventory-hub
+pip install -r api/requirements-api.txt
 ```
 
-### **Via Systemd (Direct):**
+### **2. Start API Server**
 ```bash
-# Run Ninja collector
-sudo systemctl start ninja-collector.service
+python3 api/api_server.py
+```
 
-# Run ThreatLocker collector
-sudo systemctl start threatlocker-collector@rene.service
+### **3. Test API**
+```bash
+# Basic endpoints
+curl http://localhost:5400/api/health
+curl http://localhost:5400/api/status
+curl http://localhost:5400/api/variance-report/latest
+
+# NEW: Test Variances Dashboard endpoints
+curl http://localhost:5400/api/variances/available-dates
+curl http://localhost:5400/api/collectors/history
+curl "http://localhost:5400/api/variances/export/csv"
 ```
 
 ---
 
-## **📁 Key Files for Dashboard Development**
-
-**Essential Documentation:**
-- `/opt/es-inventory-hub/docs/DATABASE_ACCESS_GUIDE.md` - Complete database guide
-- `/opt/es-inventory-hub/docs/DASHBOARD_INTEGRATION_GUIDE.md` - Dashboard requirements
-- `/opt/es-inventory-hub/docs/DEVICE_MATCHING_LOGIC.md` - Device matching logic
-
-**API Server:**
-- `/opt/es-inventory-hub/api/api_server.py` - REST API server
-- `/opt/es-inventory-hub/api/requirements-api.txt` - Python dependencies
-
-**Database Schema:**
-- `/opt/es-inventory-hub/storage/schema.py` - SQLAlchemy models
-
----
-
-## **🎯 Dashboard Requirements Summary**
+## 🎯 **DASHBOARD REQUIREMENTS SUMMARY**
 
 ### **Core Features:**
 1. **Variance Status Dashboard** - Show current exception counts and types
@@ -320,10 +394,8 @@ sudo systemctl start threatlocker-collector@rene.service
 3. **Data Freshness** - Display data status (current/stale/out_of_sync)
 4. **Collector Controls** - Trigger manual collection runs
 5. **Historical Analysis** - View variance reports for specific dates
-6. **NEW: Real-time Variance Management** - Mark exceptions as manually fixed
-7. **NEW: Bulk Operations** - Handle multiple exceptions efficiently
-8. **NEW: Variance Status Tracking** - Show fix status and audit trail
-9. **NEW: Hostname Truncation Search** - Find devices across vendors despite truncation
+6. **Export Functionality** - CSV, PDF, and Excel export capabilities
+7. **Real-time Updates** - Live collection progress and status updates
 
 ### **Data Status Handling:**
 - **Current** (`status: "current"`) - Data is ≤1 day old, show normal report
@@ -334,17 +406,13 @@ sudo systemctl start threatlocker-collector@rene.service
 - Refresh variance data
 - Trigger collector runs
 - Resolve exceptions
-- Export reports
+- Export reports (CSV, PDF, Excel)
 - Historical date selection
-- **NEW: Mark exceptions as manually fixed** (critical for real-time variance management)
-- **NEW: Bulk mark multiple exceptions as fixed**
-- **NEW: Search devices with hostname truncation handling**
-- **NEW: View variance status and audit trail**
-- **NEW: Monitor recent manual updates**
+- Real-time progress monitoring
 
 ---
 
-## **🚨 Critical Hostname Truncation Issue (RESOLVED)**
+## 🚨 **CRITICAL HOSTNAME TRUNCATION ISSUE (RESOLVED)**
 
 ### **Problem:**
 - **Ninja**: Truncates hostnames to 15 characters (e.g., `AEC-02739619435`)
@@ -352,65 +420,50 @@ sudo systemctl start threatlocker-collector@rene.service
 - **Impact**: Users searching with Ninja hostnames couldn't find corresponding ThreatLocker devices
 
 ### **Solution:**
-The new `/api/devices/search` endpoint handles this automatically:
+The `/api/devices/search` endpoint handles this automatically:
 - **Multi-strategy search**: Exact match, contains match, canonical key match, prefix match
 - **Cross-vendor grouping**: Results grouped by canonical key to show related devices
 - **Truncation detection**: Indicates when hostnames are truncated
 - **Vendor filtering**: Optional vendor-specific searches
 
-### **Usage:**
-```bash
-# Both of these will find the same device in both vendors:
-GET /api/devices/search?q=AEC-02739619435      # Ninja format (truncated)
-GET /api/devices/search?q=AEC-027396194353     # ThreatLocker format (full)
-```
-
 ---
 
-## **🔧 Setup Instructions for Dashboard AI**
+## 📞 **SUPPORT & TROUBLESHOOTING**
 
-### **1. Install Dependencies:**
-```bash
-cd /opt/es-inventory-hub
-pip install -r api/requirements-api.txt
-```
+### **Common Issues**
+1. **API Server Not Running**: Check if `python3 api/api_server.py` is running
+2. **Database Connection Failed**: Verify PostgreSQL is running and accessible
+3. **Export Dependencies Missing**: Install `pip install reportlab openpyxl xlsxwriter`
+4. **Permission Denied**: Check systemd service permissions for collectors
 
-### **2. Start API Server:**
+### **Debug Commands**
 ```bash
-python3 api/api_server.py
-```
-
-### **3. Test API:**
-```bash
-# Basic endpoints
+# Check API server status
 curl http://localhost:5400/api/health
-curl http://localhost:5400/api/status
-curl http://localhost:5400/api/variance-report/latest
 
-# NEW: Test variance management endpoints
-curl http://localhost:5400/api/exceptions/status-summary
-curl "http://localhost:5400/api/devices/search?q=AEC-02739619435"
+# Check database connection
+psql postgresql://postgres:Xat162gT2Qsg4WDlO5r@localhost:5432/es_inventory_hub
 
-# NEW: Test manual fix endpoint (replace 123 with actual exception ID)
-curl -X POST http://localhost:5400/api/exceptions/123/mark-manually-fixed \
+# Test collectors
+curl -X POST http://localhost:5400/api/collectors/run \
   -H "Content-Type: application/json" \
-  -d '{"updated_by": "test_user", "update_type": "display_name"}'
+  -d '{"collector": "both", "run_cross_vendor": true}'
 ```
-
-### **4. Build Dashboard:**
-- Use Flask or your preferred web framework
-- Connect to `http://localhost:5400` for API endpoints
-- Or connect directly to PostgreSQL database
-- Follow the design guidelines in this integration guide
 
 ---
 
-## **📞 Support**
+## 📚 **ADDITIONAL RESOURCES**
 
-If you need help with integration:
-1. Check the comprehensive documentation in `/opt/es-inventory-hub/docs/`
-2. Test API endpoints using the examples above
-3. Review the existing variance data structure
-4. Use the provided SQL queries for direct database access
+### **Key Files**
+- **API Server**: `/opt/es-inventory-hub/api/api_server.py`
+- **Database Models**: `/opt/es-inventory-hub/storage/schema.py`
+- **Configuration**: `/opt/es-inventory-hub/common/config.py`
 
-**The system is fully operational and ready for dashboard integration!** 🎉
+### **Documentation**
+- **Main README**: `/opt/es-inventory-hub/README.md`
+- **Device Matching Logic**: `/opt/es-inventory-hub/docs/DEVICE_MATCHING_LOGIC.md`
+- **API Quick Reference**: `/opt/es-inventory-hub/docs/API_QUICK_REFERENCE.md`
+
+---
+
+**🎉 The ES Inventory Hub system is fully operational and ready for dashboard integration with complete Variances Dashboard functionality!**

@@ -33,7 +33,23 @@ POST /api/exceptions/123/resolve   # Mark as resolved
 ### **Collector Control**
 ```bash
 POST /api/collectors/run           # Trigger collectors
+GET /api/collectors/status         # Collector service status
+GET /api/collectors/history        # Collection history (last 10 runs)
+GET /api/collectors/progress       # Real-time collection progress
 # Body: {"collector": "both|ninja|threatlocker", "run_cross_vendor": true}
+```
+
+### **Variances Dashboard (NEW)**
+```bash
+# Historical Analysis
+GET /api/variances/available-dates # Get available analysis dates
+GET /api/variances/historical/{date} # Historical variance data
+GET /api/variances/trends          # Trend analysis over time
+
+# Export Functionality
+GET /api/variances/export/csv      # Export variance data to CSV
+GET /api/variances/export/pdf      # Export variance data to PDF
+GET /api/variances/export/excel    # Export variance data to Excel
 ```
 
 ## 🔧 **Quick Test Commands**

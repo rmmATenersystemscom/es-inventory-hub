@@ -8,6 +8,9 @@
 
 This directory contains comprehensive documentation for the ES Inventory Hub system, which collects and analyzes device inventory data from NinjaRMM and ThreatLocker to identify discrepancies and maintain data consistency.
 
+**Last Updated**: January 15, 2025  
+**Status**: ✅ **CURRENT** - All documentation reviewed and updated
+
 ### **🔗 Shared Documentation (Symbolic Links)**
 
 **Important**: Some files in this directory are **symbolic links** to shared documentation across multiple projects. These files serve as a **single source of truth** and should **never be copied** or edited directly.
@@ -49,14 +52,14 @@ This directory contains comprehensive documentation for the ES Inventory Hub sys
 
 ### **For Dashboard Developers**
 - **[DASHBOARD_INTEGRATION_GUIDE.md](./DASHBOARD_INTEGRATION_GUIDE.md)** - Complete integration guide for building variance dashboards
-- **[AI_PROMPT_FOR_DASHBOARD.md](./AI_PROMPT_FOR_DASHBOARD.md)** - AI prompt for dashboard development
 
 ### **For Database Access**
-- **[DATABASE_ACCESS_GUIDE.md](./DATABASE_ACCESS_GUIDE.md)** - Complete database connection guide with schemas and queries
+- **[DASHBOARD_INTEGRATION_GUIDE.md](./DASHBOARD_INTEGRATION_GUIDE.md)** - Complete database connection guide with schemas and queries
 - **[DEVICE_MATCHING_LOGIC.md](./DEVICE_MATCHING_LOGIC.md)** - How devices are matched between vendors
 
 ### **For API Integration**
-- **[API_QUICK_REFERENCE.md](./API_QUICK_REFERENCE.md)** - Quick reference for API endpoints and usage
+- **[DASHBOARD_INTEGRATION_GUIDE.md](./DASHBOARD_INTEGRATION_GUIDE.md)** - Complete guide for dashboard integration with Variances Dashboard functionality
+- **[API_QUICK_REFERENCE.md](./API_QUICK_REFERENCE.md)** - Quick reference for API endpoints and usage including new export endpoints
 - **[../api/README.md](../api/README.md)** - API server and testing utilities
 - **[../api/api_server.py](../api/api_server.py)** - REST API server for variance data and collector management
 - **[../api/test_api.py](../api/test_api.py)** - API testing script
@@ -78,8 +81,6 @@ This directory contains comprehensive documentation for the ES Inventory Hub sys
 - **[THREATLOCKER_API_GUIDE.md](./THREATLOCKER_API_GUIDE.md)** - ThreatLocker API integration details
 
 ### **Migration & Updates**
-- **[MIGRATION_COMPLETED.md](./MIGRATION_COMPLETED.md)** - Database migration summary
-- **[SCHEMA_UPDATE_SUMMARY.md](./SCHEMA_UPDATE_SUMMARY.md)** - Recent schema changes
 - **[CHECK_IN_PROCESS.md](./CHECK_IN_PROCESS.md)** - Data collection process details
 
 ### **System Configuration**
@@ -193,7 +194,7 @@ journalctl -u threatlocker-collector@rene.service
 # Connect to database
 psql postgresql://postgres:Xat162gT2Qsg4WDlO5r@localhost:5432/es_inventory_hub
 
-# Run variance queries (see DATABASE_ACCESS_GUIDE.md)
+# Run variance queries (see DASHBOARD_INTEGRATION_GUIDE.md)
 ```
 
 ---

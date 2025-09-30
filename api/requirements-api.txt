@@ -4,3 +4,7 @@ Flask-CORS==4.0.0
 SQLAlchemy==2.0.21
 psycopg2-binary==2.9.7
 python-dotenv==1.0.0
+# Export functionality
+reportlab==4.0.4
+openpyxl==3.1.2
+xlsxwriter==3.1.9

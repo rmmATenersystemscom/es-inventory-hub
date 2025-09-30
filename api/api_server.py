@@ -16,13 +16,34 @@ import os
 import sys
 import json
 import subprocess
+import csv
+import io
 from datetime import date, datetime, timedelta
 from typing import Dict, List, Any, Optional
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
+
+# Export functionality imports
+try:
+    from reportlab.lib.pagesizes import letter, A4
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib import colors
+    from reportlab.lib.units import inch
+    REPORTLAB_AVAILABLE = True
+except ImportError:
+    REPORTLAB_AVAILABLE = False
+
+try:
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+    OPENPYXL_AVAILABLE = True
+except ImportError:
+    OPENPYXL_AVAILABLE = False
 
 # Add the project root to Python path
 sys.path.insert(0, '/opt/es-inventory-hub')
@@ -33,7 +54,8 @@ app = Flask(__name__)
 CORS(app)  # Enable CORS for cross-origin requests
 
 # Database connection
-DSN = 'postgresql://postgres:Xat162gT2Qsg4WDlO5r@localhost:5432/es_inventory_hub'
+from common.config import get_dsn
+DSN = get_dsn()
 engine = create_engine(DSN)
 Session = sessionmaker(bind=engine)
 
@@ -397,6 +419,137 @@ def get_collector_status():
         return jsonify({
             'error': str(e)
         }), 500
+
+@app.route('/api/collectors/history', methods=['GET'])
+def get_collection_history():
+    """
+    Get collection history for the last 10 runs.
+    
+    Returns collection runs with timestamps, status, and duration.
+    """
+    limit = int(request.args.get('limit', 10))
+    
+    with get_session() as session:
+        # Get recent job runs
+        query = text("""
+            SELECT 
+                job_name,
+                started_at,
+                ended_at,
+                status,
+                message,
+                CASE 
+                    WHEN ended_at IS NOT NULL THEN 
+                        EXTRACT(EPOCH FROM (ended_at - started_at))::INTEGER
+                    ELSE NULL
+                END as duration_seconds
+            FROM job_runs
+            WHERE job_name IN ('ninja-collector', 'threatlocker-collector')
+            ORDER BY started_at DESC
+            LIMIT :limit
+        """)
+        
+        results = session.execute(query, {'limit': limit}).fetchall()
+        
+        # Format results
+        history = []
+        for row in results:
+            job_name, started_at, ended_at, status, message, duration_seconds = row
+            
+            # Calculate duration
+            duration_str = None
+            if duration_seconds is not None:
+                if duration_seconds < 60:
+                    duration_str = f"{duration_seconds}s"
+                elif duration_seconds < 3600:
+                    minutes = duration_seconds // 60
+                    seconds = duration_seconds % 60
+                    duration_str = f"{minutes}m {seconds}s"
+                else:
+                    hours = duration_seconds // 3600
+                    minutes = (duration_seconds % 3600) // 60
+                    duration_str = f"{hours}h {minutes}m"
+            
+            history.append({
+                'job_name': job_name,
+                'started_at': started_at.isoformat() if started_at else None,
+                'ended_at': ended_at.isoformat() if ended_at else None,
+                'status': status,
+                'message': message,
+                'duration': duration_str,
+                'duration_seconds': duration_seconds
+            })
+        
+        return jsonify({
+            'collection_history': history,
+            'total_runs': len(history),
+            'generated_at': datetime.now().isoformat()
+        })
+
+@app.route('/api/collectors/progress', methods=['GET'])
+def get_collection_progress():
+    """
+    Get real-time collection progress if collectors are currently running.
+    
+    Returns progress information for active collection jobs.
+    """
+    with get_session() as session:
+        # Check for active collections
+        query = text("""
+            SELECT 
+                job_name,
+                started_at,
+                status,
+                message
+            FROM job_runs
+            WHERE job_name IN ('ninja-collector', 'threatlocker-collector')
+            AND status IN ('running', 'started')
+            AND started_at >= CURRENT_DATE
+            ORDER BY started_at DESC
+        """)
+        
+        results = session.execute(query).fetchall()
+        
+        # Check systemd service status for additional info
+        active_collections = []
+        for row in results:
+            job_name, started_at, status, message = row
+            
+            # Get systemd status
+            service_name = f"{job_name}.service"
+            if job_name == 'threatlocker-collector':
+                service_name = "threatlocker-collector@rene.service"
+            
+            try:
+                systemd_result = subprocess.run([
+                    'systemctl', 'is-active', service_name
+                ], capture_output=True, text=True)
+                
+                is_active = systemd_result.stdout.strip() == 'active'
+            except:
+                is_active = False
+            
+            # Calculate elapsed time
+            elapsed_seconds = None
+            if started_at:
+                elapsed = datetime.now() - started_at
+                elapsed_seconds = int(elapsed.total_seconds())
+            
+            active_collections.append({
+                'job_name': job_name,
+                'started_at': started_at.isoformat() if started_at else None,
+                'status': status,
+                'message': message,
+                'is_active': is_active,
+                'elapsed_seconds': elapsed_seconds,
+                'elapsed_time': f"{elapsed_seconds // 60}m {elapsed_seconds % 60}s" if elapsed_seconds else None
+            })
+        
+        return jsonify({
+            'active_collections': active_collections,
+            'total_active': len(active_collections),
+            'generated_at': datetime.now().isoformat()
+        })
 
 @app.route('/api/exceptions', methods=['GET'])
 def get_exceptions():
@@ -1156,6 +1309,805 @@ def search_devices():
             'warning': 'Some hostnames may be truncated due to Ninja 15-character limit' if truncated_count > 0 else None
         })
 
+# Export Endpoints
+
+@app.route('/api/variances/export/csv', methods=['GET'])
+def export_variances_csv():
+    """
+    Export variance data to CSV format.
+    
+    Query parameters:
+    - date: Specific date (YYYY-MM-DD) or 'latest' (default)
+    - include_resolved: Include resolved exceptions (default: false)
+    - type: Filter by exception type (optional)
+    """
+    # Get query parameters
+    date_param = request.args.get('date', 'latest')
+    include_resolved = request.args.get('include_resolved', 'false').lower() == 'true'
+    exception_type = request.args.get('type', '')
+    
+    # Determine report date
+    if date_param == 'latest':
+        report_date = get_latest_matching_date()
+        if not report_date:
+            return jsonify({
+                "error": "No matching data found between vendors",
+                "status": "out_of_sync"
+            }), 400
+    else:
+        try:
+            report_date = datetime.strptime(date_param, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
+    
+    with get_session() as session:
+        # Check if data exists for this date
+        check_query = text("""
+            SELECT COUNT(DISTINCT vendor_id) as vendor_count
+            FROM device_snapshot
+            WHERE snapshot_date = :report_date
+        """)
+        
+        result = session.execute(check_query, {'report_date': report_date}).fetchone()
+        
+        if result[0] < 2:
+            return jsonify({
+                "error": f"Insufficient data for {date_param}. Found {result[0]} vendors, need 2.",
+                "status": "insufficient_data"
+            }), 400
+        
+        # Build query for exceptions
+        query = text("""
+            SELECT 
+                e.id,
+                e.date_found,
+                e.type,
+                e.hostname,
+                e.details,
+                e.resolved,
+                e.resolved_date,
+                e.resolved_by,
+                e.manually_updated_at,
+                e.manually_updated_by,
+                e.variance_status,
+                e.update_type,
+                e.old_value,
+                e.new_value
+            FROM exceptions e
+            WHERE e.date_found = :report_date
+        """)
+        
+        params = {'report_date': report_date}
+        
+        # Add filters
+        if not include_resolved:
+            query += " AND e.resolved = FALSE"
+        
+        if exception_type:
+            query += " AND e.type = :exception_type"
+            params['exception_type'] = exception_type
+        
+        query += " ORDER BY e.type, e.hostname"
+        
+        exceptions = session.execute(query, params).fetchall()
+        
+        # Generate CSV content
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Write header
+        writer.writerow([
+            'ID', 'Date Found', 'Type', 'Hostname', 'Resolved', 'Resolved Date',
+            'Resolved By', 'Manually Updated At', 'Manually Updated By',
+            'Variance Status', 'Update Type', 'Organization', 'Details'
+        ])
+        
+        # Write data rows
+        for exc in exceptions:
+            details = exc[4] if exc[4] else {}
+            org_name = details.get('tl_org_name', details.get('ninja_org_name', 'Unknown'))
+            
+            writer.writerow([
+                exc[0],  # ID
+                exc[1].isoformat() if exc[1] else '',  # Date Found
+                exc[2],  # Type
+                exc[3],  # Hostname
+                'Yes' if exc[5] else 'No',  # Resolved
+                exc[6].isoformat() if exc[6] else '',  # Resolved Date
+                exc[7] or '',  # Resolved By
+                exc[8].isoformat() if exc[8] else '',  # Manually Updated At
+                exc[9] or '',  # Manually Updated By
+                exc[10] or 'active',  # Variance Status
+                exc[11] or '',  # Update Type
+                org_name,  # Organization
+                json.dumps(details) if details else ''  # Details
+            ])
+        
+        # Create response
+        csv_content = output.getvalue()
+        output.close()
+        
+        # Generate filename
+        filename = f"variances-{report_date.isoformat()}.csv"
+        if exception_type:
+            filename = f"variances-{exception_type.lower()}-{report_date.isoformat()}.csv"
+        
+        response = Response(
+            csv_content,
+            mimetype='text/csv',
+            headers={
+                'Content-Disposition': f'attachment; filename={filename}',
+                'Content-Type': 'text/csv; charset=utf-8'
+            }
+        )
+        
+        return response
+
+@app.route('/api/variances/available-dates', methods=['GET'])
+def get_available_dates():
+    """
+    Get available analysis dates where both vendors have data.
+    
+    Returns list of dates with data quality status.
+    """
+    with get_session() as session:
+        # Get dates with both vendors
+        query = text("""
+            SELECT 
+                snapshot_date,
+                COUNT(DISTINCT vendor_id) as vendor_count,
+                COUNT(DISTINCT CASE WHEN v.name = 'Ninja' THEN ds.vendor_id END) as ninja_count,
+                COUNT(DISTINCT CASE WHEN v.name = 'ThreatLocker' THEN ds.vendor_id END) as threatlocker_count
+            FROM device_snapshot ds
+            JOIN vendor v ON ds.vendor_id = v.id
+            WHERE snapshot_date >= CURRENT_DATE - INTERVAL '30 days'
+            GROUP BY snapshot_date
+            HAVING COUNT(DISTINCT vendor_id) = 2
+            ORDER BY snapshot_date DESC
+        """)
+        
+        results = session.execute(query).fetchall()
+        
+        # Get exception counts for each date
+        dates_with_exceptions = []
+        for row in results:
+            snapshot_date = row[0]
+            ninja_count = row[2]
+            threatlocker_count = row[3]
+            
+            # Get exception count for this date
+            exception_query = text("""
+                SELECT 
+                    COUNT(*) as total_exceptions,
+                    COUNT(CASE WHEN resolved = FALSE THEN 1 END) as unresolved_exceptions
+                FROM exceptions
+                WHERE date_found = :snapshot_date
+            """)
+            
+            exception_result = session.execute(exception_query, {'snapshot_date': snapshot_date}).fetchone()
+            total_exceptions = exception_result[0] if exception_result else 0
+            unresolved_exceptions = exception_result[1] if exception_result else 0
+            
+            # Determine data quality
+            days_old = (date.today() - snapshot_date).days
+            if days_old <= 1:
+                quality_status = "current"
+            elif days_old <= 3:
+                quality_status = "recent"
+            else:
+                quality_status = "stale"
+            
+            dates_with_exceptions.append({
+                'date': snapshot_date.isoformat(),
+                'ninja_devices': ninja_count,
+                'threatlocker_devices': threatlocker_count,
+                'total_exceptions': total_exceptions,
+                'unresolved_exceptions': unresolved_exceptions,
+                'data_quality': quality_status,
+                'days_old': days_old
+            })
+        
+        return jsonify({
+            'available_dates': dates_with_exceptions,
+            'date_range': {
+                'earliest': dates_with_exceptions[-1]['date'] if dates_with_exceptions else None,
+                'latest': dates_with_exceptions[0]['date'] if dates_with_exceptions else None
+            },
+            'total_dates': len(dates_with_exceptions)
+        })
+
+@app.route('/api/variances/historical/<date_str>', methods=['GET'])
+def get_historical_variance_data(date_str: str):
+    """
+    Get variance data for a specific historical date.
+    
+    Same structure as /api/variance-report/latest but for historical date.
+    """
+    # Get query parameters
+    include_resolved = request.args.get('include_resolved', 'false').lower() == 'true'
+    
+    try:
+        report_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
+    
+    with get_session() as session:
+        # Check if data exists for this date
+        check_query = text("""
+            SELECT COUNT(DISTINCT vendor_id) as vendor_count
+            FROM device_snapshot
+            WHERE snapshot_date = :report_date
+        """)
+        
+        result = session.execute(check_query, {'report_date': report_date}).fetchone()
+        
+        if result[0] < 2:
+            return jsonify({
+                "error": f"Insufficient data for {date_str}. Found {result[0]} vendors, need 2.",
+                "status": "insufficient_data"
+            }), 400
+        
+        # Get exceptions for the date
+        if include_resolved:
+            query = text("""
+                SELECT id, date_found, type, hostname, details, resolved
+                FROM exceptions
+                WHERE date_found = :report_date
+                ORDER BY type, hostname
+            """)
+        else:
+            query = text("""
+                SELECT id, date_found, type, hostname, details, resolved
+                FROM exceptions
+                WHERE date_found = :report_date
+                AND resolved = FALSE
+                ORDER BY type, hostname
+            """)
+        
+        exceptions = session.execute(query, {'report_date': report_date}).fetchall()
+        
+        # Group by type
+        by_type = {}
+        for exc in exceptions:
+            exc_type = exc[2]
+            if exc_type not in by_type:
+                by_type[exc_type] = []
+            by_type[exc_type].append({
+                'id': exc[0],
+                'hostname': exc[3],
+                'details': exc[4],
+                'resolved': exc[5]
+            })
+        
+        # Calculate totals
+        total_exceptions = len(exceptions)
+        unresolved_count = sum(1 for exc in exceptions if not exc[5])
+        
+        # Get device counts for this date
+        device_query = text("""
+            SELECT v.name as vendor, COUNT(*) as count
+            FROM device_snapshot ds
+            JOIN vendor v ON ds.vendor_id = v.id
+            WHERE ds.snapshot_date = :report_date
+            GROUP BY v.name
+        """)
+        
+        device_counts = {row[0]: row[1] for row in session.execute(device_query, {'report_date': report_date}).fetchall()}
+        
+        return jsonify({
+            "report_date": report_date.isoformat(),
+            "summary": {
+                "total_exceptions": total_exceptions,
+                "unresolved_count": unresolved_count,
+                "resolved_count": total_exceptions - unresolved_count
+            },
+            "exceptions_by_type": by_type,
+            "exception_counts": {exc_type: len(devices) for exc_type, devices in by_type.items()},
+            "device_counts": device_counts,
+            "data_status": {
+                "status": "historical",
+                "message": f"Historical data for {date_str}",
+                "latest_date": report_date.isoformat()
+            }
+        })
+
+@app.route('/api/variances/trends', methods=['GET'])
+def get_variance_trends():
+    """
+    Get trend analysis for variance data over time.
+    
+    Query parameters:
+    - start_date: Start date (YYYY-MM-DD)
+    - end_date: End date (YYYY-MM-DD)
+    - type: Exception type filter (optional)
+    """
+    start_date_str = request.args.get('start_date')
+    end_date_str = request.args.get('end_date')
+    exception_type = request.args.get('type', '')
+    
+    if not start_date_str or not end_date_str:
+        return jsonify({"error": "start_date and end_date are required"}), 400
+    
+    try:
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
+    
+    if start_date > end_date:
+        return jsonify({"error": "start_date must be before end_date"}), 400
+    
+    with get_session() as session:
+        # Build trend query
+        query = text("""
+            SELECT 
+                date_found,
+                type,
+                COUNT(*) as total_count,
+                COUNT(CASE WHEN resolved = FALSE THEN 1 END) as unresolved_count,
+                COUNT(CASE WHEN resolved = TRUE THEN 1 END) as resolved_count
+            FROM exceptions
+            WHERE date_found BETWEEN :start_date AND :end_date
+        """)
+        
+        params = {'start_date': start_date, 'end_date': end_date}
+        
+        if exception_type:
+            query += " AND type = :exception_type"
+            params['exception_type'] = exception_type
+        
+        query += """
+            GROUP BY date_found, type
+            ORDER BY date_found DESC, type
+        """
+        
+        results = session.execute(query, params).fetchall()
+        
+        # Group by date and type
+        trends_by_date = {}
+        trends_by_type = {}
+        
+        for row in results:
+            date_found = row[0]
+            exc_type = row[1]
+            total_count = row[2]
+            unresolved_count = row[3]
+            resolved_count = row[4]
+            
+            # Group by date
+            if date_found not in trends_by_date:
+                trends_by_date[date_found] = {}
+            trends_by_date[date_found][exc_type] = {
+                'total': total_count,
+                'unresolved': unresolved_count,
+                'resolved': resolved_count
+            }
+            
+            # Group by type
+            if exc_type not in trends_by_type:
+                trends_by_type[exc_type] = []
+            trends_by_type[exc_type].append({
+                'date': date_found.isoformat(),
+                'total': total_count,
+                'unresolved': unresolved_count,
+                'resolved': resolved_count
+            })
+        
+        # Calculate summary statistics
+        total_exceptions = sum(row[2] for row in results)
+        total_unresolved = sum(row[3] for row in results)
+        total_resolved = sum(row[4] for row in results)
+        
+        # Get unique dates and types
+        unique_dates = sorted(set(row[0] for row in results), reverse=True)
+        unique_types = sorted(set(row[1] for row in results))
+        
+        return jsonify({
+            'trends_by_date': {date.isoformat(): data for date, data in trends_by_date.items()},
+            'trends_by_type': trends_by_type,
+            'summary': {
+                'total_exceptions': total_exceptions,
+                'total_unresolved': total_unresolved,
+                'total_resolved': total_resolved,
+                'date_range': {
+                    'start': start_date.isoformat(),
+                    'end': end_date.isoformat()
+                },
+                'unique_dates': len(unique_dates),
+                'unique_types': unique_types
+            },
+            'date_range': {
+                'start_date': start_date.isoformat(),
+                'end_date': end_date.isoformat(),
+                'days': (end_date - start_date).days + 1
+            }
+        })
+
+# Enhanced Export Endpoints
+
+@app.route('/api/variances/export/pdf', methods=['GET'])
+def export_variances_pdf():
+    """
+    Export variance data to PDF format.
+    
+    Query parameters:
+    - date: Specific date (YYYY-MM-DD) or 'latest' (default)
+    - include_resolved: Include resolved exceptions (default: false)
+    - type: Filter by exception type (optional)
+    """
+    if not REPORTLAB_AVAILABLE:
+        return jsonify({
+            "error": "PDF export not available. Install reportlab: pip install reportlab"
+        }), 500
+    
+    # Get query parameters
+    date_param = request.args.get('date', 'latest')
+    include_resolved = request.args.get('include_resolved', 'false').lower() == 'true'
+    exception_type = request.args.get('type', '')
+    
+    # Determine report date
+    if date_param == 'latest':
+        report_date = get_latest_matching_date()
+        if not report_date:
+            return jsonify({
+                "error": "No matching data found between vendors",
+                "status": "out_of_sync"
+            }), 400
+    else:
+        try:
+            report_date = datetime.strptime(date_param, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
+    
+    with get_session() as session:
+        # Check if data exists for this date
+        check_query = text("""
+            SELECT COUNT(DISTINCT vendor_id) as vendor_count
+            FROM device_snapshot
+            WHERE snapshot_date = :report_date
+        """)
+        
+        result = session.execute(check_query, {'report_date': report_date}).fetchone()
+        
+        if result[0] < 2:
+            return jsonify({
+                "error": f"Insufficient data for {date_param}. Found {result[0]} vendors, need 2.",
+                "status": "insufficient_data"
+            }), 400
+        
+        # Get exceptions data
+        query = text("""
+            SELECT 
+                e.id,
+                e.date_found,
+                e.type,
+                e.hostname,
+                e.details,
+                e.resolved,
+                e.resolved_date,
+                e.resolved_by,
+                e.manually_updated_at,
+                e.manually_updated_by,
+                e.variance_status
+            FROM exceptions e
+            WHERE e.date_found = :report_date
+        """)
+        
+        params = {'report_date': report_date}
+        
+        # Add filters
+        if not include_resolved:
+            query += " AND e.resolved = FALSE"
+        
+        if exception_type:
+            query += " AND e.type = :exception_type"
+            params['exception_type'] = exception_type
+        
+        query += " ORDER BY e.type, e.hostname"
+        
+        exceptions = session.execute(query, params).fetchall()
+        
+        # Generate PDF
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4)
+        styles = getSampleStyleSheet()
+        story = []
+        
+        # Title
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=16,
+            spaceAfter=30,
+            alignment=1  # Center
+        )
+        story.append(Paragraph(f"Variance Report - {report_date.isoformat()}", title_style))
+        story.append(Spacer(1, 12))
+        
+        # Summary
+        total_exceptions = len(exceptions)
+        unresolved_count = sum(1 for exc in exceptions if not exc[5])
+        resolved_count = total_exceptions - unresolved_count
+        
+        summary_data = [
+            ['Total Exceptions', str(total_exceptions)],
+            ['Unresolved', str(unresolved_count)],
+            ['Resolved', str(resolved_count)],
+            ['Report Date', report_date.isoformat()],
+            ['Generated', datetime.now().strftime('%Y-%m-%d %H:%M:%S')]
+        ]
+        
+        summary_table = Table(summary_data, colWidths=[2*inch, 1.5*inch])
+        summary_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.lightgrey),
+            ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        
+        story.append(Paragraph("Summary", styles['Heading2']))
+        story.append(summary_table)
+        story.append(Spacer(1, 20))
+        
+        # Exceptions table
+        if exceptions:
+            story.append(Paragraph("Exception Details", styles['Heading2']))
+            
+            # Prepare table data
+            table_data = [['ID', 'Type', 'Hostname', 'Status', 'Organization']]
+            
+            for exc in exceptions:
+                details = exc[4] if exc[4] else {}
+                org_name = details.get('tl_org_name', details.get('ninja_org_name', 'Unknown'))
+                status = 'Resolved' if exc[5] else 'Active'
+                
+                table_data.append([
+                    str(exc[0]),
+                    exc[2],
+                    exc[3],
+                    status,
+                    org_name
+                ])
+            
+            # Create table
+            exceptions_table = Table(table_data, colWidths=[0.5*inch, 1.2*inch, 1.5*inch, 0.8*inch, 1.5*inch])
+            exceptions_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.beige, colors.white])
+            ]))
+            
+            story.append(exceptions_table)
+        else:
+            story.append(Paragraph("No exceptions found for the specified criteria.", styles['Normal']))
+        
+        # Build PDF
+        doc.build(story)
+        buffer.seek(0)
+        
+        # Generate filename
+        filename = f"variances-{report_date.isoformat()}.pdf"
+        if exception_type:
+            filename = f"variances-{exception_type.lower()}-{report_date.isoformat()}.pdf"
+        
+        return Response(
+            buffer.getvalue(),
+            mimetype='application/pdf',
+            headers={
+                'Content-Disposition': f'attachment; filename={filename}',
+                'Content-Type': 'application/pdf'
+            }
+        )
+
+@app.route('/api/variances/export/excel', methods=['GET'])
+def export_variances_excel():
+    """
+    Export variance data to Excel format with multiple sheets.
+    
+    Query parameters:
+    - date: Specific date (YYYY-MM-DD) or 'latest' (default)
+    - include_resolved: Include resolved exceptions (default: false)
+    - type: Filter by exception type (optional)
+    """
+    if not OPENPYXL_AVAILABLE:
+        return jsonify({
+            "error": "Excel export not available. Install openpyxl: pip install openpyxl"
+        }), 500
+    
+    # Get query parameters
+    date_param = request.args.get('date', 'latest')
+    include_resolved = request.args.get('include_resolved', 'false').lower() == 'true'
+    exception_type = request.args.get('type', '')
+    
+    # Determine report date
+    if date_param == 'latest':
+        report_date = get_latest_matching_date()
+        if not report_date:
+            return jsonify({
+                "error": "No matching data found between vendors",
+                "status": "out_of_sync"
+            }), 400
+    else:
+        try:
+            report_date = datetime.strptime(date_param, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
+    
+    with get_session() as session:
+        # Check if data exists for this date
+        check_query = text("""
+            SELECT COUNT(DISTINCT vendor_id) as vendor_count
+            FROM device_snapshot
+            WHERE snapshot_date = :report_date
+        """)
+        
+        result = session.execute(check_query, {'report_date': report_date}).fetchone()
+        
+        if result[0] < 2:
+            return jsonify({
+                "error": f"Insufficient data for {date_param}. Found {result[0]} vendors, need 2.",
+                "status": "insufficient_data"
+            }), 400
+        
+        # Get exceptions data
+        query = text("""
+            SELECT 
+                e.id,
+                e.date_found,
+                e.type,
+                e.hostname,
+                e.details,
+                e.resolved,
+                e.resolved_date,
+                e.resolved_by,
+                e.manually_updated_at,
+                e.manually_updated_by,
+                e.variance_status,
+                e.update_type
+            FROM exceptions e
+            WHERE e.date_found = :report_date
+        """)
+        
+        params = {'report_date': report_date}
+        
+        # Add filters
+        if not include_resolved:
+            query += " AND e.resolved = FALSE"
+        
+        if exception_type:
+            query += " AND e.type = :exception_type"
+            params['exception_type'] = exception_type
+        
+        query += " ORDER BY e.type, e.hostname"
+        
+        exceptions = session.execute(query, params).fetchall()
+        
+        # Create Excel workbook
+        wb = openpyxl.Workbook()
+        
+        # Remove default sheet
+        wb.remove(wb.active)
+        
+        # Create Summary sheet
+        summary_ws = wb.create_sheet("Summary")
+        summary_ws.title = "Summary"
+        
+        # Summary data
+        total_exceptions = len(exceptions)
+        unresolved_count = sum(1 for exc in exceptions if not exc[5])
+        resolved_count = total_exceptions - unresolved_count
+        
+        summary_data = [
+            ['Variance Report Summary'],
+            [''],
+            ['Report Date', report_date.isoformat()],
+            ['Generated', datetime.now().strftime('%Y-%m-%d %H:%M:%S')],
+            [''],
+            ['Total Exceptions', total_exceptions],
+            ['Unresolved', unresolved_count],
+            ['Resolved', resolved_count],
+            [''],
+            ['Exception Types:']
+        ]
+        
+        # Add exception type breakdown
+        type_counts = {}
+        for exc in exceptions:
+            exc_type = exc[2]
+            type_counts[exc_type] = type_counts.get(exc_type, 0) + 1
+        
+        for exc_type, count in sorted(type_counts.items()):
+            summary_data.append([exc_type, count])
+        
+        # Write summary data
+        for row_idx, row_data in enumerate(summary_data, 1):
+            for col_idx, cell_value in enumerate(row_data, 1):
+                cell = summary_ws.cell(row=row_idx, column=col_idx, value=cell_value)
+                if row_idx == 1:  # Title
+                    cell.font = Font(bold=True, size=14)
+                elif row_idx in [3, 4, 6, 7, 8]:  # Data rows
+                    cell.font = Font(bold=True)
+        
+        # Create detailed exceptions sheet
+        details_ws = wb.create_sheet("Exceptions")
+        details_ws.title = "Exceptions"
+        
+        # Headers
+        headers = [
+            'ID', 'Date Found', 'Type', 'Hostname', 'Resolved',
+            'Resolved Date', 'Resolved By', 'Manually Updated At',
+            'Manually Updated By', 'Variance Status', 'Update Type', 'Organization'
+        ]
+        
+        for col_idx, header in enumerate(headers, 1):
+            cell = details_ws.cell(row=1, column=col_idx, value=header)
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill(start_color="CCCCCC", end_color="CCCCCC", fill_type="solid")
+        
+        # Data rows
+        for row_idx, exc in enumerate(exceptions, 2):
+            details = exc[4] if exc[4] else {}
+            org_name = details.get('tl_org_name', details.get('ninja_org_name', 'Unknown'))
+            
+            row_data = [
+                exc[0],  # ID
+                exc[1].isoformat() if exc[1] else '',  # Date Found
+                exc[2],  # Type
+                exc[3],  # Hostname
+                'Yes' if exc[5] else 'No',  # Resolved
+                exc[6].isoformat() if exc[6] else '',  # Resolved Date
+                exc[7] or '',  # Resolved By
+                exc[8].isoformat() if exc[8] else '',  # Manually Updated At
+                exc[9] or '',  # Manually Updated By
+                exc[10] or 'active',  # Variance Status
+                exc[11] or '',  # Update Type
+                org_name  # Organization
+            ]
+            
+            for col_idx, value in enumerate(row_data, 1):
+                details_ws.cell(row=row_idx, column=col_idx, value=value)
+        
+        # Auto-adjust column widths
+        for ws in [summary_ws, details_ws]:
+            for column in ws.columns:
+                max_length = 0
+                column_letter = get_column_letter(column[0].column)
+                for cell in column:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(str(cell.value))
+                    except:
+                        pass
+                adjusted_width = min(max_length + 2, 50)
+                ws.column_dimensions[column_letter].width = adjusted_width
+        
+        # Save to buffer
+        buffer = io.BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+        
+        # Generate filename
+        filename = f"variances-{report_date.isoformat()}.xlsx"
+        if exception_type:
+            filename = f"variances-{exception_type.lower()}-{report_date.isoformat()}.xlsx"
+        
+        return Response(
+            buffer.getvalue(),
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            headers={
+                'Content-Disposition': f'attachment; filename={filename}',
+                'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            }
+        )
+
 if __name__ == '__main__':
     print("Starting ES Inventory Hub API Server...")
     print("Available endpoints:")
@@ -1166,6 +2118,8 @@ if __name__ == '__main__':
     print("  GET  /api/variance-report/filtered - Filtered variance report for dashboard")
     print("  POST /api/collectors/run - Trigger collector runs")
     print("  GET  /api/collectors/status - Collector service status")
+    print("  GET  /api/collectors/history - Collection history (last 10 runs)")
+    print("  GET  /api/collectors/progress - Real-time collection progress")
     print("  GET  /api/exceptions - Get exceptions with filtering")
     print("  POST /api/exceptions/{id}/resolve - Resolve an exception")
     print("  POST /api/exceptions/{id}/mark-manually-fixed - Mark as manually fixed (NEW)")
@@ -1173,6 +2127,14 @@ if __name__ == '__main__':
     print("  POST /api/exceptions/bulk-update - Bulk exception operations (NEW)")
     print("  GET  /api/exceptions/status-summary - Exception status summary (NEW)")
     print("  GET  /api/devices/search?q={hostname} - Search devices (handles hostname truncation)")
+    print()
+    print("NEW EXPORT ENDPOINTS:")
+    print("  GET  /api/variances/export/csv - Export variance data to CSV")
+    print("  GET  /api/variances/export/pdf - Export variance data to PDF")
+    print("  GET  /api/variances/export/excel - Export variance data to Excel")
+    print("  GET  /api/variances/available-dates - Get available analysis dates")
+    print("  GET  /api/variances/historical/{date} - Get historical variance data")
+    print("  GET  /api/variances/trends - Get variance trends over time")
     print()
     print("Server will run on http://localhost:5400")
     

@@ -17,7 +17,7 @@ log_message "Starting ThreatLocker daily collection"
 
 # Load environment variables
 set -a
-. /opt/dashboard-project/es-dashboards/.env
+. /opt/es-inventory-hub/.env
 set +a
 
 # Activate virtual environment
@@ -37,7 +37,8 @@ from sqlalchemy.orm import sessionmaker
 from collectors.checks.cross_vendor import run_cross_vendor_checks
 
 # Connect to database
-dsn = 'postgresql://postgres:Xat162gT2Qsg4WDlO5r@localhost:5432/es_inventory_hub'
+import os
+dsn = os.getenv('DB_DSN', 'postgresql://postgres:mK2D282lRrs6bTpXWe7@localhost:5432/es_inventory_hub')
 engine = create_engine(dsn)
 Session = sessionmaker(bind=engine)
 session = Session()

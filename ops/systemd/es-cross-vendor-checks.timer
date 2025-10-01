@@ -1,0 +1,12 @@
+[Unit]
+Description=Run ES Inventory Hub cross-vendor checks daily at 11:30 PM Central Time
+Requires=es-cross-vendor-checks.service
+
+[Timer]
+OnCalendar=*-*-* 23:30:00 America/Chicago
+Persistent=true
+AccuracySec=1m
+Unit=es-cross-vendor-checks.service
+
+[Install]
+WantedBy=timers.target

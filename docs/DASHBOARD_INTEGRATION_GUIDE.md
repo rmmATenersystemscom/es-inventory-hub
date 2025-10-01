@@ -21,25 +21,34 @@ pip install -r api/requirements-api.txt
 python3 api/api_server.py
 ```
 
-**API Base URL:** `http://localhost:5400`
+**API Base URL:** 
+- **Production HTTPS**: `https://db-api.enersystems.com:5400` (Let's Encrypt Certificate)
+- **Local Access**: `https://localhost:5400` (HTTPS)
+- **IP Access**: `https://192.168.99.246:5400` (HTTPS - Use `-k` flag for testing)
+- **HTTP Fallback**: `http://192.168.99.246:5400` (HTTP - Not recommended for production)
 
-### **Option 2: Direct Database Access**
+### **Option 2: Direct Database Access (Database AI Only)**
 
-Connect directly to the PostgreSQL database for advanced queries.
+**⚠️ DASHBOARD AI SHOULD NEVER USE THIS OPTION!**
 
-**Connection Details:**
+This is for Database AI internal operations only. Dashboard AI must use the API server.
+
+**Connection Details (Database AI Internal Only):**
 ```
-Host: localhost (or 192.168.99.246 for remote)
+Host: 192.168.99.246 (Database AI Server)
 Port: 5432
 Database: es_inventory_hub
 Username: postgres
 Password: Xat162gT2Qsg4WDlO5r
 ```
 
-**Connection String:**
-```
-postgresql://postgres:Xat162gT2Qsg4WDlO5r@localhost:5432/es_inventory_hub
-```
+**🚨 CRITICAL FOR DASHBOARD AI:**
+- **Dashboard AI Server**: 192.168.99.245
+- **Database AI Server**: 192.168.99.246
+- **Dashboard AI MUST use**: `https://db-api.enersystems.com:5400` (HTTPS API server)
+- **Dashboard AI MUST NOT use**: Port 5432 (direct database access)
+- **HTTPS Required**: Mixed content security requires HTTPS for dashboard integration
+- **Certificate**: Valid Let's Encrypt certificate for db-api.enersystems.com
 
 ---
 
@@ -373,15 +382,18 @@ python3 api/api_server.py
 
 ### **3. Test API**
 ```bash
-# Basic endpoints
-curl http://localhost:5400/api/health
-curl http://localhost:5400/api/status
-curl http://localhost:5400/api/variance-report/latest
+# Basic endpoints (from Dashboard AI server 192.168.99.245)
+curl https://db-api.enersystems.com:5400/api/health
+curl https://db-api.enersystems.com:5400/api/status
+curl https://db-api.enersystems.com:5400/api/variance-report/latest
 
 # NEW: Test Variances Dashboard endpoints
-curl http://localhost:5400/api/variances/available-dates
-curl http://localhost:5400/api/collectors/history
-curl "http://localhost:5400/api/variances/export/csv"
+curl https://db-api.enersystems.com:5400/api/variances/available-dates
+curl https://db-api.enersystems.com:5400/api/collectors/history
+curl "https://db-api.enersystems.com:5400/api/variances/export/csv"
+
+# Alternative IP access (use -k flag for testing)
+curl -k https://192.168.99.246:5400/api/health
 ```
 
 ---
@@ -438,17 +450,60 @@ The `/api/devices/search` endpoint handles this automatically:
 
 ### **Debug Commands**
 ```bash
-# Check API server status
-curl http://localhost:5400/api/health
+# Check API server status (from Dashboard AI server 192.168.99.245)
+curl -k https://192.168.99.246:5400/api/health
 
-# Check database connection
-psql postgresql://postgres:Xat162gT2Qsg4WDlO5r@localhost:5432/es_inventory_hub
+# Check database connection (from Dashboard AI server 192.168.99.245)
+psql postgresql://postgres:Xat162gT2Qsg4WDlO5r@192.168.99.246:5432/es_inventory_hub
 
-# Test collectors
-curl -X POST http://localhost:5400/api/collectors/run \
+# Test collectors (from Dashboard AI server 192.168.99.245)
+curl -k -X POST https://192.168.99.246:5400/api/collectors/run \
   -H "Content-Type: application/json" \
   -d '{"collector": "both", "run_cross_vendor": true}'
 ```
+
+---
+
+## 🔐 **HTTPS CONFIGURATION**
+
+The API server now supports HTTPS to resolve mixed content errors when accessed from HTTPS dashboards.
+
+### **Current SSL Setup:**
+- **Let's Encrypt certificate**: Production-ready certificate for `db-api.enersystems.com`
+- **HTTPS URL**: `https://db-api.enersystems.com:5400`
+- **Certificate location**: `/opt/es-inventory-hub/ssl/api.crt`
+- **Private key location**: `/opt/es-inventory-hub/ssl/api.key`
+- **Certificate expires**: December 29, 2025 (auto-renewal configured)
+
+### **Production SSL Setup (Let's Encrypt):**
+```bash
+# 1. Configure GoDaddy API credentials
+nano /opt/es-inventory-hub/ssl/godaddy.ini
+
+# 2. Run SSL setup script
+cd /opt/es-inventory-hub/ssl
+./setup_ssl.sh
+
+# 3. Restart API server
+sudo systemctl restart es-inventory-api.service
+```
+
+### **Testing HTTPS:**
+```bash
+# Test with Let's Encrypt certificate (production)
+curl https://db-api.enersystems.com:5400/api/health
+
+# Test main endpoint
+curl https://db-api.enersystems.com:5400/api/variance-report/latest
+
+# Test with IP address (use -k flag for testing)
+curl -k https://192.168.99.246:5400/api/health
+```
+
+### **Firewall Configuration:**
+- **Port 5400**: Allowed for HTTPS API access
+- **Port 443**: Allowed for HTTPS traffic
+- **Port 5432**: Blocked for Dashboard AI (database access)
 
 ---
 

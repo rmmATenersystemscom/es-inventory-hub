@@ -12,6 +12,8 @@
 - ✅ **Cross-Vendor Checks**: Variance detection and exception handling
 - ✅ **Documentation**: Project-specific documentation in `/docs/`
 - ✅ **Environment Configuration**: Local `.env` files and systemd service configs
+- ✅ **Database Performance**: Query optimization and schema management
+- ✅ **Data Quality**: Ensuring accurate device inventory collection
 
 ### **Dashboard Project AI Scope:**
 - ✅ **Web Dashboards**: All dashboard containers (see [Port Configuration](PORT_CONFIGURATION.md))
@@ -20,6 +22,8 @@
 - ✅ **Dashboard Integration**: Connecting dashboards to ES Inventory Hub API
 - ✅ **Socat Forwarders**: Container networking and port forwarding
 - ✅ **SSL Certificates**: Let's Encrypt certificate management
+- ✅ **User Experience**: Improving dashboard interfaces and performance
+- ✅ **Container Management**: Docker container lifecycle and networking
 
 ## 🚫 **Boundary Rules**
 
@@ -30,6 +34,8 @@
 - ❌ Modify dashboard project files in `/opt/dashboard-project/`
 - ❌ Update socat forwarder configurations
 - ❌ Change dashboard port mappings
+- ❌ Modify dashboard UI/UX elements
+- ❌ Manage Docker container networking
 
 ### **Dashboard AI Should NOT:**
 - ❌ Modify ES Inventory Hub database schema
@@ -38,6 +44,8 @@
 - ❌ Update API server code
 - ❌ Change cross-vendor check logic
 - ❌ Modify environment variable configurations
+- ❌ Change database queries or schema
+- ❌ Modify data collection logic
 
 ## 🔄 **Cross-Project Coordination**
 
@@ -58,19 +66,20 @@ Put your request in a text box:
 **For complete port allocation details, see [Port Configuration](PORT_CONFIGURATION.md)**
 
 ### **Key Points:**
-- **ES Inventory Hub**: Uses ports 5400-5499
-- **Dashboard Project**: Uses ports 5000-5399  
-- **Shared Services**: PostgreSQL (port 5432)
-- **Single Source of Truth**: All port information is maintained in PORT_CONFIGURATION.md
+- **ES Inventory Hub**: Database AI manages API and data collection services
+- **Dashboard Project**: Dashboard AI manages web interfaces and containers
+- **Single Source of Truth**: All port information is maintained in [Port Configuration](PORT_CONFIGURATION.md)
 
 ## 🎯 **Focus Areas**
 
-### **ES Inventory Hub AI Should Focus On:**
+### **ES Inventory Hub AI (Database AI) Should Focus On:**
 1. **Data Quality**: Ensuring accurate device inventory collection
 2. **Variance Detection**: Improving cross-vendor consistency checks
 3. **API Reliability**: Maintaining stable REST API endpoints
 4. **Database Performance**: Optimizing queries and schema
 5. **Automation**: Enhancing systemd service reliability
+6. **Data Collection**: NinjaRMM and ThreatLocker collector optimization
+7. **Database Management**: Schema design and query optimization
 
 ### **Dashboard AI Should Focus On:**
 1. **User Experience**: Improving dashboard interfaces
@@ -78,6 +87,8 @@ Put your request in a text box:
 3. **Integration**: Connecting dashboards to ES Inventory Hub API
 4. **Security**: Managing SSL certificates and nginx security
 5. **Networking**: Maintaining container networking and port forwarding
+6. **Container Management**: Docker container lifecycle and networking
+7. **UI/UX**: Frontend interface design and user experience
 
 ## ⚠️ **Important Notes**
 
@@ -98,6 +109,7 @@ If urgent cross-project changes are needed:
 
 ---
 
-**Last Updated**: September 26, 2025  
+**Last Updated**: October 1, 2025  
 **Status**: ✅ **ACTIVE** - Boundaries in effect  
-**Projects**: ES Inventory Hub (Database AI) + Dashboard Project (Dashboard AI)
+**Projects**: ES Inventory Hub (Database AI) + Dashboard Project (Dashboard AI)  
+**Port Information**: See [Port Configuration](PORT_CONFIGURATION.md) for authoritative port allocation details

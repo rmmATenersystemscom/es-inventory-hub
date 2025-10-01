@@ -305,6 +305,9 @@ def get_variance_report_by_date(date_str: str):
                 'resolved': exc[5]
             })
         
+        # Get collection timestamps
+        collection_info = _get_collection_timestamps(session, report_date)
+        
         return jsonify({
             "report_date": report_date.isoformat(),
             "summary": {
@@ -313,7 +316,8 @@ def get_variance_report_by_date(date_str: str):
                 "resolved_count": sum(1 for exc in exceptions if exc[5])
             },
             "exceptions_by_type": by_type,
-            "exception_counts": {exc_type: len(devices) for exc_type, devices in by_type.items()}
+            "exception_counts": {exc_type: len(devices) for exc_type, devices in by_type.items()},
+            "collection_info": collection_info
         })
 
 @app.route('/api/collectors/run', methods=['POST'])
@@ -1036,26 +1040,37 @@ def _get_collection_timestamps(session, latest_date: date) -> dict:
         FROM job_runs 
         WHERE status = 'completed'
         AND job_name IN ('ninja-collector', 'threatlocker-collector')
-        AND DATE(started_at) = :collection_date
         ORDER BY started_at DESC
     """)
     
-    results = session.execute(collection_query, {'collection_date': latest_date}).fetchall()
+    results = session.execute(collection_query).fetchall()
     
     # Initialize timestamps
     ninja_collected = None
     threatlocker_collected = None
     last_collection = None
     
-    # Process results
+    # Process results - take the most recent for each collector type
     for job_name, started_at, ended_at in results:
         # Use ended_at if available, otherwise started_at
         timestamp = ended_at if ended_at else started_at
         
-        if job_name == 'ninja-collector':
-            ninja_collected = timestamp.isoformat() + 'Z'
-        elif job_name == 'threatlocker-collector':
-            threatlocker_collected = timestamp.isoformat() + 'Z'
+        # Format timestamp properly (ISO 8601 with Z suffix)
+        # Remove any existing timezone info and add Z for UTC
+        if timestamp.tzinfo is not None:
+            # Convert to UTC and format
+            utc_timestamp = timestamp.astimezone().replace(tzinfo=None)
+            formatted_timestamp = utc_timestamp.isoformat() + 'Z'
+        else:
+            # Already UTC, just add Z
+            formatted_timestamp = timestamp.isoformat() + 'Z'
+        
+        # Only set if we haven't found a timestamp for this collector yet
+        # (since results are ordered by started_at DESC, first occurrence is most recent)
+        if job_name == 'ninja-collector' and ninja_collected is None:
+            ninja_collected = formatted_timestamp
+        elif job_name == 'threatlocker-collector' and threatlocker_collected is None:
+            threatlocker_collected = formatted_timestamp
     
     # Determine the latest collection time
     timestamps = [t for t in [ninja_collected, threatlocker_collected] if t]
@@ -1064,7 +1079,9 @@ def _get_collection_timestamps(session, latest_date: date) -> dict:
         parsed_times = []
         for ts in timestamps:
             try:
-                parsed_times.append(datetime.fromisoformat(ts.replace('Z', '+00:00')))
+                # Remove Z suffix and parse as datetime
+                clean_ts = ts.replace('Z', '')
+                parsed_times.append(datetime.fromisoformat(clean_ts))
             except:
                 continue
         
@@ -2136,6 +2153,20 @@ if __name__ == '__main__':
     print("  GET  /api/variances/historical/{date} - Get historical variance data")
     print("  GET  /api/variances/trends - Get variance trends over time")
     print()
-    print("Server will run on http://localhost:5400")
+    print("Server will run on:")
+    print("  HTTP:  http://localhost:5400")
+    print("  HTTPS: https://localhost:5400 (if SSL certificates are available)")
     
-    app.run(host='0.0.0.0', port=5400, debug=True)
+    # Check for SSL certificates
+    ssl_cert = '/opt/es-inventory-hub/ssl/api.crt'
+    ssl_key = '/opt/es-inventory-hub/ssl/api.key'
+    
+    if os.path.exists(ssl_cert) and os.path.exists(ssl_key):
+        print(f"SSL certificates found. Starting HTTPS server...")
+        app.run(host='0.0.0.0', port=5400, debug=True, ssl_context=(ssl_cert, ssl_key))
+    else:
+        print(f"SSL certificates not found. Starting HTTP server...")
+        print(f"To enable HTTPS, place SSL certificates at:")
+        print(f"  Certificate: {ssl_cert}")
+        print(f"  Private Key: {ssl_key}")
+        app.run(host='0.0.0.0', port=5400, debug=True)

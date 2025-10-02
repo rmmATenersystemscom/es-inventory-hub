@@ -25,8 +25,18 @@ from typing import Dict, Any, Tuple, List, Optional
 # Add the project root to the Python path
 sys.path.insert(0, '/opt/es-inventory-hub')
 
-from storage.database import get_session
-from storage.schema import DeviceSnapshot, Vendor, DeviceType
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
+from common.config import get_dsn
+
+# Database connection
+DSN = get_dsn()
+engine = create_engine(DSN)
+Session = sessionmaker(bind=engine)
+
+def get_session():
+    """Get database session."""
+    return Session()
 
 # Configure logging
 logging.basicConfig(
@@ -338,29 +348,48 @@ def get_windows_devices(session) -> List[Dict[str, Any]]:
     """Get all Windows devices that need assessment"""
     try:
         # Get Windows devices (desktops and laptops only) from today's snapshot
-        query = session.query(DeviceSnapshot).join(Vendor).join(DeviceType).filter(
-            Vendor.name == 'Ninja',
-            DeviceSnapshot.snapshot_date == datetime.now().date(),
-            DeviceSnapshot.os_name.ilike('%windows%'),
-            DeviceType.name.in_(['Desktop', 'Laptop'])
-        )
+        query = text("""
+        SELECT 
+            ds.id,
+            ds.hostname,
+            ds.os_architecture,
+            ds.memory_gib,
+            ds.volumes,
+            ds.cpu_model,
+            ds.has_tpm,
+            ds.tpm_enabled,
+            ds.tpm_version,
+            ds.secure_boot_available,
+            ds.secure_boot_enabled,
+            ds.organization_name,
+            ds.display_name
+        FROM device_snapshot ds
+        JOIN vendor v ON ds.vendor_id = v.id
+        JOIN device_type dt ON ds.device_type_id = dt.id
+        WHERE v.name = 'Ninja'
+        AND ds.snapshot_date = CURRENT_DATE
+        AND ds.os_name ILIKE '%windows%'
+        AND dt.code IN ('Desktop', 'Laptop')
+        """)
         
+        result = session.execute(query)
         devices = []
-        for device in query.all():
+        
+        for row in result:
             device_data = {
-                'id': device.id,
-                'hostname': device.hostname,
-                'os_architecture': device.os_architecture,
-                'memory_gib': float(device.memory_gib) if device.memory_gib else None,
-                'volumes': device.volumes,
-                'cpu_model': device.cpu_model,
-                'has_tpm': device.has_tpm,
-                'tpm_enabled': device.tpm_enabled,
-                'tpm_version': device.tpm_version,
-                'secure_boot_available': device.secure_boot_available,
-                'secure_boot_enabled': device.secure_boot_enabled,
-                'organization_name': device.organization_name,
-                'display_name': device.display_name
+                'id': row.id,
+                'hostname': row.hostname,
+                'os_architecture': row.os_architecture,
+                'memory_gib': float(row.memory_gib) if row.memory_gib else None,
+                'volumes': row.volumes,
+                'cpu_model': row.cpu_model,
+                'has_tpm': row.has_tpm,
+                'tpm_enabled': row.tpm_enabled,
+                'tpm_version': row.tpm_version,
+                'secure_boot_available': row.secure_boot_available,
+                'secure_boot_enabled': row.secure_boot_enabled,
+                'organization_name': row.organization_name,
+                'display_name': row.display_name
             }
             devices.append(device_data)
         
@@ -374,11 +403,6 @@ def get_windows_devices(session) -> List[Dict[str, Any]]:
 def update_device_assessment(session, device_id: int, assessment_result: Dict[str, Any]) -> bool:
     """Update device with assessment result"""
     try:
-        device = session.query(DeviceSnapshot).filter(DeviceSnapshot.id == device_id).first()
-        if not device:
-            logger.error(f"Device {device_id} not found")
-            return False
-        
         # Convert verdict to boolean
         capable = None
         if assessment_result['verdict'] == 'Yes':
@@ -387,8 +411,18 @@ def update_device_assessment(session, device_id: int, assessment_result: Dict[st
             capable = False
         # None for insufficient data or errors
         
-        device.windows_11_24h2_capable = capable
-        device.windows_11_24h2_deficiencies = json.dumps(assessment_result)
+        update_query = text("""
+        UPDATE device_snapshot 
+        SET windows_11_24h2_capable = :capable,
+            windows_11_24h2_deficiencies = :deficiencies
+        WHERE id = :device_id
+        """)
+        
+        session.execute(update_query, {
+            'capable': capable,
+            'deficiencies': json.dumps(assessment_result),
+            'device_id': device_id
+        })
         
         session.commit()
         return True

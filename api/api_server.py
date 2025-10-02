@@ -79,6 +79,156 @@ def get_latest_matching_date() -> Optional[date]:
         result = session.execute(query).fetchone()
         return result[0] if result else None
 
+def get_organization_breakdown(session, exceptions, report_date):
+    """Get detailed breakdown of exceptions by organization for each variance type."""
+    # Get organization data for each exception
+    org_query = text("""
+        SELECT 
+            e.id,
+            e.type,
+            e.hostname,
+            e.details,
+            e.resolved,
+            COALESCE(
+                ds_tl.organization_name,
+                ds_ninja.organization_name,
+                'Unknown'
+            ) as organization_name,
+            COALESCE(
+                ds_tl.display_name,
+                ds_ninja.display_name,
+                e.hostname
+            ) as display_name,
+            COALESCE(
+                ds_tl.device_status,
+                ds_ninja.device_status,
+                'Unknown'
+            ) as billing_status,
+            CASE 
+                WHEN v_tl.name = 'ThreatLocker' THEN 'ThreatLocker'
+                WHEN v_ninja.name = 'Ninja' THEN 'Ninja'
+                ELSE 'Unknown'
+            END as vendor
+        FROM exceptions e
+        LEFT JOIN device_snapshot ds_tl ON ds_tl.hostname = e.hostname 
+            AND ds_tl.snapshot_date = :report_date
+            AND ds_tl.vendor_id = (SELECT id FROM vendor WHERE name = 'ThreatLocker')
+        LEFT JOIN vendor v_tl ON ds_tl.vendor_id = v_tl.id
+        LEFT JOIN device_snapshot ds_ninja ON ds_ninja.hostname = e.hostname 
+            AND ds_ninja.snapshot_date = :report_date
+            AND ds_ninja.vendor_id = (SELECT id FROM vendor WHERE name = 'Ninja')
+        LEFT JOIN vendor v_ninja ON ds_ninja.vendor_id = v_ninja.id
+        WHERE e.date_found = :report_date
+        ORDER BY e.type, organization_name, e.hostname
+    """)
+    
+    org_results = session.execute(org_query, {'report_date': report_date}).fetchall()
+    
+    # Group by type and organization
+    by_organization = {}
+    
+    for row in org_results:
+        exc_id, exc_type, hostname, details, resolved, org_name, display_name, billing_status, vendor = row
+        
+        # Map exception types to dashboard format
+        dashboard_type = None
+        if exc_type == "MISSING_NINJA":
+            dashboard_type = "missing_in_ninja"
+        elif exc_type == "DUPLICATE_TL":
+            dashboard_type = "threatlocker_duplicates"
+        elif exc_type == "SPARE_MISMATCH":
+            dashboard_type = "ninja_duplicates"
+        elif exc_type == "DISPLAY_NAME_MISMATCH":
+            dashboard_type = "display_name_mismatches"
+        
+        if not dashboard_type:
+            continue
+            
+        if dashboard_type not in by_organization:
+            by_organization[dashboard_type] = {
+                "total_count": 0,
+                "by_organization": {}
+            }
+        
+        # For Missing in Ninja, ThreatLocker Duplicates, and Ninja Duplicates, extract organization from details if not found in device_snapshot
+        if exc_type in ["MISSING_NINJA", "DUPLICATE_TL", "SPARE_MISMATCH"] and org_name == "Unknown" and details:
+            # Extract organization from the details JSONB field
+            details_dict = details if isinstance(details, dict) else {}
+            
+            # For SPARE_MISMATCH (Ninja Duplicates), prefer ninja_org_name over tl_org_name
+            if exc_type == "SPARE_MISMATCH":
+                ninja_org = details_dict.get('ninja_org_name', '')
+                tl_org = details_dict.get('tl_org_name', '')
+                
+                # Use ninja_org if it exists and is not empty, otherwise use tl_org, otherwise 'Unknown'
+                if ninja_org and ninja_org.strip():
+                    org_name = ninja_org
+                    vendor = 'Ninja'
+                elif tl_org and tl_org.strip():
+                    org_name = tl_org
+                    vendor = 'ThreatLocker'
+                else:
+                    org_name = 'Unknown'
+            else:
+                # For MISSING_NINJA and DUPLICATE_TL, use tl_org_name
+                org_name = details_dict.get('tl_org_name', 'Unknown')
+                if details_dict.get('tl_org_name'):
+                    vendor = 'ThreatLocker'
+            
+            # Update display_name from site information
+            if details_dict.get('tl_site_name'):
+                display_name = f"{hostname} ({details_dict.get('tl_site_name')})"
+            elif details_dict.get('ninja_site'):
+                display_name = f"{hostname} ({details_dict.get('ninja_site')})"
+        
+        # For Display Name Mismatches, extract display name information from details
+        if exc_type == "DISPLAY_NAME_MISMATCH" and details:
+            details_dict = details if isinstance(details, dict) else {}
+            
+            # Extract organization from details (prefer ninja_org_name)
+            ninja_org = details_dict.get('ninja_org_name', '')
+            tl_org = details_dict.get('tl_org_name', '')
+            
+            if ninja_org and ninja_org.strip():
+                org_name = ninja_org
+                vendor = 'Ninja'
+            elif tl_org and tl_org.strip():
+                org_name = tl_org
+                vendor = 'ThreatLocker'
+            
+            # Use the Ninja display name as the primary display name for the modal
+            ninja_display = details_dict.get('ninja_display_name', '')
+            if ninja_display and ninja_display.strip():
+                display_name = ninja_display
+        
+        if org_name not in by_organization[dashboard_type]["by_organization"]:
+            by_organization[dashboard_type]["by_organization"][org_name] = []
+        
+        # Create device entry
+        device_entry = {
+            "hostname": hostname,
+            "vendor": vendor,
+            "display_name": display_name,
+            "organization": org_name,
+            "billing_status": billing_status,
+            "action": "Investigate"
+        }
+        
+        # For Display Name Mismatches, add specific display name information for the modal
+        if exc_type == "DISPLAY_NAME_MISMATCH" and details:
+            details_dict = details if isinstance(details, dict) else {}
+            device_entry.update({
+                "ninja_display_name": details_dict.get('ninja_display_name', ''),
+                "threatlocker_display_name": details_dict.get('tl_display_name', ''),
+                "ninja_hostname": details_dict.get('ninja_hostname', ''),
+                "threatlocker_hostname": details_dict.get('tl_hostname', '')
+            })
+        
+        by_organization[dashboard_type]["by_organization"][org_name].append(device_entry)
+        by_organization[dashboard_type]["total_count"] += 1
+    
+    return by_organization
+
 def get_data_status() -> Dict[str, Any]:
     """Determine the status of the data (current, stale, out_of_sync)."""
     latest_date = get_latest_matching_date()
@@ -225,6 +375,29 @@ def get_latest_variance_report():
         # Get collection timestamps
         collection_info = _get_collection_timestamps(session, latest_date)
         
+        # Get detailed organization breakdown
+        org_breakdown = get_organization_breakdown(session, exceptions, latest_date)
+        
+        # Update dashboard format with organization data
+        enhanced_dashboard_format = {
+            "missing_in_ninja": org_breakdown.get("missing_in_ninja", {
+                "total_count": exception_counts.get("MISSING_NINJA", 0),
+                "by_organization": {}
+            }),
+            "threatlocker_duplicates": org_breakdown.get("threatlocker_duplicates", {
+                "total_count": exception_counts.get("DUPLICATE_TL", 0),
+                "by_organization": {}
+            }),
+            "ninja_duplicates": org_breakdown.get("ninja_duplicates", {
+                "total_count": exception_counts.get("SPARE_MISMATCH", 0),
+                "by_organization": {}
+            }),
+            "display_name_mismatches": org_breakdown.get("display_name_mismatches", {
+                "total_count": exception_counts.get("DISPLAY_NAME_MISMATCH", 0),
+                "by_organization": {}
+            })
+        }
+        
         return jsonify({
             "report_date": latest_date.isoformat(),
             "data_status": get_data_status(),
@@ -242,8 +415,8 @@ def get_latest_variance_report():
                 "last_collection": collection_info["last_collection"],
                 "data_freshness": collection_info["data_freshness"]
             },
-            # Dashboard-compatible format
-            **dashboard_format
+            # Enhanced dashboard-compatible format with organization breakdown
+            **enhanced_dashboard_format
         })
 
 @app.route('/api/variance-report/<date_str>', methods=['GET'])
@@ -1336,12 +1509,12 @@ def export_variances_csv():
     Query parameters:
     - date: Specific date (YYYY-MM-DD) or 'latest' (default)
     - include_resolved: Include resolved exceptions (default: false)
-    - type: Filter by exception type (optional)
+    - variance_type: Filter by exception type (optional)
     """
     # Get query parameters
     date_param = request.args.get('date', 'latest')
     include_resolved = request.args.get('include_resolved', 'false').lower() == 'true'
-    exception_type = request.args.get('type', '')
+    exception_type = request.args.get('variance_type', request.args.get('type', ''))
     
     # Determine report date
     if date_param == 'latest':
@@ -1374,7 +1547,7 @@ def export_variances_csv():
             }), 400
         
         # Build query for exceptions
-        query = text("""
+        query_str = """
             SELECT 
                 e.id,
                 e.date_found,
@@ -1392,19 +1565,21 @@ def export_variances_csv():
                 e.new_value
             FROM exceptions e
             WHERE e.date_found = :report_date
-        """)
+        """
         
         params = {'report_date': report_date}
         
         # Add filters
         if not include_resolved:
-            query += " AND e.resolved = FALSE"
+            query_str += " AND e.resolved = FALSE"
         
         if exception_type:
-            query += " AND e.type = :exception_type"
+            query_str += " AND e.type = :exception_type"
             params['exception_type'] = exception_type
         
-        query += " ORDER BY e.type, e.hostname"
+        query_str += " ORDER BY e.type, e.hostname"
+        
+        query = text(query_str)
         
         exceptions = session.execute(query, params).fetchall()
         
@@ -1611,6 +1786,29 @@ def get_historical_variance_data(date_str: str):
         
         device_counts = {row[0]: row[1] for row in session.execute(device_query, {'report_date': report_date}).fetchall()}
         
+        # Get detailed organization breakdown
+        org_breakdown = get_organization_breakdown(session, exceptions, report_date)
+        
+        # Create enhanced format with organization data
+        enhanced_format = {
+            "missing_in_ninja": org_breakdown.get("missing_in_ninja", {
+                "total_count": 0,
+                "by_organization": {}
+            }),
+            "threatlocker_duplicates": org_breakdown.get("threatlocker_duplicates", {
+                "total_count": 0,
+                "by_organization": {}
+            }),
+            "ninja_duplicates": org_breakdown.get("ninja_duplicates", {
+                "total_count": 0,
+                "by_organization": {}
+            }),
+            "display_name_mismatches": org_breakdown.get("display_name_mismatches", {
+                "total_count": 0,
+                "by_organization": {}
+            })
+        }
+        
         return jsonify({
             "report_date": report_date.isoformat(),
             "summary": {
@@ -1625,7 +1823,9 @@ def get_historical_variance_data(date_str: str):
                 "status": "historical",
                 "message": f"Historical data for {date_str}",
                 "latest_date": report_date.isoformat()
-            }
+            },
+            # Enhanced format with organization breakdown
+            **enhanced_format
         })
 
 @app.route('/api/variances/trends', methods=['GET'])
@@ -1750,7 +1950,7 @@ def export_variances_pdf():
     Query parameters:
     - date: Specific date (YYYY-MM-DD) or 'latest' (default)
     - include_resolved: Include resolved exceptions (default: false)
-    - type: Filter by exception type (optional)
+    - variance_type: Filter by exception type (optional)
     """
     if not REPORTLAB_AVAILABLE:
         return jsonify({
@@ -1760,7 +1960,7 @@ def export_variances_pdf():
     # Get query parameters
     date_param = request.args.get('date', 'latest')
     include_resolved = request.args.get('include_resolved', 'false').lower() == 'true'
-    exception_type = request.args.get('type', '')
+    exception_type = request.args.get('variance_type', request.args.get('type', ''))
     
     # Determine report date
     if date_param == 'latest':
@@ -1793,7 +1993,7 @@ def export_variances_pdf():
             }), 400
         
         # Get exceptions data
-        query = text("""
+        query_str = """
             SELECT 
                 e.id,
                 e.date_found,
@@ -1808,19 +2008,21 @@ def export_variances_pdf():
                 e.variance_status
             FROM exceptions e
             WHERE e.date_found = :report_date
-        """)
+        """
         
         params = {'report_date': report_date}
         
         # Add filters
         if not include_resolved:
-            query += " AND e.resolved = FALSE"
+            query_str += " AND e.resolved = FALSE"
         
         if exception_type:
-            query += " AND e.type = :exception_type"
+            query_str += " AND e.type = :exception_type"
             params['exception_type'] = exception_type
         
-        query += " ORDER BY e.type, e.hostname"
+        query_str += " ORDER BY e.type, e.hostname"
+        
+        query = text(query_str)
         
         exceptions = session.execute(query, params).fetchall()
         
@@ -1932,7 +2134,7 @@ def export_variances_excel():
     Query parameters:
     - date: Specific date (YYYY-MM-DD) or 'latest' (default)
     - include_resolved: Include resolved exceptions (default: false)
-    - type: Filter by exception type (optional)
+    - variance_type: Filter by exception type (optional)
     """
     if not OPENPYXL_AVAILABLE:
         return jsonify({
@@ -1942,7 +2144,7 @@ def export_variances_excel():
     # Get query parameters
     date_param = request.args.get('date', 'latest')
     include_resolved = request.args.get('include_resolved', 'false').lower() == 'true'
-    exception_type = request.args.get('type', '')
+    exception_type = request.args.get('variance_type', request.args.get('type', ''))
     
     # Determine report date
     if date_param == 'latest':
@@ -1975,7 +2177,7 @@ def export_variances_excel():
             }), 400
         
         # Get exceptions data
-        query = text("""
+        query_str = """
             SELECT 
                 e.id,
                 e.date_found,
@@ -1991,19 +2193,21 @@ def export_variances_excel():
                 e.update_type
             FROM exceptions e
             WHERE e.date_found = :report_date
-        """)
+        """
         
         params = {'report_date': report_date}
         
         # Add filters
         if not include_resolved:
-            query += " AND e.resolved = FALSE"
+            query_str += " AND e.resolved = FALSE"
         
         if exception_type:
-            query += " AND e.type = :exception_type"
+            query_str += " AND e.type = :exception_type"
             params['exception_type'] = exception_type
         
-        query += " ORDER BY e.type, e.hostname"
+        query_str += " ORDER BY e.type, e.hostname"
+        
+        query = text(query_str)
         
         exceptions = session.execute(query, params).fetchall()
         

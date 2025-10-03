@@ -369,7 +369,7 @@ def get_windows_devices(session) -> List[Dict[str, Any]]:
         WHERE v.name = 'Ninja'
         AND ds.snapshot_date = CURRENT_DATE
         AND ds.os_name ILIKE '%windows%'
-        AND dt.code IN ('Desktop', 'Laptop')
+        AND dt.code IN ('Desktop', 'Laptop', 'workstation')
         """)
         
         result = session.execute(query)

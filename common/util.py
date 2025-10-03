@@ -232,6 +232,12 @@ def insert_snapshot(
         'tpm_version': stmt.excluded.tpm_version,
         'secure_boot_available': stmt.excluded.secure_boot_available,
         'secure_boot_enabled': stmt.excluded.secure_boot_enabled,
+        
+        # Hardware Information (Ninja-specific)
+        'os_architecture': stmt.excluded.os_architecture,
+        'cpu_model': stmt.excluded.cpu_model,
+        'memory_gib': stmt.excluded.memory_gib,
+        'volumes': stmt.excluded.volumes,
     }
     
     # Add ON CONFLICT clause for the unique constraint

@@ -104,6 +104,7 @@ GET /api/devices/search?q={hostname} # Search devices across vendors
 GET /api/windows-11-24h2/status        # Windows 11 24H2 compatibility status summary
 GET /api/windows-11-24h2/incompatible  # List of incompatible devices with deficiencies
 GET /api/windows-11-24h2/compatible    # List of compatible devices with passed requirements
+POST /api/windows-11-24h2/run          # Manually trigger Windows 11 24H2 assessment
 ```
 
 ---
@@ -335,6 +336,7 @@ const VARIANCE_TYPES = {
 - `GET /api/windows-11-24h2/status` - Compatibility status summary with counts and rates
 - `GET /api/windows-11-24h2/incompatible` - List of incompatible devices with detailed deficiencies
 - `GET /api/windows-11-24h2/compatible` - List of compatible devices with passed requirements
+- `POST /api/windows-11-24h2/run` - Manually trigger Windows 11 24H2 assessment
 
 **Features:**
 - ✅ **Automatic Assessment**: Runs 45 minutes after Ninja collector completion
@@ -363,9 +365,20 @@ async function getCompatibleDevices() {
     const response = await fetch('/api/windows-11-24h2/compatible');
     return await response.json();
 }
+
+// Manually trigger Windows 11 24H2 assessment
+async function runWindows11Assessment() {
+    const response = await fetch('/api/windows-11-24h2/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    });
+    return await response.json();
+}
 ```
 
-**Response Example:**
+**Response Examples:**
+
+**Status Summary:**
 ```json
 {
   "total_windows_devices": 1232,
@@ -374,6 +387,16 @@ async function getCompatibleDevices() {
   "not_assessed_devices": 0,
   "compatibility_rate": 69.5,
   "last_assessment": "2025-10-02T23:45:00Z"
+}
+```
+
+**Manual Trigger Response:**
+```json
+{
+  "status": "success",
+  "message": "Windows 11 24H2 assessment completed successfully",
+  "output": "2025-10-02 19:52:31,441 - INFO - Assessment complete:\n  - Total devices assessed: 634\n  - Compatible devices: 296\n  - Incompatible devices: 338\n  - Compatibility rate: 46.7%",
+  "timestamp": "2025-10-03T00:52:31.441Z"
 }
 ```
 
@@ -677,6 +700,12 @@ curl "https://db-api.enersystems.com:5400/api/variances/export/excel?variance_ty
 # NEW: Test Enhanced Historical endpoints with organization breakdown
 curl https://db-api.enersystems.com:5400/api/variances/historical/2025-10-01
 curl "https://db-api.enersystems.com:5400/api/variances/trends?start_date=2025-09-01&end_date=2025-10-02"
+
+# NEW: Test Windows 11 24H2 Assessment endpoints
+curl https://db-api.enersystems.com:5400/api/windows-11-24h2/status
+curl https://db-api.enersystems.com:5400/api/windows-11-24h2/incompatible
+curl https://db-api.enersystems.com:5400/api/windows-11-24h2/compatible
+curl -X POST https://db-api.enersystems.com:5400/api/windows-11-24h2/run
 
 # Alternative IP access (use -k flag for testing)
 curl -k https://192.168.99.246:5400/api/health

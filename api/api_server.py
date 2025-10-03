@@ -2465,6 +2465,44 @@ def get_compatible_devices():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route('/api/windows-11-24h2/run', methods=['POST'])
+def run_windows_11_24h2_assessment():
+    """Manually trigger Windows 11 24H2 assessment"""
+    try:
+        import subprocess
+        import os
+        
+        # Run the assessment script
+        script_path = '/opt/es-inventory-hub/collectors/assessments/windows_11_24h2_assessment.py'
+        
+        if not os.path.exists(script_path):
+            return jsonify({"error": "Assessment script not found"}), 404
+        
+        # Execute the assessment script
+        result = subprocess.run([
+            '/opt/es-inventory-hub/.venv/bin/python3',
+            script_path
+        ], capture_output=True, text=True, cwd='/opt/es-inventory-hub')
+        
+        if result.returncode == 0:
+            return jsonify({
+                "status": "success",
+                "message": "Windows 11 24H2 assessment completed successfully",
+                "output": result.stdout,
+                "timestamp": datetime.utcnow().isoformat() + 'Z'
+            })
+        else:
+            return jsonify({
+                "status": "error",
+                "message": "Assessment failed",
+                "error": result.stderr,
+                "output": result.stdout
+            }), 500
+            
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == '__main__':
     print("Starting ES Inventory Hub API Server...")
     print("Available endpoints:")
@@ -2497,6 +2535,7 @@ if __name__ == '__main__':
     print("  GET  /api/windows-11-24h2/status - Windows 11 24H2 compatibility status summary")
     print("  GET  /api/windows-11-24h2/incompatible - List of incompatible devices")
     print("  GET  /api/windows-11-24h2/compatible - List of compatible devices")
+    print("  POST /api/windows-11-24h2/run - Manually trigger Windows 11 24H2 assessment")
     print()
     print("Server will run on:")
     print("  HTTP:  http://localhost:5400")

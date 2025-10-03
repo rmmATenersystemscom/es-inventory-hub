@@ -1,7 +1,7 @@
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import (
     Column, Integer, String, DateTime, Date, Text, ForeignKey, 
-    UniqueConstraint, Index, CheckConstraint, BigInteger, Boolean
+    UniqueConstraint, Index, CheckConstraint, BigInteger, Boolean, Numeric
 )
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlalchemy.orm import relationship
@@ -167,6 +167,12 @@ class DeviceSnapshot(Base):
     tpm_version = Column(String(100), nullable=True)
     secure_boot_available = Column(Boolean, nullable=True)
     secure_boot_enabled = Column(Boolean, nullable=True)
+    
+    # Hardware Information (Ninja-specific)
+    os_architecture = Column(String(100), nullable=True)
+    cpu_model = Column(String(255), nullable=True)
+    memory_gib = Column(Numeric(10, 2), nullable=True)
+    volumes = Column(Text, nullable=True)
     
     # Unique constraint on snapshot_date, vendor_id, and device_identity_id
     __table_args__ = (

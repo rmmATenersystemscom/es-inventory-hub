@@ -2335,45 +2335,46 @@ def export_variances_excel():
 def get_windows_11_24h2_status():
     """Get Windows 11 24H2 compatibility status summary"""
     try:
-        # Query database for Windows 11 24H2 assessment results
-        query = """
-        SELECT 
-            COUNT(*) as total_windows_devices,
-            COUNT(CASE WHEN windows_11_24h2_capable = true THEN 1 END) as compatible_devices,
-            COUNT(CASE WHEN windows_11_24h2_capable = false THEN 1 END) as incompatible_devices,
-            COUNT(CASE WHEN windows_11_24h2_capable IS NULL THEN 1 END) as not_assessed_devices
-        FROM device_snapshot ds
-        JOIN vendor v ON ds.vendor_id = v.id
-        WHERE v.name = 'Ninja' 
-        AND ds.snapshot_date = CURRENT_DATE
-        AND ds.os_name ILIKE '%windows%'
-        AND (ds.device_type_id IN (SELECT id FROM device_type WHERE name IN ('Desktop', 'Laptop')))
-        """
-        
-        result = db.execute(text(query)).fetchone()
-        
-        # Get last assessment date
-        last_assessment_query = """
-        SELECT MAX(assessment_date) as last_assessment
-        FROM (
-            SELECT jsonb_extract_path_text(windows_11_24h2_deficiencies, 'assessment_date') as assessment_date
-            FROM device_snapshot 
-            WHERE windows_11_24h2_deficiencies IS NOT NULL 
-            AND windows_11_24h2_deficiencies != '{}'
-        ) as assessments
-        """
-        
-        last_assessment_result = db.execute(text(last_assessment_query)).fetchone()
-        last_assessment = last_assessment_result.last_assessment if last_assessment_result else None
-        
-        return jsonify({
-            "total_windows_devices": result.total_windows_devices,
-            "compatible_devices": result.compatible_devices,
-            "incompatible_devices": result.incompatible_devices,
-            "not_assessed_devices": result.not_assessed_devices,
-            "compatibility_rate": round((result.compatible_devices / result.total_windows_devices * 100), 1) if result.total_windows_devices > 0 else 0,
-            "last_assessment": last_assessment
-        })
+        with get_session() as session:
+            # Query database for Windows 11 24H2 assessment results
+            query = text("""
+            SELECT 
+                COUNT(*) as total_windows_devices,
+                COUNT(CASE WHEN windows_11_24h2_capable = true THEN 1 END) as compatible_devices,
+                COUNT(CASE WHEN windows_11_24h2_capable = false THEN 1 END) as incompatible_devices,
+                COUNT(CASE WHEN windows_11_24h2_capable IS NULL THEN 1 END) as not_assessed_devices
+            FROM device_snapshot ds
+            JOIN vendor v ON ds.vendor_id = v.id
+            WHERE v.name = 'Ninja' 
+            AND ds.snapshot_date = CURRENT_DATE
+            AND ds.os_name ILIKE '%windows%'
+            AND (ds.device_type_id IN (SELECT id FROM device_type WHERE name IN ('Desktop', 'Laptop')))
+            """)
+            
+            result = session.execute(query).fetchone()
+            
+            # Get last assessment date
+            last_assessment_query = text("""
+            SELECT MAX(assessment_date) as last_assessment
+            FROM (
+                SELECT jsonb_extract_path_text(windows_11_24h2_deficiencies, 'assessment_date') as assessment_date
+                FROM device_snapshot 
+                WHERE windows_11_24h2_deficiencies IS NOT NULL 
+                AND windows_11_24h2_deficiencies != '{}'
+            ) as assessments
+            """)
+            
+            last_assessment_result = session.execute(last_assessment_query).fetchone()
+            last_assessment = last_assessment_result.last_assessment if last_assessment_result else None
+            
+            return jsonify({
+                "total_windows_devices": result.total_windows_devices,
+                "compatible_devices": result.compatible_devices,
+                "incompatible_devices": result.incompatible_devices,
+                "not_assessed_devices": result.not_assessed_devices,
+                "compatibility_rate": round((result.compatible_devices / result.total_windows_devices * 100), 1) if result.total_windows_devices > 0 else 0,
+                "last_assessment": last_assessment
+            })
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -2383,40 +2384,41 @@ def get_windows_11_24h2_status():
 def get_incompatible_devices():
     """Get list of devices that are incompatible with Windows 11 24H2"""
     try:
-        query = """
-        SELECT 
-            ds.hostname,
-            ds.display_name,
-            ds.organization_name,
-            ds.os_name,
-            ds.windows_11_24h2_deficiencies
-        FROM device_snapshot ds
-        JOIN vendor v ON ds.vendor_id = v.id
-        WHERE v.name = 'Ninja'
-        AND ds.snapshot_date = CURRENT_DATE
-        AND ds.windows_11_24h2_capable = false
-        AND (ds.device_type_id IN (SELECT id FROM device_type WHERE name IN ('Desktop', 'Laptop')))
-        ORDER BY ds.organization_name, ds.hostname
-        """
-        
-        results = db.execute(text(query)).fetchall()
-        
-        devices = []
-        for row in results:
-            deficiencies = json.loads(row.windows_11_24h2_deficiencies) if row.windows_11_24h2_deficiencies else {}
-            devices.append({
-                "hostname": row.hostname,
-                "display_name": row.display_name,
-                "organization": row.organization_name,
-                "os_name": row.os_name,
-                "deficiencies": deficiencies.get('deficiencies', []),
-                "assessment_date": deficiencies.get('assessment_date', 'Unknown')
+        with get_session() as session:
+            query = text("""
+            SELECT 
+                ds.hostname,
+                ds.display_name,
+                ds.organization_name,
+                ds.os_name,
+                ds.windows_11_24h2_deficiencies
+            FROM device_snapshot ds
+            JOIN vendor v ON ds.vendor_id = v.id
+            WHERE v.name = 'Ninja'
+            AND ds.snapshot_date = CURRENT_DATE
+            AND ds.windows_11_24h2_capable = false
+            AND (ds.device_type_id IN (SELECT id FROM device_type WHERE name IN ('Desktop', 'Laptop')))
+            ORDER BY ds.organization_name, ds.hostname
+            """)
+            
+            results = session.execute(query).fetchall()
+            
+            devices = []
+            for row in results:
+                deficiencies = json.loads(row.windows_11_24h2_deficiencies) if row.windows_11_24h2_deficiencies else {}
+                devices.append({
+                    "hostname": row.hostname,
+                    "display_name": row.display_name,
+                    "organization": row.organization_name,
+                    "os_name": row.os_name,
+                    "deficiencies": deficiencies.get('deficiencies', []),
+                    "assessment_date": deficiencies.get('assessment_date', 'Unknown')
+                })
+            
+            return jsonify({
+                "incompatible_devices": devices,
+                "total_count": len(devices)
             })
-        
-        return jsonify({
-            "incompatible_devices": devices,
-            "total_count": len(devices)
-        })
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -2426,40 +2428,41 @@ def get_incompatible_devices():
 def get_compatible_devices():
     """Get list of devices that are compatible with Windows 11 24H2"""
     try:
-        query = """
-        SELECT 
-            ds.hostname,
-            ds.display_name,
-            ds.organization_name,
-            ds.os_name,
-            ds.windows_11_24h2_deficiencies
-        FROM device_snapshot ds
-        JOIN vendor v ON ds.vendor_id = v.id
-        WHERE v.name = 'Ninja'
-        AND ds.snapshot_date = CURRENT_DATE
-        AND ds.windows_11_24h2_capable = true
-        AND (ds.device_type_id IN (SELECT id FROM device_type WHERE name IN ('Desktop', 'Laptop')))
-        ORDER BY ds.organization_name, ds.hostname
-        """
-        
-        results = db.execute(text(query)).fetchall()
-        
-        devices = []
-        for row in results:
-            assessment_data = json.loads(row.windows_11_24h2_deficiencies) if row.windows_11_24h2_deficiencies else {}
-            devices.append({
-                "hostname": row.hostname,
-                "display_name": row.display_name,
-                "organization": row.organization_name,
-                "os_name": row.os_name,
-                "passed_requirements": assessment_data.get('passed_requirements', []),
-                "assessment_date": assessment_data.get('assessment_date', 'Unknown')
+        with get_session() as session:
+            query = text("""
+            SELECT 
+                ds.hostname,
+                ds.display_name,
+                ds.organization_name,
+                ds.os_name,
+                ds.windows_11_24h2_deficiencies
+            FROM device_snapshot ds
+            JOIN vendor v ON ds.vendor_id = v.id
+            WHERE v.name = 'Ninja'
+            AND ds.snapshot_date = CURRENT_DATE
+            AND ds.windows_11_24h2_capable = true
+            AND (ds.device_type_id IN (SELECT id FROM device_type WHERE name IN ('Desktop', 'Laptop')))
+            ORDER BY ds.organization_name, ds.hostname
+            """)
+            
+            results = session.execute(query).fetchall()
+            
+            devices = []
+            for row in results:
+                assessment_data = json.loads(row.windows_11_24h2_deficiencies) if row.windows_11_24h2_deficiencies else {}
+                devices.append({
+                    "hostname": row.hostname,
+                    "display_name": row.display_name,
+                    "organization": row.organization_name,
+                    "os_name": row.os_name,
+                    "passed_requirements": assessment_data.get('passed_requirements', []),
+                    "assessment_date": assessment_data.get('assessment_date', 'Unknown')
+                })
+            
+            return jsonify({
+                "compatible_devices": devices,
+                "total_count": len(devices)
             })
-        
-        return jsonify({
-            "compatible_devices": devices,
-            "total_count": len(devices)
-        })
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500

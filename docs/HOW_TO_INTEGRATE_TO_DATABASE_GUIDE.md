@@ -99,6 +99,13 @@ POST /api/exceptions/bulk-update   # Bulk exception operations
 GET /api/devices/search?q={hostname} # Search devices across vendors
 ```
 
+### **Windows 11 24H2 Assessment (NEW)**
+```bash
+GET /api/windows-11-24h2/status        # Windows 11 24H2 compatibility status summary
+GET /api/windows-11-24h2/incompatible  # List of incompatible devices with deficiencies
+GET /api/windows-11-24h2/compatible    # List of compatible devices with passed requirements
+```
+
 ---
 
 ## 🚀 **NEW ENHANCED API CAPABILITIES (OCTOBER 2025)**
@@ -317,6 +324,60 @@ const VARIANCE_TYPES = {
 ```
 
 ### **✅ 4. ENHANCED MODAL FUNCTIONALITY (📋 Detailed Views)**
+
+**Status**: ✅ **FULLY IMPLEMENTED & ENHANCED**
+
+### **✅ 5. WINDOWS 11 24H2 ASSESSMENT (🪟 Compatibility Analysis)**
+
+**Status**: ✅ **FULLY IMPLEMENTED**
+
+**API Endpoints:**
+- `GET /api/windows-11-24h2/status` - Compatibility status summary with counts and rates
+- `GET /api/windows-11-24h2/incompatible` - List of incompatible devices with detailed deficiencies
+- `GET /api/windows-11-24h2/compatible` - List of compatible devices with passed requirements
+
+**Features:**
+- ✅ **Automatic Assessment**: Runs 45 minutes after Ninja collector completion
+- ✅ **Comprehensive Requirements**: CPU (Intel 8th gen+, AMD Zen 2+), TPM 2.0, Secure Boot, Memory (≥4GB), Storage (≥64GB), 64-bit OS
+- ✅ **Detailed Deficiency Reporting**: Specific reasons why devices fail requirements with remediation suggestions
+- ✅ **Organization Breakdown**: Incompatible devices grouped by organization
+- ✅ **Real-time Status**: Current compatibility rates and assessment status
+- ✅ **Export Integration**: Windows 11 24H2 data included in variance exports
+
+**Usage Example:**
+```javascript
+// Get Windows 11 24H2 compatibility status
+async function getWindows11Status() {
+    const response = await fetch('/api/windows-11-24h2/status');
+    return await response.json();
+}
+
+// Get incompatible devices with deficiencies
+async function getIncompatibleDevices() {
+    const response = await fetch('/api/windows-11-24h2/incompatible');
+    return await response.json();
+}
+
+// Get compatible devices
+async function getCompatibleDevices() {
+    const response = await fetch('/api/windows-11-24h2/compatible');
+    return await response.json();
+}
+```
+
+**Response Example:**
+```json
+{
+  "total_windows_devices": 1232,
+  "compatible_devices": 856,
+  "incompatible_devices": 376,
+  "not_assessed_devices": 0,
+  "compatibility_rate": 69.5,
+  "last_assessment": "2025-10-02T23:45:00Z"
+}
+```
+
+### **✅ 6. ENHANCED MODAL FUNCTIONALITY (📋 Detailed Views)**
 
 **Status**: ✅ **FULLY IMPLEMENTED & ENHANCED**
 

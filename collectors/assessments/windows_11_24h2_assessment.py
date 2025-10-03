@@ -367,7 +367,7 @@ def get_windows_devices(session) -> List[Dict[str, Any]]:
         JOIN vendor v ON ds.vendor_id = v.id
         JOIN device_type dt ON ds.device_type_id = dt.id
         WHERE v.name = 'Ninja'
-        AND ds.snapshot_date = CURRENT_DATE
+        AND ds.snapshot_date = '2025-10-02'
         AND ds.os_name ILIKE '%windows%'
         AND dt.code IN ('Desktop', 'Laptop', 'workstation')
         """)

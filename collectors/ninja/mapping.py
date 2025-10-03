@@ -78,16 +78,16 @@ def normalize_ninja_device(raw: Dict[str, Any], ninja_api=None) -> Dict[str, Any
         'mac_addresses': _format_mac_addresses(network_obj.get('macAddresses', [])),
         'public_ip': raw.get('publicIp', ''),
         
-        # Hardware Information
+        # Hardware Information - using correct API paths from documentation
         'system_manufacturer': sys_obj.get('manufacturer', ''),
         'system_model': sys_obj.get('model', ''),
-        'cpu_model': hardware_obj.get('cpuModel', ''),
-        'cpu_cores': hardware_obj.get('cpuCores'),
-        'cpu_threads': hardware_obj.get('cpuThreads'),
-        'cpu_speed_mhz': hardware_obj.get('cpuSpeedMhz'),
-        'memory_gib': _convert_memory_to_gib(hardware_obj.get('memoryBytes')),
-        'memory_bytes': hardware_obj.get('memoryBytes'),
-        'volumes': _format_volumes(hardware_obj.get('volumes', [])),
+        'cpu_model': _get_cpu_model(raw.get('processors', [])),
+        'cpu_cores': _get_cpu_cores(raw.get('processors', [])),
+        'cpu_threads': _get_cpu_threads(raw.get('processors', [])),
+        'cpu_speed_mhz': _get_cpu_speed(raw.get('processors', [])),
+        'memory_gib': _convert_memory_to_gib(raw.get('memory', 0)),
+        'memory_bytes': raw.get('memory', 0),
+        'volumes': _format_volumes(raw.get('volumes', [])),
         'bios_serial': sys_obj.get('biosSerialNumber', ''),
         
         # Timestamps
@@ -439,3 +439,43 @@ def _interpret_tpm_version(value: str) -> str:
         return 'No TPM'
     else:
         return value  # Return version string as-is (e.g., "2.0, 0, 1.38")
+
+
+def _get_cpu_model(processors: list) -> str:
+    """Extract CPU model from processors array."""
+    if not processors or len(processors) == 0:
+        return ''
+    
+    # Get the first processor (primary CPU)
+    first_processor = processors[0]
+    return first_processor.get('name', '')
+
+
+def _get_cpu_cores(processors: list) -> Optional[int]:
+    """Extract CPU cores from processors array."""
+    if not processors or len(processors) == 0:
+        return None
+    
+    # Get the first processor (primary CPU)
+    first_processor = processors[0]
+    return first_processor.get('numCores')
+
+
+def _get_cpu_threads(processors: list) -> Optional[int]:
+    """Extract CPU threads from processors array."""
+    if not processors or len(processors) == 0:
+        return None
+    
+    # Get the first processor (primary CPU)
+    first_processor = processors[0]
+    return first_processor.get('numLogicalCores')
+
+
+def _get_cpu_speed(processors: list) -> Optional[int]:
+    """Extract CPU speed from processors array."""
+    if not processors or len(processors) == 0:
+        return None
+    
+    # Get the first processor (primary CPU)
+    first_processor = processors[0]
+    return first_processor.get('maxClockSpeed')

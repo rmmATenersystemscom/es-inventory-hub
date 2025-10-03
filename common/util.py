@@ -184,6 +184,12 @@ def insert_snapshot(
         'tpm_version': normalized.get('tpm_version'),
         'secure_boot_available': normalized.get('secure_boot_available'),
         'secure_boot_enabled': normalized.get('secure_boot_enabled'),
+        
+        # Hardware Information (Ninja-specific)
+        'os_architecture': normalized.get('os_architecture'),
+        'cpu_model': normalized.get('cpu_model'),
+        'memory_gib': normalized.get('memory_gib'),
+        'volumes': normalized.get('volumes'),
     }
     
     # Perform PostgreSQL upsert

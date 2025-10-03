@@ -295,16 +295,18 @@ def _convert_memory_to_gib(memory_bytes: Optional[int]) -> Optional[float]:
 
 
 def _format_volumes(volumes: list) -> str:
-    """Format volume information as comma-separated string."""
+    """Format volume information as comma-separated string with capacity."""
     if not volumes:
         return ''
     volume_info = []
     for vol in volumes:
         if isinstance(vol, dict):
             name = vol.get('name', '')
-            size = vol.get('size', '')
-            if name and size:
-                volume_info.append(f"{name}: {size}")
+            capacity = vol.get('capacity', 0)
+            if name and capacity:
+                # Convert bytes to GB
+                capacity_gb = capacity / (1024**3)
+                volume_info.append(f"{name}: {capacity_gb:.1f}GB")
             elif name:
                 volume_info.append(name)
         else:

@@ -116,17 +116,19 @@ def calculate_storage_from_volumes(volumes_text: str) -> float:
     total_gb = 0.0
     try:
         # Parse volumes text to extract storage sizes
-        # This is a simplified parser - may need adjustment based on actual format
-        lines = volumes_text.split('\n')
-        for line in lines:
-            if 'GB' in line or 'TB' in line:
-                # Extract numbers and convert to GB
-                numbers = re.findall(r'(\d+(?:\.\d+)?)', line)
-                for num in numbers:
-                    if 'TB' in line:
-                        total_gb += float(num) * 1024  # Convert TB to GB
-                    else:
-                        total_gb += float(num)
+        # Format: "C: 2793.4GB, D: 500.0GB"
+        volumes = volumes_text.split(', ')
+        for volume in volumes:
+            if 'GB' in volume:
+                # Extract number before GB
+                match = re.search(r'(\d+(?:\.\d+)?)GB', volume)
+                if match:
+                    total_gb += float(match.group(1))
+            elif 'TB' in volume:
+                # Extract number before TB and convert to GB
+                match = re.search(r'(\d+(?:\.\d+)?)TB', volume)
+                if match:
+                    total_gb += float(match.group(1)) * 1024
     except Exception as e:
         logger.warning(f"Error parsing volumes: {e}")
     

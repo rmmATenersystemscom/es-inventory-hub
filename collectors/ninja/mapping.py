@@ -85,8 +85,8 @@ def normalize_ninja_device(raw: Dict[str, Any], ninja_api=None) -> Dict[str, Any
         'cpu_cores': _get_cpu_cores(raw.get('processors', [])),
         'cpu_threads': _get_cpu_threads(raw.get('processors', [])),
         'cpu_speed_mhz': _get_cpu_speed(raw.get('processors', [])),
-        'memory_gib': _convert_memory_to_gib(raw.get('memory', 0)),
-        'memory_bytes': raw.get('memory', 0),
+        'memory_gib': _convert_memory_to_gib(raw.get('memory', {}).get('capacity', 0)),
+        'memory_bytes': raw.get('memory', {}).get('capacity', 0),
         'volumes': _format_volumes(raw.get('volumes', [])),
         'bios_serial': sys_obj.get('biosSerialNumber', ''),
         

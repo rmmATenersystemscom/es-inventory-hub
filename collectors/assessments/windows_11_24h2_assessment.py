@@ -63,6 +63,10 @@ def assess_cpu_support(cpu_model: str) -> Tuple[bool, str]:
         if any(gen in cpu_lower for gen in ['8th gen', '9th gen', '10th gen', '11th gen', '12th gen', '13th gen', '14th gen']):
             return True, "Intel generation meets requirement"
         
+        # Check for Intel Core Ultra series (newer than 14th gen)
+        if 'ultra' in cpu_lower:
+            return True, "Intel Core Ultra series meets requirement"
+        
         # Parse CPU model number
         # Look for patterns like i7-8565U, i5-1185G7, etc.
         match = re.search(r'i[3579]-(\d{4})', cpu_model)

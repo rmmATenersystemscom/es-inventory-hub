@@ -1,6 +1,6 @@
 # ES Inventory Hub
 
-**Current Version**: v1.17.0 (stable)
+**Current Version**: v1.18.0 (stable)
 
 A centralized inventory management system for collecting and storing data from various sources including Ninja and ThreatLocker.
 
@@ -44,9 +44,9 @@ If ES Inventory Hub needs dashboard-related changes, put your request in a text 
 - Provide dashboards for analysis (seat counts, spares, billing vs non-billing, etc.).
 - Highlight mismatches and exceptions (e.g., ThreatLocker device missing in Ninja).
 
-## Current Version (v1.17.0)
+## Current Version (v1.18.0)
 
-This release includes the complete Windows 11 24H2 Assessment System Implementation with enhanced assessment capabilities, new Ninja API integration module, database schema updates with Ninja modal fields for Windows 11 compatibility tracking, improved API server functionality for assessment data processing, enhanced collectors with better Windows 11 24H2 detection and mapping, comprehensive documentation updates including Windows 11 24H2 assessment guides, AI preferences documentation for enhanced system intelligence, updated database integration guide with latest assessment methodologies, enhanced utility functions for better system compatibility detection, and improved ThreatLocker mapping for enhanced security assessment integration.
+This release includes complete project cleanup and security improvements with enhanced security by adding .env to .gitignore to protect database credentials, moved SECURITY_IMPLEMENTATION.md to docs/ directory for better organization, removed obsolete W1124h2 specification file (feature already implemented), organized debug script in research-and-development directory, cleaned up accidental command fragment files, removed obsolete DASHBOARD_AI_CONNECTION_PROMPT.md file, improved project structure and documentation organization, and ensured all security files are properly protected from Git exposure.
 
 ## Current State
 

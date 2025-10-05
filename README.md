@@ -1,6 +1,6 @@
 # ES Inventory Hub
 
-**Current Version**: v1.18.0 (stable)
+**Current Version**: v1.18.1 (stable)
 
 A centralized inventory management system for collecting and storing data from various sources including Ninja and ThreatLocker.
 
@@ -44,9 +44,9 @@ If ES Inventory Hub needs dashboard-related changes, put your request in a text 
 - Provide dashboards for analysis (seat counts, spares, billing vs non-billing, etc.).
 - Highlight mismatches and exceptions (e.g., ThreatLocker device missing in Ninja).
 
-## Current Version (v1.18.0)
+## Current Version (v1.18.1)
 
-This release includes complete project cleanup and security improvements with enhanced security by adding .env to .gitignore to protect database credentials, moved SECURITY_IMPLEMENTATION.md to docs/ directory for better organization, removed obsolete W1124h2 specification file (feature already implemented), organized debug script in research-and-development directory, cleaned up accidental command fragment files, removed obsolete DASHBOARD_AI_CONNECTION_PROMPT.md file, improved project structure and documentation organization, and ensured all security files are properly protected from Git exposure.
+This release includes improved CHECK-IN process workflow with README version updates now performed before commit to ensure tag and README version consistency, eliminated separate version update commits, streamlined the CHECK-IN process for better logical flow, and enhanced process documentation for more efficient version management.
 
 ## Current State
 

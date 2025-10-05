@@ -46,6 +46,7 @@ Start with: **[Database Schema Guide](./DATABASE_SCHEMA_GUIDE.md)** - Database r
 - Database Schema
 - Automation (Systemd)
 - Monitoring & Logging
+- **NEW**: Enhanced Field Mappings with NinjaRMM API Integration
 
 ### **🔧 [Setup and Troubleshooting Guide](./SETUP_AND_TROUBLESHOOTING_GUIDE.md)**
 **Operational guide for system maintenance**
@@ -150,7 +151,37 @@ curl https://db-api.enersystems.com:5400/api/variance-report/latest
 
 # Windows 11 24H2 status
 curl https://db-api.enersystems.com:5400/api/windows-11-24h2/status
+
+# Windows 11 24H2 compatible devices (with enhanced field mappings)
+curl https://db-api.enersystems.com:5400/api/windows-11-24h2/compatible
+
+# Windows 11 24H2 incompatible devices (with enhanced field mappings)
+curl https://db-api.enersystems.com:5400/api/windows-11-24h2/incompatible
 ```
+
+---
+
+## 🪟 **WINDOWS 11 24H2 ENHANCED FIELD MAPPINGS (NEW)**
+
+The Windows 11 24H2 API endpoints now provide enhanced field data through NinjaRMM API integration:
+
+### **Enhanced Fields Available:**
+- **`organization`**: Real company names from NinjaRMM API (not "N/A")
+- **`location`**: Actual site identifiers from NinjaRMM API (not "Main Office")
+- **`system_name`**: Device hostname/identifier
+- **`display_name`**: User-friendly device names (not OS versions)
+- **`device_type`**: Physical hardware classification
+- **`billable_status`**: Billing classification
+- **`status`**: Compatibility status
+- **`os_name`**: Full operating system name
+- **`os_version`**: OS version identifier (e.g., "22H2", "23H2")
+- **`os_build`**: OS build number
+
+### **Data Source Enhancement:**
+- **Response includes**: `"data_source": "Database + NinjaRMM API"`
+- **Fallback handling**: If NinjaRMM API unavailable, falls back to database values
+
+**📚 For complete field mappings, examples, and detailed documentation, see [Windows 11 24H2 Guide](./WINDOWS_11_24H2_GUIDE.md)**
 
 ---
 

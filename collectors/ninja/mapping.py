@@ -3,7 +3,43 @@
 from typing import Dict, Any, Optional
 
 
-def normalize_ninja_device(raw: Dict[str, Any], ninja_api=None) -> Dict[str, Any]:
+def _resolve_organization_name(raw: Dict[str, Any], org_map: Dict[str, str] = None) -> str:
+    """Resolve organization name from device data."""
+    if not org_map:
+        return raw.get('organizationName', '')
+    
+    # Try to get organization ID from device
+    org_id = raw.get('organizationId')
+    if org_id and org_id in org_map:
+        return org_map[org_id]
+    
+    # Fallback to organizationName field
+    return raw.get('organizationName', '')
+
+
+def _resolve_location_name(raw: Dict[str, Any], loc_map: Dict[str, str] = None, fallback: str = '') -> str:
+    """Resolve location name from device data."""
+    if not loc_map:
+        return fallback
+    
+    # Try to get location ID from device
+    loc_id = raw.get('locationId')
+    if loc_id and loc_id in loc_map:
+        return loc_map[loc_id]
+    
+    # Try location object
+    location_obj = raw.get('location')
+    if isinstance(location_obj, dict):
+        loc_id = location_obj.get('id')
+        if loc_id and loc_id in loc_map:
+            return loc_map[loc_id]
+        return location_obj.get('name', fallback)
+    
+    # Fallback to provided fallback value
+    return fallback
+
+
+def normalize_ninja_device(raw: Dict[str, Any], ninja_api=None, org_map: Dict[str, str] = None, loc_map: Dict[str, str] = None) -> Dict[str, Any]:
     """
     Normalize a raw Ninja device record into standardized format.
     
@@ -19,12 +55,13 @@ def normalize_ninja_device(raw: Dict[str, Any], ninja_api=None) -> Dict[str, Any
     network_obj = raw.get("network") or {}
     hardware_obj = raw.get("hardware") or {}
     
-    # Get vendor device key (use device ID as unique identifier)
-    vendor_device_key = str(raw.get('id', ''))
-    
     # Get hostname (only use systemName field - this is analogous to ThreatLocker's hostname)
     # Note: displayName should never be used as anchor for device matching
     hostname = raw.get('systemName', '')
+    
+    # Get vendor device key (use hostname as unique identifier)
+    # This ensures the same physical device always gets the same vendor_device_key
+    vendor_device_key = hostname
     
     # Validate that hostname is present - this is critical for device matching
     if not hostname or not hostname.strip():
@@ -56,17 +93,21 @@ def normalize_ninja_device(raw: Dict[str, Any], ninja_api=None) -> Dict[str, Any
         'device_type': device_type,
         'billing_status': billing_status,
         
-        # Core Device Information
-        'organization_name': raw.get('organizationName', ''),
-        'location_name': site_name,
+        # Core Device Information (using correct API paths from documentation)
+        'organization_name': _resolve_organization_name(raw, org_map),
+        'location_name': _resolve_location_name(raw, loc_map, site_name),
         'system_name': raw.get('systemName', ''),
         'display_name': raw.get('displayName', ''),
         'device_status': raw.get('status', ''),
-        'last_logged_in_user': raw.get('lastLoggedInUser', ''),
+        'last_logged_in_user': raw.get('user', ''),  # Correct API path from documentation
+        
+        # NinjaRMM Modal Fields (for Windows 11 24H2 API)
+        'device_type_name': device_type,
+        'billable_status_name': billing_status,
         
         # OS Information
         'os_release_id': os_obj.get('releaseId', ''),
-        'os_build': os_obj.get('build', ''),
+        'os_build': os_obj.get('buildNumber', '') or os_obj.get('build', ''),
         'os_architecture': os_obj.get('architecture', ''),
         'os_manufacturer': os_obj.get('manufacturer', ''),
         'device_timezone': raw.get('timezone', ''),

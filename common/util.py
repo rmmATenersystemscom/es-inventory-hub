@@ -89,7 +89,8 @@ def insert_snapshot(
     snapshot_date: datetime,
     vendor_id: int,
     device_identity_id: int,
-    normalized: dict
+    normalized: dict,
+    raw: dict = None
 ) -> None:
     """
     Upsert a device snapshot record using PostgreSQL ON CONFLICT.
@@ -161,6 +162,11 @@ def insert_snapshot(
         'display_name': normalized.get('display_name'),
         'device_status': normalized.get('device_status'),
         
+        # NinjaRMM Modal Fields (for Windows 11 24H2 API)
+        'location_name': normalized.get('location_name'),
+        'device_type_name': normalized.get('device_type_name'),
+        'billable_status_name': normalized.get('billable_status_name'),
+        
         # Timestamps
         'last_online': normalized.get('last_online'),
         'agent_install_timestamp': normalized.get('agent_install_timestamp'),
@@ -187,6 +193,8 @@ def insert_snapshot(
         
         # Hardware Information (Ninja-specific)
         'os_architecture': normalized.get('os_architecture'),
+        'os_build': normalized.get('os_build'),
+        'os_release_id': normalized.get('os_release_id'),
         'cpu_model': normalized.get('cpu_model'),
         'memory_gib': normalized.get('memory_gib'),
         'volumes': normalized.get('volumes'),
@@ -208,6 +216,11 @@ def insert_snapshot(
         'organization_name': stmt.excluded.organization_name,
         'display_name': stmt.excluded.display_name,
         'device_status': stmt.excluded.device_status,
+        
+        # NinjaRMM Modal Fields (for Windows 11 24H2 API)
+        'location_name': stmt.excluded.location_name,
+        'device_type_name': stmt.excluded.device_type_name,
+        'billable_status_name': stmt.excluded.billable_status_name,
         
         # Timestamps
         'last_online': stmt.excluded.last_online,
@@ -235,6 +248,8 @@ def insert_snapshot(
         
         # Hardware Information (Ninja-specific)
         'os_architecture': stmt.excluded.os_architecture,
+        'os_build': stmt.excluded.os_build,
+        'os_release_id': stmt.excluded.os_release_id,
         'cpu_model': stmt.excluded.cpu_model,
         'memory_gib': stmt.excluded.memory_gib,
         'volumes': stmt.excluded.volumes,

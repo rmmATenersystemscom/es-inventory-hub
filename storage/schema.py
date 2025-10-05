@@ -144,6 +144,11 @@ class DeviceSnapshot(Base):
     display_name = Column(String(255), nullable=True)
     device_status = Column(String(100), nullable=True)
     
+    # NinjaRMM Modal Fields (for Windows 11 24H2 API)
+    location_name = Column(String(255), nullable=True)
+    device_type_name = Column(String(100), nullable=True)
+    billable_status_name = Column(String(100), nullable=True)
+    
     # Timestamps
     last_online = Column(TIMESTAMP(timezone=True), nullable=True)
     agent_install_timestamp = Column(TIMESTAMP(timezone=True), nullable=True)
@@ -170,6 +175,8 @@ class DeviceSnapshot(Base):
     
     # Hardware Information (Ninja-specific)
     os_architecture = Column(String(100), nullable=True)
+    os_build = Column(String(100), nullable=True)
+    os_release_id = Column(String(100), nullable=True)
     cpu_model = Column(String(255), nullable=True)
     memory_gib = Column(Numeric(10, 2), nullable=True)
     volumes = Column(Text, nullable=True)
@@ -204,6 +211,10 @@ class DeviceSnapshot(Base):
         Index('idx_device_snapshot_tpm_version', 'tpm_version'),
         Index('idx_device_snapshot_secure_boot_available', 'secure_boot_available'),
         Index('idx_device_snapshot_secure_boot_enabled', 'secure_boot_enabled'),
+        # NinjaRMM Modal Field indexes
+        Index('idx_device_snapshot_location_name', 'location_name'),
+        Index('idx_device_snapshot_device_type_name', 'device_type_name'),
+        Index('idx_device_snapshot_billable_status_name', 'billable_status_name'),
     )
     
     # Relationships

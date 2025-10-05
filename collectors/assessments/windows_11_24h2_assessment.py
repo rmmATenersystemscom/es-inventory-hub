@@ -135,11 +135,134 @@ def calculate_storage_from_volumes(volumes_text: str) -> float:
     return total_gb
 
 
+def is_windows_11_24h2_installed(os_name: str, os_release_id: str = None, os_build: str = None) -> bool:
+    """Check if the device already has Windows 11 24H2 installed"""
+    print(f"DEBUG: is_windows_11_24h2_installed called with: os_name='{os_name}', os_release_id='{os_release_id}', os_build='{os_build}'")
+    
+    if not os_name:
+        print("DEBUG: No OS name, returning False")
+        return False
+    
+    os_lower = os_name.lower()
+    print(f"DEBUG: OS name lower: '{os_lower}'")
+    
+    # Check if it's Windows 11
+    if 'windows 11' not in os_lower:
+        print("DEBUG: Not Windows 11, returning False")
+        return False
+    
+    print("DEBUG: Is Windows 11, checking version...")
+    
+    # Method 1: Check release ID if available
+    if os_release_id and os_release_id.strip():
+        print(f"DEBUG: Checking release ID: '{os_release_id}'")
+        result = '24h2' in os_release_id.lower()
+        print(f"DEBUG: Release ID check result: {result}")
+        return result
+    
+    # Method 2: Check build number for Windows 11 24H2
+    # Windows 11 24H2: Build 26100.x (based on actual API data)
+    if os_build and os_build.strip():
+        print(f"DEBUG: Checking build number: '{os_build}'")
+        try:
+            # Extract the major build number (e.g., "26100" -> 26100)
+            build_parts = os_build.split('.')
+            if len(build_parts) >= 1:
+                major_build = int(build_parts[0])
+                print(f"DEBUG: Major build number: {major_build}")
+                # Windows 11 24H2 is build 26100.x
+                result = major_build == 26100
+                print(f"DEBUG: Build number check result: {result}")
+                return result
+        except (ValueError, IndexError) as e:
+            print(f"DEBUG: Error parsing build number: {e}")
+            # If we can't parse the build number, fall through to False
+            pass
+    
+    print("DEBUG: No valid version info, returning False")
+    # If we can't determine the version, assume it's not 24H2
+    return False
+
+
+def has_newer_windows_version(os_name: str, os_release_id: str = None, os_build: str = None) -> bool:
+    """Check if the device has a newer Windows version than 24H2 (e.g., 25H2, 26H2, etc.)"""
+    print(f"DEBUG: has_newer_windows_version called with: os_name='{os_name}', os_release_id='{os_release_id}', os_build='{os_build}'")
+    
+    if not os_name:
+        print("DEBUG: No OS name, returning False")
+        return False
+    
+    os_lower = os_name.lower()
+    print(f"DEBUG: OS name lower: '{os_lower}'")
+    
+    # Check if it's Windows 11
+    if 'windows 11' not in os_lower:
+        print("DEBUG: Not Windows 11, returning False")
+        return False
+    
+    print("DEBUG: Is Windows 11, checking for newer version...")
+    
+    # Method 1: Check release ID for newer versions
+    if os_release_id and os_release_id.strip():
+        print(f"DEBUG: Checking release ID: '{os_release_id}'")
+        release_lower = os_release_id.lower()
+        
+        # Check for known newer versions
+        newer_versions = ['25h2', '26h2', '27h2', '28h2', '29h2', '30h2']
+        for version in newer_versions:
+            if version in release_lower:
+                print(f"DEBUG: Found newer version {version} in release ID")
+                return True
+        
+        # Check for any version higher than 24H2 (e.g., 25H2, 26H2, etc.)
+        # Extract year from release ID (e.g., "25H2" -> 25)
+        import re
+        version_match = re.search(r'(\d+)h2', release_lower)
+        if version_match:
+            year = int(version_match.group(1))
+            if year > 24:  # Any year after 2024
+                print(f"DEBUG: Found version year {year} which is newer than 24H2")
+                return True
+    
+    # Method 2: Check build number for newer versions
+    # Windows 11 24H2: Build 26100.x
+    # Newer versions will have higher build numbers
+    if os_build and os_build.strip():
+        print(f"DEBUG: Checking build number: '{os_build}'")
+        try:
+            # Extract the major build number (e.g., "26100" -> 26100)
+            build_parts = os_build.split('.')
+            if len(build_parts) >= 1:
+                major_build = int(build_parts[0])
+                print(f"DEBUG: Major build number: {major_build}")
+                # Windows 11 24H2 is build 26100.x, newer versions will be higher
+                if major_build > 26100:
+                    print(f"DEBUG: Build number {major_build} is newer than 24H2 (26100)")
+                    return True
+        except (ValueError, IndexError) as e:
+            print(f"DEBUG: Error parsing build number: {e}")
+            # If we can't parse the build number, fall through to False
+            pass
+    
+    print("DEBUG: No newer version detected, returning False")
+    return False
+
+
+def is_windows_server(os_name: str) -> bool:
+    """Check if the device is running Windows Server"""
+    if not os_name:
+        return False
+    
+    os_lower = os_name.lower()
+    return 'server' in os_lower
+
+
 def assess_windows_11_24h2_capability(device_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Assess Windows 11 24H2 capability based on device hardware data
     
     Input fields required:
+    - os_name (string, e.g., "Windows 11 Professional")
     - os_architecture (string, e.g., "64-bit")
     - memory_gib (float, total RAM in GiB) 
     - volumes (string, storage information)
@@ -154,6 +277,65 @@ def assess_windows_11_24h2_capability(device_data: Dict[str, Any]) -> Dict[str, 
     deficiencies = []
     passed_requirements = []
     verdict = "Yes"
+    
+    # Check if device already has Windows 11 24H2 installed
+    os_name = device_data.get('os_name', '')
+    os_release_id = device_data.get('os_release_id', '')
+    os_build = device_data.get('os_build', '')
+    
+    # Debug logging
+    print(f"DEBUG: Device {device_data.get('hostname', 'Unknown')} - OS: {os_name}, Release: '{os_release_id}', Build: '{os_build}'")
+    
+    is_24h2 = is_windows_11_24h2_installed(os_name, os_release_id, os_build)
+    print(f"DEBUG: is_windows_11_24h2_installed returned: {is_24h2}")
+    
+    if is_24h2:
+        print("DEBUG: Device has 24H2 - returning early with 'Already Installed' status")
+        return {
+            "verdict": "Yes",
+            "deficiencies": [],
+            "passed_requirements": [{
+                "requirement": "Windows 11 24H2 Already Installed",
+                "status": "PASS",
+                "current_value": os_name,
+                "reason": "Device already has Windows 11 24H2 installed"
+            }],
+            "assessment_date": datetime.utcnow().isoformat() + 'Z'
+        }
+    
+    # Check if device has a newer Windows version than 24H2 (e.g., 25H2, 26H2, etc.)
+    has_newer = has_newer_windows_version(os_name, os_release_id, os_build)
+    print(f"DEBUG: has_newer_windows_version returned: {has_newer}")
+    
+    if has_newer:
+        print("DEBUG: Device has newer Windows version - excluding from assessment")
+        return {
+            "verdict": "N/A",
+            "deficiencies": [],
+            "passed_requirements": [{
+                "requirement": "Windows Version Check",
+                "status": "EXCLUDED",
+                "current_value": f"{os_name} ({os_release_id or os_build or 'Unknown version'})",
+                "reason": "Device has a newer Windows version than 24H2 and is excluded from assessment"
+            }],
+            "assessment_date": datetime.utcnow().isoformat() + 'Z'
+        }
+    
+    print("DEBUG: Device does not have 24H2 or newer version - continuing with hardware assessment")
+    
+    # Check if device is running Windows Server (assessment does not apply)
+    if is_windows_server(os_name):
+        return {
+            "verdict": "N/A",
+            "deficiencies": [],
+            "passed_requirements": [{
+                "requirement": "Windows Server OS",
+                "status": "N/A",
+                "current_value": os_name,
+                "reason": "Windows Server operating systems are not assessed for Windows 11 24H2 compatibility"
+            }],
+            "assessment_date": datetime.utcnow().isoformat() + 'Z'
+        }
     
     try:
         # 1. 64-bit OS requirement
@@ -351,13 +533,15 @@ def assess_windows_11_24h2_capability(device_data: Dict[str, Any]) -> Dict[str, 
 
 
 def get_windows_devices(session) -> List[Dict[str, Any]]:
-    """Get all Windows devices that need assessment"""
+    """Get all Windows devices that need assessment from the latest available data"""
     try:
-        # Get Windows devices (desktops and laptops only) from today's snapshot
+        # Get Windows devices (desktops and laptops only) from the latest snapshot
+        # Exclude Windows Server and non-Windows devices
         query = text("""
-        SELECT 
+        SELECT
             ds.id,
             ds.hostname,
+            ds.os_name,
             ds.os_architecture,
             ds.memory_gib,
             ds.volumes,
@@ -368,13 +552,21 @@ def get_windows_devices(session) -> List[Dict[str, Any]]:
             ds.secure_boot_available,
             ds.secure_boot_enabled,
             ds.organization_name,
-            ds.display_name
+            ds.display_name,
+            ds.os_release_id,
+            ds.os_build
         FROM device_snapshot ds
         JOIN vendor v ON ds.vendor_id = v.id
         JOIN device_type dt ON ds.device_type_id = dt.id
         WHERE v.name = 'Ninja'
-        AND ds.snapshot_date = '2025-10-02'
+        AND ds.snapshot_date = (
+            SELECT MAX(snapshot_date)
+            FROM device_snapshot ds2
+            JOIN vendor v2 ON ds2.vendor_id = v2.id
+            WHERE v2.name = 'Ninja'
+        )
         AND ds.os_name ILIKE '%windows%'
+        AND ds.os_name NOT ILIKE '%server%'
         AND dt.code IN ('Desktop', 'Laptop', 'workstation')
         """)
         
@@ -385,6 +577,7 @@ def get_windows_devices(session) -> List[Dict[str, Any]]:
             device_data = {
                 'id': row.id,
                 'hostname': row.hostname,
+                'os_name': row.os_name,
                 'os_architecture': row.os_architecture,
                 'memory_gib': float(row.memory_gib) if row.memory_gib else None,
                 'volumes': row.volumes,
@@ -395,9 +588,24 @@ def get_windows_devices(session) -> List[Dict[str, Any]]:
                 'secure_boot_available': row.secure_boot_available,
                 'secure_boot_enabled': row.secure_boot_enabled,
                 'organization_name': row.organization_name,
-                'display_name': row.display_name
+                'display_name': row.display_name,
+                'os_release_id': row.os_release_id,
+                'os_build': row.os_build
             }
             devices.append(device_data)
+        
+        # Log which snapshot date we're using
+        if devices:
+            # Get the snapshot date from the first device (they're all from the same date)
+            snapshot_query = text("""
+            SELECT MAX(snapshot_date) as latest_snapshot
+            FROM device_snapshot ds
+            JOIN vendor v ON ds.vendor_id = v.id
+            WHERE v.name = 'Ninja'
+            """)
+            snapshot_result = session.execute(snapshot_query).fetchone()
+            latest_snapshot = snapshot_result.latest_snapshot if snapshot_result else 'Unknown'
+            logger.info(f"Using snapshot data from: {latest_snapshot}")
         
         return devices
         
@@ -409,13 +617,17 @@ def get_windows_devices(session) -> List[Dict[str, Any]]:
 def update_device_assessment(session, device_id: int, assessment_result: Dict[str, Any]) -> bool:
     """Update device with assessment result"""
     try:
-        # Convert verdict to boolean
+        # Convert verdict to boolean - Updated logic for "Already Compatible" devices
         capable = None
         if assessment_result['verdict'] == 'Yes':
-            capable = True
+            # Check if it's "Already Compatible" (has 24H2) or "Compatible" (can be upgraded)
+            if 'Windows 11 24H2 Already Installed' in str(assessment_result.get('passed_requirements', [])):
+                capable = True  # Mark as capable since they already have 24H2
+            else:
+                capable = True  # Mark as capable since they can be upgraded
         elif assessment_result['verdict'] == 'No':
             capable = False
-        # None for insufficient data or errors
+        # None for N/A (Windows Server), insufficient data, or errors
         
         update_query = text("""
         UPDATE device_snapshot 
@@ -457,10 +669,12 @@ def main():
             assessed_count = 0
             compatible_count = 0
             incompatible_count = 0
+            already_installed_count = 0
+            server_os_count = 0
             
             for device in devices:
                 try:
-                    logger.info(f"Assessing device: {device['hostname']} ({device['organization_name']})")
+                    logger.info(f"Assessing device: {device['hostname']} ({device['organization_name']}) - {device['os_name']}")
                     
                     # Perform assessment
                     assessment_result = assess_windows_11_24h2_capability(device)
@@ -470,8 +684,19 @@ def main():
                         assessed_count += 1
                         
                         if assessment_result['verdict'] == 'Yes':
-                            compatible_count += 1
-                            logger.info(f"✓ {device['hostname']} - Compatible")
+                            if 'Windows 11 24H2 Already Installed' in str(assessment_result.get('passed_requirements', [])):
+                                already_installed_count += 1
+                                logger.info(f"✓ {device['hostname']} - Already has Windows 11 24H2")
+                            else:
+                                compatible_count += 1
+                                logger.info(f"✓ {device['hostname']} - Compatible")
+                        elif assessment_result['verdict'] == 'N/A':
+                            if 'Windows 11 24H2 Already Installed' in str(assessment_result.get('passed_requirements', [])):
+                                already_installed_count += 1
+                                logger.info(f"✓ {device['hostname']} - Already has Windows 11 24H2")
+                            elif 'Windows Server OS' in str(assessment_result.get('passed_requirements', [])):
+                                server_os_count += 1
+                                logger.info(f"- {device['hostname']} - Windows Server (assessment not applicable)")
                         else:
                             incompatible_count += 1
                             logger.info(f"✗ {device['hostname']} - Incompatible ({len(assessment_result['deficiencies'])} issues)")
@@ -487,6 +712,8 @@ def main():
             logger.info(f"  - Total devices assessed: {assessed_count}")
             logger.info(f"  - Compatible devices: {compatible_count}")
             logger.info(f"  - Incompatible devices: {incompatible_count}")
+            logger.info(f"  - Already have Windows 11 24H2: {already_installed_count}")
+            logger.info(f"  - Windows Server (N/A): {server_os_count}")
             logger.info(f"  - Compatibility rate: {(compatible_count/assessed_count*100):.1f}%" if assessed_count > 0 else "  - No devices assessed")
             
     except Exception as e:

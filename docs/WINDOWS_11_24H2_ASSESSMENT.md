@@ -73,7 +73,19 @@ The data is collected from the NinjaRMM API using the following mappings (as doc
 
 ## Assessment Logic
 
-The Windows 11 24H2 assessment evaluates **6 critical requirements** based on Microsoft's official hardware requirements:
+The Windows 11 24H2 assessment evaluates devices based on the following criteria:
+
+### Pre-Assessment Checks
+
+Before evaluating hardware requirements, the assessment performs these checks:
+
+1. **Non-Windows Devices**: If the device is not running any version of Windows, the 24H2 assessment does not apply
+2. **Windows Server**: If the device is running Windows Server, the 24H2 assessment does not apply  
+3. **Already Installed**: If the device already has Windows 11 24H2 installed, it is automatically marked as compatible
+
+### Hardware Requirements Assessment
+
+For Windows client devices that don't already have Windows 11 24H2, the assessment evaluates **6 critical requirements** based on Microsoft's official hardware requirements:
 
 ### 1. 64-bit Operating System
 - **Field**: `os_architecture`
@@ -201,10 +213,12 @@ The `windows_11_24h2_deficiencies` field contains a JSONB object with the follow
 - **`verdict`**: Overall compatibility result
   - `"Yes"`: Device is compatible with Windows 11 24H2
   - `"No"`: Device is not compatible
+  - `"N/A"`: Assessment does not apply (Windows Server or already has 24H2)
 - **`status`**: Individual requirement status
   - `"PASS"`: Requirement met
   - `"FAIL"`: Requirement not met
   - `"INSUFFICIENT_DATA"`: Data not available for assessment
+  - `"N/A"`: Not applicable (Windows Server or already installed)
 
 ## API Integration
 

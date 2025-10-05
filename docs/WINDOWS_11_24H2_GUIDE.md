@@ -15,6 +15,8 @@ The Windows 11 24H2 Assessment system automatically evaluates Windows devices fo
 ### **Key Features:**
 - ✅ **Automatic Assessment**: Runs 45 minutes after Ninja collector completion
 - ✅ **Manual Trigger**: API endpoint to run assessment on-demand
+- ✅ **Smart Pre-checks**: Automatically handles non-Windows, Windows Server, already-installed 24H2, and newer Windows versions
+- ✅ **Version Exclusion**: Excludes devices with Windows 11 25H2+ (newer than target version)
 - ✅ **Comprehensive Requirements**: CPU, TPM 2.0, Secure Boot, Memory, Storage, OS Architecture
 - ✅ **Detailed Deficiency Reporting**: Specific reasons why devices fail with remediation suggestions
 - ✅ **Organization Breakdown**: Results grouped by organization
@@ -64,7 +66,101 @@ async function runWindows11Assessment() {
 
 ---
 
+## 🪟 **ENHANCED FIELD MAPPINGS (NEW - October 2025)**
+
+The Windows 11 24H2 API endpoints now provide enhanced field data through NinjaRMM API integration:
+
+### **Enhanced Field Mappings:**
+```json
+{
+  "organization": "Acme Corporation",           // Real company names from NinjaRMM API
+  "location": "Main Office",                   // Actual site identifiers from NinjaRMM API
+  "system_name": "WORKSTATION-01",             // Device hostname/identifier
+  "display_name": "John's Laptop",             // User-friendly device names (not OS versions)
+  "device_type": "Desktop",                    // Physical hardware classification
+  "billable_status": "billable",               // Billing classification
+  "status": "Compatible for Upgrade",         // Compatibility status
+  "hostname": "WORKSTATION-01",               // System hostname
+  "os_name": "Windows 10 Pro",               // Operating system
+  "os_version": "22H2",                       // OS version (e.g., "22H2", "23H2")
+  "os_build": "19045",                        // OS build number (e.g., "19045", "22631")
+  "last_update": "2025-10-05T00:21:56.199Z", // Last data update timestamp
+  "memory_gib": 15.92,                        // Memory in GiB (Gigabytes)
+  "memory_bytes": null,                       // Memory in bytes (if available)
+  "system_manufacturer": "Not Available",     // System manufacturer (not available)
+  "system_model": "Not Available",            // System model (not available)
+  "passed_requirements": [...],               // Compatibility requirements passed
+  "assessment_date": "2024-10-04"             // Assessment date
+}
+```
+
+### **Field Descriptions:**
+- **`organization`**: Real company names from NinjaRMM API (not "N/A")
+- **`location`**: Actual site identifiers from NinjaRMM API (not "Main Office")
+- **`system_name`**: Device hostname/identifier (e.g., "WORKSTATION-01")
+- **`display_name`**: User-friendly device names from NinjaRMM API (not OS versions)
+- **`device_type`**: Physical hardware classification (laptop, desktop, server, etc.)
+- **`billable_status`**: Billing classification (billable, spare, etc.)
+- **`status`**: Compatibility status ("Compatible for Upgrade", "Incompatible", "Already Installed")
+- **`os_name`**: Full operating system name (e.g., "Windows 10 Pro", "Windows 11 Professional Edition")
+- **`os_version`**: OS version identifier (e.g., "22H2", "23H2", "21H2")
+- **`os_build`**: OS build number (e.g., "19045", "22631", "22000")
+- **`last_update`**: Last data update timestamp (ISO 8601 format)
+- **`memory_gib`**: Memory in GiB (Gigabytes) - Available in database
+- **`memory_bytes`**: Memory in bytes - Available in database (may be null)
+- **`system_manufacturer`**: System manufacturer - Not available in database
+- **`system_model`**: System model - Not available in database
+
+### **Data Source Enhancement:**
+- **Response includes**: `"data_source": "Database + NinjaRMM API"`
+- **Last updated**: `"last_updated": "2024-10-04T14:30:00Z"`
+- **Fallback handling**: If NinjaRMM API unavailable, falls back to database values
+
+### **Example Enhanced API Response:**
+```json
+{
+  "compatible_devices": [
+    {
+      "organization": "Acme Corporation",
+      "location": "Main Office",
+      "system_name": "WORKSTATION-01",
+      "display_name": "John's Laptop",
+      "device_type": "Desktop",
+      "billable_status": "billable",
+      "status": "Compatible for Upgrade",
+      "hostname": "WORKSTATION-01",
+      "os_name": "Windows 10 Pro",
+      "os_version": "22H2",
+      "os_build": "19045",
+      "last_update": "2025-10-05T00:21:56.199Z",
+      "memory_gib": 15.92,
+      "memory_bytes": null,
+      "system_manufacturer": "Not Available",
+      "system_model": "Not Available",
+      "passed_requirements": ["TPM 2.0", "Secure Boot", "UEFI"],
+      "assessment_date": "2024-10-04"
+    }
+  ],
+  "total_count": 25,
+  "data_source": "Database + NinjaRMM API",
+  "last_updated": "2024-10-04T14:30:00Z"
+}
+```
+
+---
+
 ## 🔍 **ASSESSMENT REQUIREMENTS**
+
+### **Device Exclusion Logic**
+The assessment automatically excludes certain devices from compatibility evaluation:
+
+- **Non-Windows Devices**: Only Windows devices are assessed
+- **Windows Server**: Server operating systems are excluded (assessment doesn't apply)
+- **Already Installed 24H2**: Devices with Windows 11 24H2 are marked as "Already Compatible"
+- **Newer Windows Versions**: Devices with Windows 11 25H2+ are excluded (already beyond target version)
+
+### **Hardware Requirements**
+The assessment evaluates devices against Microsoft's Windows 11 24H2 requirements:
 
 ### **1. Operating System Architecture (64-bit)**
 - **Requirement**: 64-bit Windows operating system

@@ -51,7 +51,12 @@ sys.path.insert(0, '/opt/es-inventory-hub')
 from collectors.checks.cross_vendor import run_cross_vendor_checks
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for cross-origin requests
+# Enable CORS for cross-origin requests with permissive settings for dashboard access
+CORS(app, 
+     origins=['*'],  # Allow all origins for now - can be restricted later
+     methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+     allow_headers=['Content-Type', 'Authorization', 'X-Requested-With'],
+     supports_credentials=True)
 
 # Database connection
 from common.config import get_dsn
@@ -2336,19 +2341,33 @@ def get_windows_11_24h2_status():
     """Get Windows 11 24H2 compatibility status summary"""
     try:
         with get_session() as session:
-            # Query database for Windows 11 24H2 assessment results
+            # Query database for Windows 11 24H2 assessment results with enhanced status breakdown
             query = text("""
             SELECT 
                 COUNT(*) as total_windows_devices,
-                COUNT(CASE WHEN windows_11_24h2_capable = true THEN 1 END) as compatible_devices,
+                COUNT(CASE WHEN windows_11_24h2_capable = true THEN 1 END) as total_compatible_devices,
                 COUNT(CASE WHEN windows_11_24h2_capable = false THEN 1 END) as incompatible_devices,
-                COUNT(CASE WHEN windows_11_24h2_capable IS NULL THEN 1 END) as not_assessed_devices
+                COUNT(CASE WHEN windows_11_24h2_capable IS NULL THEN 1 END) as not_assessed_devices,
+                COUNT(CASE WHEN windows_11_24h2_capable = true 
+                          AND jsonb_extract_path_text(windows_11_24h2_deficiencies, 'passed_requirements') LIKE '%Windows 11 24H2 Already Installed%' 
+                          THEN 1 END) as already_compatible_devices,
+                COUNT(CASE WHEN windows_11_24h2_capable = true 
+                          AND (jsonb_extract_path_text(windows_11_24h2_deficiencies, 'passed_requirements') NOT LIKE '%Windows 11 24H2 Already Installed%' 
+                               OR jsonb_extract_path_text(windows_11_24h2_deficiencies, 'passed_requirements') IS NULL)
+                          THEN 1 END) as compatible_for_upgrade_devices
             FROM device_snapshot ds
             JOIN vendor v ON ds.vendor_id = v.id
             WHERE v.name = 'Ninja' 
-            AND ds.snapshot_date = CURRENT_DATE
+            AND ds.snapshot_date = (
+                SELECT MAX(snapshot_date)
+                FROM device_snapshot ds2
+                JOIN vendor v2 ON ds2.vendor_id = v2.id
+                WHERE v2.name = 'Ninja'
+            )
             AND ds.os_name ILIKE '%windows%'
-            AND (ds.device_type_id IN (SELECT id FROM device_type WHERE name IN ('Desktop', 'Laptop')))
+            AND ds.os_name NOT ILIKE '%server%'
+            AND (ds.device_type_id IN (SELECT id FROM device_type WHERE code IN ('workstation')))
+            AND ds.windows_11_24h2_capable IS NOT NULL
             """)
             
             result = session.execute(query).fetchone()
@@ -2369,10 +2388,12 @@ def get_windows_11_24h2_status():
             
             return jsonify({
                 "total_windows_devices": result.total_windows_devices,
-                "compatible_devices": result.compatible_devices,
+                "total_compatible_devices": result.total_compatible_devices,
+                "already_compatible_devices": result.already_compatible_devices,
+                "compatible_for_upgrade_devices": result.compatible_for_upgrade_devices,
                 "incompatible_devices": result.incompatible_devices,
                 "not_assessed_devices": result.not_assessed_devices,
-                "compatibility_rate": round((result.compatible_devices / result.total_windows_devices * 100), 1) if result.total_windows_devices > 0 else 0,
+                "compatibility_rate": round((result.total_compatible_devices / result.total_windows_devices * 100), 1) if result.total_windows_devices > 0 else 0,
                 "last_assessment": last_assessment
             })
         
@@ -2390,14 +2411,30 @@ def get_incompatible_devices():
                 ds.hostname,
                 ds.display_name,
                 ds.organization_name,
+                ds.location_name,
+                ds.device_type_name,
+                ds.billable_status_name,
                 ds.os_name,
+                ds.os_build,
+                ds.os_release_id,
+                ds.memory_gib,
+                ds.memory_bytes,
+                ds.created_at,
                 ds.windows_11_24h2_deficiencies
             FROM device_snapshot ds
             JOIN vendor v ON ds.vendor_id = v.id
             WHERE v.name = 'Ninja'
-            AND ds.snapshot_date = CURRENT_DATE
+            AND ds.snapshot_date = (
+                SELECT MAX(snapshot_date)
+                FROM device_snapshot ds2
+                JOIN vendor v2 ON ds2.vendor_id = v2.id
+                WHERE v2.name = 'Ninja'
+            )
+            AND ds.os_name ILIKE '%windows%'
+            AND ds.os_name NOT ILIKE '%server%'
+            AND ds.windows_11_24h2_capable IS NOT NULL
             AND ds.windows_11_24h2_capable = false
-            AND (ds.device_type_id IN (SELECT id FROM device_type WHERE name IN ('Desktop', 'Laptop')))
+            AND (ds.device_type_id IN (SELECT id FROM device_type WHERE code IN ('workstation')))
             ORDER BY ds.organization_name, ds.hostname
             """)
             
@@ -2405,19 +2442,39 @@ def get_incompatible_devices():
             
             devices = []
             for row in results:
-                deficiencies = json.loads(row.windows_11_24h2_deficiencies) if row.windows_11_24h2_deficiencies else {}
+                deficiencies = row.windows_11_24h2_deficiencies if row.windows_11_24h2_deficiencies else {}
+                
                 devices.append({
+                    # Modal column mapping - using database fields
+                    "organization": row.organization_name if row.organization_name and row.organization_name.strip() else "Unknown",
+                    "location": row.location_name or "Main Office",
+                    "system_name": row.hostname,  # System hostname/identifier
+                    "display_name": row.display_name or row.hostname,  # User-friendly device name
+                    "device_type": row.device_type_name or "Desktop",  # Physical device type
+                    "billable_status": row.billable_status_name or "Active",  # Billing status
+                    "status": "Incompatible",  # Clear status
+                    
+                    # Additional fields for reference
                     "hostname": row.hostname,
-                    "display_name": row.display_name,
-                    "organization": row.organization_name,
                     "os_name": row.os_name,
+                    "os_version": row.os_release_id,  # Use os_release_id as version
+                    "os_build": row.os_build,
                     "deficiencies": deficiencies.get('deficiencies', []),
-                    "assessment_date": deficiencies.get('assessment_date', 'Unknown')
+                    "assessment_date": deficiencies.get('assessment_date', 'Unknown'),
+                    
+                    # New fields requested by Dashboard AI
+                    "last_update": row.created_at.isoformat() + 'Z' if row.created_at else None,
+                    "memory_gib": float(row.memory_gib) if row.memory_gib else None,
+                    "memory_bytes": int(row.memory_bytes) if row.memory_bytes else None,
+                    "system_manufacturer": "Not Available",  # Not available in database
+                    "system_model": "Not Available"  # Not available in database
                 })
             
             return jsonify({
                 "incompatible_devices": devices,
-                "total_count": len(devices)
+                "total_count": len(devices),
+                "data_source": "Database (NinjaRMM fields populated)",
+                "last_updated": datetime.utcnow().isoformat() + 'Z'
             })
         
     except Exception as e:
@@ -2428,20 +2485,40 @@ def get_incompatible_devices():
 def get_compatible_devices():
     """Get list of devices that are compatible with Windows 11 24H2"""
     try:
+        
         with get_session() as session:
+            # Get compatible devices from database
             query = text("""
             SELECT 
                 ds.hostname,
                 ds.display_name,
                 ds.organization_name,
+                ds.location_name,
+                ds.device_type_name,
+                ds.billable_status_name,
                 ds.os_name,
+                ds.os_build,
+                ds.os_release_id,
+                ds.memory_gib,
+                ds.memory_bytes,
+                ds.created_at,
                 ds.windows_11_24h2_deficiencies
             FROM device_snapshot ds
             JOIN vendor v ON ds.vendor_id = v.id
             WHERE v.name = 'Ninja'
-            AND ds.snapshot_date = CURRENT_DATE
+            AND ds.snapshot_date = (
+                SELECT MAX(snapshot_date)
+                FROM device_snapshot ds2
+                JOIN vendor v2 ON ds2.vendor_id = v2.id
+                WHERE v2.name = 'Ninja'
+            )
+            AND ds.os_name ILIKE '%windows%'
+            AND ds.os_name NOT ILIKE '%server%'
+            AND ds.windows_11_24h2_capable IS NOT NULL
             AND ds.windows_11_24h2_capable = true
-            AND (ds.device_type_id IN (SELECT id FROM device_type WHERE name IN ('Desktop', 'Laptop')))
+            AND (jsonb_extract_path_text(ds.windows_11_24h2_deficiencies, 'passed_requirements') NOT LIKE '%Windows 11 24H2 Already Installed%' 
+                 OR jsonb_extract_path_text(ds.windows_11_24h2_deficiencies, 'passed_requirements') IS NULL)
+            AND (ds.device_type_id IN (SELECT id FROM device_type WHERE code IN ('workstation')))
             ORDER BY ds.organization_name, ds.hostname
             """)
             
@@ -2449,19 +2526,39 @@ def get_compatible_devices():
             
             devices = []
             for row in results:
-                assessment_data = json.loads(row.windows_11_24h2_deficiencies) if row.windows_11_24h2_deficiencies else {}
+                assessment_data = row.windows_11_24h2_deficiencies if row.windows_11_24h2_deficiencies else {}
+                
                 devices.append({
+                    # Modal column mapping - using database fields
+                    "organization": row.organization_name if row.organization_name and row.organization_name.strip() else "Unknown",
+                    "location": row.location_name or "Main Office",
+                    "system_name": row.hostname,  # System hostname/identifier
+                    "display_name": row.display_name or row.hostname,  # User-friendly device name
+                    "device_type": row.device_type_name or "Desktop",  # Physical device type
+                    "billable_status": row.billable_status_name or "Active",  # Billing status
+                    "status": "Compatible for Upgrade",  # Clear status
+                    
+                    # Additional fields for reference
                     "hostname": row.hostname,
-                    "display_name": row.display_name,
-                    "organization": row.organization_name,
                     "os_name": row.os_name,
+                    "os_version": row.os_release_id,  # Use os_release_id as version
+                    "os_build": row.os_build,
                     "passed_requirements": assessment_data.get('passed_requirements', []),
-                    "assessment_date": assessment_data.get('assessment_date', 'Unknown')
+                    "assessment_date": assessment_data.get('assessment_date', 'Unknown'),
+                    
+                    # New fields requested by Dashboard AI
+                    "last_update": row.created_at.isoformat() + 'Z' if row.created_at else None,
+                    "memory_gib": float(row.memory_gib) if row.memory_gib else None,
+                    "memory_bytes": int(row.memory_bytes) if row.memory_bytes else None,
+                    "system_manufacturer": "Not Available",  # Not available in database
+                    "system_model": "Not Available"  # Not available in database
                 })
             
             return jsonify({
                 "compatible_devices": devices,
-                "total_count": len(devices)
+                "total_count": len(devices),
+                "data_source": "Database (NinjaRMM fields populated)",
+                "last_updated": datetime.utcnow().isoformat() + 'Z'
             })
         
     except Exception as e:
@@ -2506,6 +2603,28 @@ def run_windows_11_24h2_assessment():
         return jsonify({"error": str(e)}), 500
 
 
+# Documentation endpoints
+@app.route('/api/docs', methods=['GET'])
+def get_documentation():
+    """Serve the main integration guide"""
+    try:
+        from flask import send_from_directory
+        docs_dir = '/opt/es-inventory-hub/docs'
+        return send_from_directory(docs_dir, 'HOW_TO_INTEGRATE_TO_DATABASE_GUIDE.md')
+    except Exception as e:
+        return jsonify({"error": f"Documentation not available: {str(e)}"}), 404
+
+@app.route('/api/docs/<filename>', methods=['GET'])
+def get_doc_file(filename):
+    """Serve specific documentation files"""
+    try:
+        from flask import send_from_directory
+        docs_dir = '/opt/es-inventory-hub/docs'
+        return send_from_directory(docs_dir, filename)
+    except Exception as e:
+        return jsonify({"error": f"Documentation file '{filename}' not available: {str(e)}"}), 404
+
+
 if __name__ == '__main__':
     print("Starting ES Inventory Hub API Server...")
     print("Available endpoints:")
@@ -2539,6 +2658,10 @@ if __name__ == '__main__':
     print("  GET  /api/windows-11-24h2/incompatible - List of incompatible devices")
     print("  GET  /api/windows-11-24h2/compatible - List of compatible devices")
     print("  POST /api/windows-11-24h2/run - Manually trigger Windows 11 24H2 assessment")
+    print()
+    print("DOCUMENTATION ENDPOINTS:")
+    print("  GET  /api/docs - Main integration documentation")
+    print("  GET  /api/docs/<filename> - Specific documentation files")
     print()
     print("Server will run on:")
     print("  HTTP:  http://localhost:5400")

@@ -4,7 +4,7 @@
 ```bash
 cd /opt/es-inventory-hub
 python3 api/api_server.py
-# Server runs on http://localhost:5400
+# Server runs on https://db-api.enersystems.com:5400
 ```
 
 ## 📊 **Core Endpoints**
@@ -55,16 +55,16 @@ GET /api/variances/export/excel    # Export variance data to Excel
 ## 🔧 **Quick Test Commands**
 ```bash
 # Test API server
-curl http://localhost:5400/api/health
+curl https://db-api.enersystems.com:5400/api/health
 
 # Get latest variance report
-curl http://localhost:5400/api/variance-report/latest
+curl https://db-api.enersystems.com:5400/api/variance-report/latest
 
 # Get filtered variance report (dashboard format)
-curl http://localhost:5400/api/variance-report/filtered
+curl https://db-api.enersystems.com:5400/api/variance-report/filtered
 
 # Run both collectors
-curl -X POST http://localhost:5400/api/collectors/run \
+curl -X POST https://db-api.enersystems.com:5400/api/collectors/run \
   -H "Content-Type: application/json" \
   -d '{"collector": "both", "run_cross_vendor": true}'
 ```
@@ -127,7 +127,7 @@ curl -X POST http://localhost:5400/api/collectors/run \
 ### **Dashboard Integration**
 ```javascript
 // Get latest variance data
-const response = await fetch('http://localhost:5400/api/variance-report/latest');
+const response = await fetch('https://db-api.enersystems.com:5400/api/variance-report/latest');
 const data = await response.json();
 
 // Display exception counts
@@ -138,7 +138,7 @@ console.log(`Unresolved: ${data.summary.unresolved_count}`);
 ### **Trigger Collection**
 ```bash
 # Run collectors and cross-vendor checks
-curl -X POST http://localhost:5400/api/collectors/run \
+curl -X POST https://db-api.enersystems.com:5400/api/collectors/run \
   -H "Content-Type: application/json" \
   -d '{"collector": "both", "run_cross_vendor": true}'
 ```
@@ -146,10 +146,10 @@ curl -X POST http://localhost:5400/api/collectors/run \
 ### **Exception Management**
 ```bash
 # Get unresolved exceptions
-curl "http://localhost:5400/api/exceptions?resolved=false&limit=10"
+curl "https://db-api.enersystems.com:5400/api/exceptions?resolved=false&limit=10"
 
 # Resolve an exception
-curl -X POST http://localhost:5400/api/exceptions/123/resolve \
+curl -X POST https://db-api.enersystems.com:5400/api/exceptions/123/resolve \
   -H "Content-Type: application/json" \
   -d '{"resolved_by": "admin", "notes": "Fixed in Ninja"}'
 ```

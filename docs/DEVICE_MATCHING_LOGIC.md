@@ -450,13 +450,13 @@ GET /api/devices/search?q={hostname}&vendor={ninja|threatlocker}&limit={number}
 **Example Usage:**
 ```bash
 # Search for device using Ninja hostname (truncated)
-curl "http://localhost:5400/api/devices/search?q=AEC-02739619435"
+curl "https://db-api.enersystems.com:5400/api/devices/search?q=AEC-02739619435"
 
 # Search for device using ThreatLocker hostname (full)
-curl "http://localhost:5400/api/devices/search?q=AEC-027396194353"
+curl "https://db-api.enersystems.com:5400/api/devices/search?q=AEC-027396194353"
 
 # Search only in Ninja
-curl "http://localhost:5400/api/devices/search?q=AEC-02739619435&vendor=ninja"
+curl "https://db-api.enersystems.com:5400/api/devices/search?q=AEC-02739619435&vendor=ninja"
 ```
 
 **Response Format:**

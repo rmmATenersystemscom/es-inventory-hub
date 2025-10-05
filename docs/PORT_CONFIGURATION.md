@@ -194,7 +194,7 @@ sudo ufw allow 5432/tcp  # PostgreSQL database
    ```nginx
    # nginx/nginx.conf
    location /dashboard/dashboard-name/ {
-       proxy_pass http://localhost:NEW_PORT/;
+       proxy_pass https://db-api.enersystems.com:NEW_PORT/;
    }
    ```
 
@@ -214,7 +214,7 @@ sudo ufw allow 5432/tcp  # PostgreSQL database
 2. **Update Dashboard Integration**
    ```python
    # Update API calls in dashboards
-   API_BASE = f"http://localhost:{NEW_PORT}"
+   API_BASE = f"https://db-api.enersystems.com:{NEW_PORT}"
    ```
 
 3. **Update Documentation**
@@ -230,13 +230,13 @@ sudo ufw allow 5432/tcp  # PostgreSQL database
 ### **Verification Steps**
 ```bash
 # Test new port
-curl http://localhost:NEW_PORT/api/health
+curl https://db-api.enersystems.com:NEW_PORT/api/health
 
 # Check if port is listening
 ss -tlnp | grep NEW_PORT
 
 # Test dashboard endpoints
-curl http://localhost:NEW_PORT/
+curl https://db-api.enersystems.com:NEW_PORT/
 ```
 
 ---
@@ -284,13 +284,13 @@ ss -tlnp | grep -E ":(55[0-9][0-9])"
 ### **Cross-Project Communication**
 ```javascript
 // Dashboard project calling ES Inventory Hub API
-const response = await fetch('http://localhost:5400/api/variance-report/latest');
+const response = await fetch('https://db-api.enersystems.com:5400/api/variance-report/latest');
 ```
 
 ```python
 # Dashboard project calling ES Inventory Hub API
 import requests
-response = requests.get('http://localhost:5400/api/variance-report/latest')
+response = requests.get('https://db-api.enersystems.com:5400/api/variance-report/latest')
 ```
 
 ---

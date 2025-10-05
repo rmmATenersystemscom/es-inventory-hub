@@ -16,7 +16,7 @@
 - **Size**: 429 lines
 - **Dependencies**: Flask, SQLAlchemy, project modules
 - **Usage**: `python3 api_server.py`
-- **Port**: Runs on http://localhost:5400
+- **Port**: Runs on https://db-api.enersystems.com:5400
 
 ### **Port Configuration**
 - **ES Inventory Hub Port Range**: 5400-5499
@@ -127,9 +127,9 @@ To change the API server port, update the following:
 python3 api/test_api.py
 
 # Test specific endpoint (manual)
-curl http://localhost:5400/api/health
-curl http://localhost:5400/api/status
-curl http://localhost:5400/api/variance-report/latest
+curl https://db-api.enersystems.com:5400/api/health
+curl https://db-api.enersystems.com:5400/api/status
+curl https://db-api.enersystems.com:5400/api/variance-report/latest
 ```
 
 ---
@@ -137,7 +137,7 @@ curl http://localhost:5400/api/variance-report/latest
 ## 📚 **Integration**
 
 ### **For Dashboard Developers**
-- **API Base URL**: `http://localhost:5400`
+- **API Base URL**: `https://db-api.enersystems.com:5400`
 - **Documentation**: See `docs/API_QUICK_REFERENCE.md`
 - **Integration Guide**: See `docs/DASHBOARD_INTEGRATION_GUIDE.md`
 
@@ -196,7 +196,7 @@ curl http://localhost:5400/api/variance-report/latest
    python3 api/api_server.py
    
    # Check endpoint URLs
-   curl http://localhost:5400/api/health
+   curl https://db-api.enersystems.com:5400/api/health
    ```
 
 3. **Database Connection Issues**

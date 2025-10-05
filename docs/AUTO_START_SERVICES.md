@@ -151,7 +151,7 @@ systemctl status threatlocker-collector@rene.timer
 systemctl status es-cross-vendor-checks.timer
 
 # Check if API is responding
-curl http://localhost:5400/api/health
+curl https://db-api.enersystems.com:5400/api/health
 ```
 
 ### **Expected Output**
@@ -252,7 +252,7 @@ systemctl status ninja-collector.timer
 systemctl status threatlocker-collector@rene.timer
 
 # Test API connectivity
-curl http://localhost:5400/api/health
+curl https://db-api.enersystems.com:5400/api/health
 
 # Check port usage
 ss -tlnp | grep -E ":(5400|5432)"

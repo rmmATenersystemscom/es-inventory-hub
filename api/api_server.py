@@ -9,7 +9,7 @@ Provides REST API endpoints for:
 
 Usage:
     python3 api_server.py
-    # Server runs on http://localhost:5400
+    # Server runs on https://db-api.enersystems.com:5400
 """
 
 import os
@@ -2664,8 +2664,8 @@ if __name__ == '__main__':
     print("  GET  /api/docs/<filename> - Specific documentation files")
     print()
     print("Server will run on:")
-    print("  HTTP:  http://localhost:5400")
-    print("  HTTPS: https://localhost:5400 (if SSL certificates are available)")
+    print("  HTTP:  http://localhost:5400 (development only)")
+    print("  HTTPS: https://db-api.enersystems.com:5400 (production)")
     
     # Check for SSL certificates
     ssl_cert = '/opt/es-inventory-hub/ssl/api.crt'

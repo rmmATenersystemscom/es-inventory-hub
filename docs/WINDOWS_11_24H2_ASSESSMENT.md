@@ -331,13 +331,13 @@ python collectors/assessments/windows_11_24h2_assessment.py
 
 ```bash
 # Get compatibility status
-curl http://localhost:5000/api/windows-11-24h2/status
+curl https://db-api.enersystems.com:5400/api/windows-11-24h2/status
 
 # Get incompatible devices
-curl http://localhost:5000/api/windows-11-24h2/incompatible
+curl https://db-api.enersystems.com:5400/api/windows-11-24h2/incompatible
 
 # Get compatible devices
-curl http://localhost:5000/api/windows-11-24h2/compatible
+curl https://db-api.enersystems.com:5400/api/windows-11-24h2/compatible
 ```
 
 ### Database Queries

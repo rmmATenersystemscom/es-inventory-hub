@@ -144,7 +144,7 @@ ThreatLocker (02:31 AM) → Database → Cross-Vendor Analysis → Variance Repo
 
 ### **Connection Details**
 ```
-Host: localhost
+Host: db-api.enersystems.com
 Port: 5432
 Database: es_inventory_hub
 Username: postgres
@@ -221,8 +221,8 @@ systemctl list-timers | grep -E "(ninja|threatlocker)"
 psql -d es_inventory_hub -c "SELECT * FROM exceptions ORDER BY date_found DESC LIMIT 10;"
 
 # Test API endpoints
-curl http://localhost:5400/api/health
-curl http://localhost:5400/api/variance-report/latest
+curl https://db-api.enersystems.com:5400/api/health
+curl https://db-api.enersystems.com:5400/api/variance-report/latest
 ```
 
 ---

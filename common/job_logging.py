@@ -6,14 +6,26 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from storage.schema import JobRuns
 
-# Database connection
-DSN = 'postgresql://postgres:Xat162gT2Qsg4WDlO5r@localhost:5432/es_inventory_hub'
-engine = create_engine(DSN)
-Session = sessionmaker(bind=engine)
+# Database connection - lazy initialization
+from common.config import get_dsn
+
+_engine = None
+_Session = None
+
+def get_engine():
+    """Get database engine, creating it if necessary."""
+    global _engine
+    if _engine is None:
+        DSN = get_dsn()
+        _engine = create_engine(DSN)
+    return _engine
 
 def get_session():
     """Get database session."""
-    return Session()
+    global _Session
+    if _Session is None:
+        _Session = sessionmaker(bind=get_engine())
+    return _Session()
 
 
 def log_job_start(job_name: str, message: Optional[str] = None) -> int:

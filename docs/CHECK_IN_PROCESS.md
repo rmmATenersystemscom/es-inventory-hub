@@ -18,16 +18,16 @@
 - **Determine next version**: Based on change type (patch/minor/major)
 - **Verify all changes**: Ensure all modifications are ready for commit
 
-### **Step 2: Git Operations**
+### **Step 2: README Version Updates (BEFORE COMMIT)**
+- **Update Project Overview**: Change `**Current Version**: vX.Y.Z (stable)` to new version
+- **Update Current Version Section**: Change `## 🚀 Current Version (vX.Y.Z)` to new version
+- **Stage README changes**: `git add README.md`
+
+### **Step 3: Git Operations**
 1. **Stage all changes**: `git add .`
 2. **Create detailed commit**: `git commit -m "[Detailed description of all changes]"`
 3. **Create version tag**: `git tag -a vX.Y.Z -m "[Comprehensive change description]"`
 4. **Push everything**: `git push origin main --tags`
-
-### **Step 3: README Version Updates**
-- **Update Project Overview**: Change `**Current Version**: vX.Y.Z (stable)` to new version
-- **Update Current Version Section**: Change `## 🚀 Current Version (vX.Y.Z)` to new version
-- **Commit version update**: `git add README.md && git commit -m "Update version to vX.Y.Z" && git push`
 
 ### **Step 4: Confirmation**
 - **Display completion message** with tag used and changes committed
@@ -68,12 +68,12 @@ Changes Committed:
 - Enhanced CSS styling - Added comprehensive dark theme styling for all modal elements
 - Improved user experience - Close buttons now have proper contrast and hover effects
 - Maintained theme consistency - All modal components match the dashboard's dark aesthetic
-- Updated version number in main README.md to v1.11.0
+- Updated version number in main README.md to v1.11.0 (included in main commit)
 
 Files Modified:
 - dashboards/topleft/app.py - Backend improvements
 - dashboards/topleft/templates/dashboard.html - CSS styling for modal visibility
-- README.md - Updated version number to v1.11.0
+- README.md - Updated version number to v1.11.0 (included in main commit)
 
 The changes have been successfully committed and pushed to GitHub with the descriptive tag v1.11.0
 All detailed revision notes are preserved in Git tag messages and commit history

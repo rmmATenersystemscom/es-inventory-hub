@@ -346,17 +346,26 @@ def check_duplicate_tl(session: Session, vendor_ids: Dict[str, int], snapshot_da
         
         # Create details with all duplicate hostnames (use clean hostnames)
         clean_hostnames = []
+        organizations = []
         for host in tl_hosts:
             if host.hostname:
                 # Extract clean hostname, handling data quality issues
                 clean_hostname = extract_clean_hostname(host.hostname, hostname_base)
                 clean_hostnames.append(clean_hostname)
+                # Collect organization information
+                if host.organization_name:
+                    organizations.append(host.organization_name)
+        
+        # Get the most common organization (or first one if all different)
+        primary_org = organizations[0] if organizations else None
         
         details = {
             'hostname_base': hostname_base,
             'count': duplicate.count,
             'duplicate_hostnames': clean_hostnames,
-            'sites': [host.site.name if host.site else None for host in tl_hosts]
+            'sites': [host.site.name if host.site else None for host in tl_hosts],
+            'organizations': organizations,
+            'tl_org_name': primary_org  # Primary organization for API compatibility
         }
         
         # Insert exception for the first clean hostname (representative)
@@ -537,6 +546,8 @@ def check_spare_mismatch(session: Session, vendor_ids: Dict[str, int], snapshot_
                     'ninja_billing_status': ninja_host.billing_status.code if ninja_host.billing_status else None,
                     'tl_site': tl_host.site.name if tl_host.site else None,
                     'ninja_site': ninja_host.site.name if ninja_host.site else None,
+                    'tl_org_name': tl_host.organization_name,
+                    'ninja_org_name': ninja_host.organization_name,
                     'note': 'Device marked as spare in Ninja - consider if ThreatLocker cleanup needed'
                 }
                 

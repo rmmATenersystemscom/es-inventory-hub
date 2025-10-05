@@ -1,0 +1,9 @@
+[Unit]
+Description=Run Windows 11 24H2 Assessment 45 minutes after Ninja collection
+
+[Timer]
+OnCalendar=*-*-* 23:45:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

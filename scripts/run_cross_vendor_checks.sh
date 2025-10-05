@@ -22,12 +22,14 @@ log "Starting cross-vendor consistency checks..."
 # Change to project directory
 cd "$SCRIPT_DIR"
 
-# Set environment variables
-export DB_DSN="postgresql+psycopg2://postgres:Xat162gT2Qsg4WDlO5r@localhost:5432/es_inventory_hub"
+# Load environment variables
+set -a
+. /opt/es-inventory-hub/.env
+set +a
 
 # Run cross-vendor checks via API (only cross-vendor, not collectors)
 log "Triggering cross-vendor checks via API..."
-RESPONSE=$(curl -s -X POST http://localhost:5400/api/collectors/run \
+RESPONSE=$(curl -k -s -X POST https://localhost:5400/api/collectors/run \
     -H "Content-Type: application/json" \
     -d '{"run_cross_vendor": true, "run_ninja": false, "run_threatlocker": false}')
 

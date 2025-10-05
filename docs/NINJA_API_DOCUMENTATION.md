@@ -55,18 +55,22 @@ The NinjaRMM API integration provides comprehensive device management and monito
 
 ## Authentication & Configuration
 
+> **🔐 Secret Management**: For complete secret management setup, security procedures, and troubleshooting, see [Secret Management Notes](./SECRET_MANAGEMENT_NOTES.md).
+
 ### Environment Variables
 
 The NinjaRMM API uses OAuth 2.0 authentication with the following environment variables:
 
 ```bash
 # NinjaRMM API Configuration
-NINJA_BASE_URL=https://eu.ninjarmm.com
+NINJA_BASE_URL=https://app.ninjarmm.com
 NINJA_CLIENT_ID=your_client_id_here
 NINJA_CLIENT_SECRET=your_client_secret_here
 NINJA_REFRESH_TOKEN=your_refresh_token_here
 NINJA_TIMEOUT=30
 ```
+
+> **📁 Shared Secrets**: These variables are managed in the shared secrets file `/opt/shared-secrets/api-secrets.env` and symlinked to the project. See [Secret Management Notes](./SECRET_MANAGEMENT_NOTES.md) for setup and troubleshooting.
 
 ### Authentication Flow
 
@@ -148,6 +152,619 @@ GET /api/v2/devices-detailed
 ```
 **Purpose**: Retrieve comprehensive device information
 **Response**: List of detailed device objects with full system information
+
+### Modal Data Fields Reference
+
+The Ninja Usage dashboard modal displays comprehensive device information across 45+ columns. Here's how to access each field category:
+
+#### **Basic Device Information**
+| Field | API Path | Description | Example Value |
+|-------|----------|-------------|---------------|
+| **Organization** | `device.organizationId` → `org.name` | Organization name | "Acme Corp" |
+| **Location** | `device.location.name` or `device.locationId` → `location.name` | Device location | "Main Office" |
+| **System Name** | `device.systemName` | Computer name | "WORKSTATION-01" |
+| **Display Name** | `device.displayName` | Friendly device name | "John's Laptop" |
+| **Device Type** | `device.deviceType` | Classified type | "workstation", "server", "virtualization" |
+| **Billable Status** | `device.billableStatus` | Billing classification | "billable", "spare", "virtualization" |
+| **Status** | `device.status` | Device status | "online", "offline" |
+
+#### **Operating System Information**
+| Field | API Path | Description | Example Value |
+|-------|----------|-------------|---------------|
+| **OS Name** | `device.os.name` | Operating system | "Windows 10 Pro" |
+| **OS Version** | `device.os.version` or `device.os.releaseId` | OS version | "22H2" |
+| **OS Build** | `device.os.build` | Build number | "19045.3693" |
+| **OS Architecture** | `device.os.architecture` | System architecture | "x64" |
+| **OS Manufacturer** | `device.os.manufacturer` | OS vendor | "Microsoft Corporation" |
+
+#### **User & Network Information**
+| Field | API Path | Description | Example Value |
+|-------|----------|-------------|---------------|
+| **Last Logged In User** | `device.user` | Last user to log in | "john.doe" |
+| **IP Addresses** | `device.ipAddress` | All IP addresses | "192.168.1.100, 10.0.0.5" |
+| **IPv4 Addresses** | `device.ipv4Addresses` | IPv4 addresses only | "192.168.1.100" |
+| **IPv6 Addresses** | `device.ipv6Addresses` | IPv6 addresses only | "2001:db8::1" |
+| **Public IP** | `device.publicIp` | External IP address | "203.0.113.1" |
+
+#### **System Hardware Information**
+| Field | API Path | Description | Example Value |
+|-------|----------|-------------|---------------|
+| **System Manufacturer** | `device.system.manufacturer` | Hardware manufacturer | "Dell Inc." |
+| **System Model** | `device.system.model` | Hardware model | "OptiPlex 7090" |
+| **Serial Number** | `device.system.serialNumber` | Hardware serial | "ABC123456" |
+| **BIOS Serial** | `device.system.biosSerialNumber` | BIOS serial number | "BIOS123456" |
+| **MAC Addresses** | `device.macAddress` | Network MAC addresses | "00:1B:44:11:3A:B7" |
+
+#### **CPU Information**
+| Field | API Path | Description | Example Value |
+|-------|----------|-------------|---------------|
+| **CPU Model** | `device.processors[0].name` | Processor model | "Intel Core i7-10700" |
+| **CPU Cores** | `device.processors[0].numCores` | Physical cores | 8 |
+| **CPU Threads** | `device.processors[0].numLogicalCores` | Logical processors | 16 |
+| **CPU Speed (MHz)** | `device.processors[0].maxClockSpeed` | Clock speed | 2900 |
+
+#### **Memory Information**
+| Field | API Path | Description | Example Value |
+|-------|----------|-------------|---------------|
+| **Memory (GiB)** | `device.memory / (1024**3)` | RAM in GiB | 16.0 |
+| **Memory (Bytes)** | `device.memory` | RAM in bytes | 17179869184 |
+
+#### **Storage Information**
+| Field | API Path | Description | Example Value |
+|-------|----------|-------------|---------------|
+| **Volumes** | `device.volumes` | Storage volumes | "C: 500GB, D: 1TB" |
+
+#### **Timestamps & Activity**
+| Field | API Path | Description | Example Value |
+|-------|----------|-------------|---------------|
+| **Last Online** | `device.lastContact` | Last seen online | "2024-01-15 14:30:00" |
+| **Last Update** | `device.lastUpdate` | Last data update | "2024-01-15 14:25:00" |
+| **Last Boot Time** | `device.lastBootTime` | System boot time | "2024-01-15 08:00:00" |
+| **Agent Install** | `device.created` | Agent installation | "2023-06-01 10:00:00" |
+
+#### **Device Properties**
+| Field | API Path | Description | Example Value |
+|-------|----------|-------------|---------------|
+| **Domain** | `device.system.domain` | Domain membership | "company.local" |
+| **Timezone** | `device.timezone` | Device timezone | "America/New_York" |
+| **Tags** | `device.tags` | Device tags | "Production, Critical" |
+| **Notes** | `device.description` | Device notes | "Primary workstation" |
+| **Approval Status** | `device.approvalStatus` | Approval state | "approved" |
+| **Node Class** | `device.nodeClass` | Node classification | "WINDOWS_WORKSTATION" |
+
+#### **Monitoring & Security**
+| Field | API Path | Description | Example Value |
+|-------|----------|-------------|---------------|
+| **Monitoring (Health State)** | `device.health.status` | Device health | "healthy", "warning" |
+| **Antivirus (Products & State)** | `device.antivirus.products` | AV products | "Windows Defender: Active" |
+
+### Complete Modal Data Access Implementation
+
+#### **Python Implementation Example**
+```python
+def get_modal_device_data(device):
+    """Extract all modal fields from a NinjaRMM device object"""
+    
+    # Basic device information
+    modal_data = {
+        # Organization and Location (requires separate API calls)
+        'organizationName': get_organization_name(device.get('organizationId')),
+        'location': get_location_name(device.get('locationId')),
+        
+        # Core device info
+        'systemName': device.get('systemName', 'N/A'),
+        'displayName': device.get('displayName', 'N/A'),
+        'deviceType': classify_device_type(device),
+        'billableStatus': classify_billable_status(device),
+        'status': device.get('status', 'N/A'),
+        
+        # Operating System
+        'os': device.get('os', {}).get('name', 'N/A'),
+        'osVersion': device.get('os', {}).get('version', 'N/A'),
+        'osBuild': device.get('os', {}).get('build', 'N/A'),
+        'osArchitecture': device.get('os', {}).get('architecture', 'N/A'),
+        'osManufacturer': device.get('os', {}).get('manufacturer', 'N/A'),
+        
+        # User and Network
+        'user': device.get('user', 'N/A'),
+        'ipAddress': device.get('ipAddress', 'N/A'),
+        'ipv4Addresses': device.get('ipv4Addresses', 'N/A'),
+        'ipv6Addresses': device.get('ipv6Addresses', 'N/A'),
+        'publicIp': device.get('publicIp', 'N/A'),
+        
+        # Hardware Information
+        'system': device.get('system', {}),
+        'manufacturer': device.get('system', {}).get('manufacturer', 'N/A'),
+        'model': device.get('system', {}).get('model', 'N/A'),
+        'serialNumber': device.get('system', {}).get('serialNumber', 'N/A'),
+        'biosSerial': device.get('system', {}).get('biosSerialNumber', 'N/A'),
+        'macAddress': device.get('macAddress', 'N/A'),
+        
+        # CPU Information
+        'processors': device.get('processors', []),
+        'cpu': get_cpu_info(device.get('processors', [])),
+        'cpuCores': get_cpu_cores(device.get('processors', [])),
+        'cpuThreads': get_cpu_threads(device.get('processors', [])),
+        'cpuSpeed': get_cpu_speed(device.get('processors', [])),
+        
+        # Memory Information
+        'memory': device.get('memory', 0),
+        'memoryGiB': convert_to_gib(device.get('memory', 0)),
+        
+        # Storage Information
+        'volumes': format_volumes(device.get('volumes', [])),
+        
+        # Timestamps
+        'lastContact': format_timestamp(device.get('lastContact')),
+        'lastUpdate': format_timestamp(device.get('lastUpdate')),
+        'lastBootTime': format_timestamp(device.get('lastBootTime')),
+        'created': format_timestamp(device.get('created')),
+        
+        # Device Properties
+        'domain': device.get('system', {}).get('domain', 'N/A'),
+        'timezone': device.get('timezone', 'N/A'),
+        'tags': format_tags(device.get('tags', [])),
+        'notes': device.get('description', 'N/A'),
+        'approvalStatus': device.get('approvalStatus', 'N/A'),
+        'nodeClass': device.get('nodeClass', 'N/A'),
+        
+        # Monitoring & Security (requires additional API calls)
+        'healthStatus': get_health_status(device.get('id')),
+        'antivirusStatus': get_antivirus_status(device.get('id')),
+        
+        # Custom Fields (TPM/Secure Boot)
+        'customFields': get_device_custom_fields(device.get('id'))
+    }
+    
+    return modal_data
+
+def get_cpu_info(processors):
+    """Extract CPU model from processors array"""
+    if processors and len(processors) > 0:
+        return processors[0].get('name', 'N/A')
+    return 'N/A'
+
+def get_cpu_cores(processors):
+    """Extract CPU core count"""
+    if processors and len(processors) > 0:
+        return processors[0].get('numCores', 'N/A')
+    return 'N/A'
+
+def get_cpu_threads(processors):
+    """Extract CPU thread count"""
+    if processors and len(processors) > 0:
+        return processors[0].get('numLogicalCores', 'N/A')
+    return 'N/A'
+
+def get_cpu_speed(processors):
+    """Extract CPU speed in MHz"""
+    if processors and len(processors) > 0:
+        speed = processors[0].get('maxClockSpeed', 0)
+        return f"{speed} MHz" if speed > 0 else 'N/A'
+    return 'N/A'
+
+def convert_to_gib(bytes_value):
+    """Convert bytes to GiB"""
+    if bytes_value and bytes_value > 0:
+        return round(bytes_value / (1024**3), 2)
+    return 'N/A'
+
+def format_volumes(volumes):
+    """Format storage volumes for display"""
+    if not volumes:
+        return 'N/A'
+    
+    formatted_volumes = []
+    for volume in volumes:
+        name = volume.get('name', 'Unknown')
+        size = volume.get('size', 0)
+        size_gb = round(size / (1024**3), 1) if size > 0 else 0
+        formatted_volumes.append(f"{name}: {size_gb}GB")
+    
+    return ', '.join(formatted_volumes)
+
+def format_timestamp(timestamp):
+    """Format Unix timestamp to readable date"""
+    if not timestamp:
+        return 'N/A'
+    
+    try:
+        from datetime import datetime
+        return datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+    except:
+        return str(timestamp)
+
+def format_tags(tags):
+    """Format tags array for display"""
+    if not tags:
+        return 'N/A'
+    return ', '.join(tags) if isinstance(tags, list) else str(tags)
+```
+
+#### **JavaScript Frontend Implementation**
+```javascript
+// Extract modal data from device object
+function extractModalData(device) {
+    return {
+        // Basic Information
+        organizationName: device.organizationName || 'N/A',
+        location: device.location || 'N/A',
+        systemName: device.systemName || 'N/A',
+        displayName: device.displayName || 'N/A',
+        deviceType: device.deviceType || 'N/A',
+        billableStatus: device.billableStatus || 'N/A',
+        status: device.status || 'N/A',
+        
+        // Operating System
+        osName: device['OS Name'] || device.os || 'N/A',
+        osVersion: device['OS Version'] || device.osVersion || 'N/A',
+        osBuild: device['OS Build'] || 'N/A',
+        osArchitecture: device['OS Architecture'] || 'N/A',
+        osManufacturer: device['OS Manufacturer'] || 'N/A',
+        
+        // User & Network
+        lastLoggedInUser: device['Last Logged In User'] || device.user || 'N/A',
+        ipAddresses: device['IP Addresses'] || device.ipAddress || 'N/A',
+        ipv4Addresses: device['IPv4 Addresses'] || 'N/A',
+        ipv6Addresses: device['IPv6 Addresses'] || 'N/A',
+        publicIp: device['Public IP'] || 'N/A',
+        
+        // Hardware
+        systemManufacturer: device['System Manufacturer'] || device.manufacturer || 'N/A',
+        systemModel: device['System Model'] || device.model || 'N/A',
+        serialNumber: device['Serial Number'] || device.serialNumber || 'N/A',
+        biosSerial: device['BIOS Serial'] || 'N/A',
+        macAddresses: device['MAC Addresses'] || device.macAddress || 'N/A',
+        
+        // CPU
+        cpuModel: device['CPU Model'] || device.cpu || 'N/A',
+        cpuCores: device['CPU Cores'] || 'N/A',
+        cpuThreads: device['CPU Threads'] || 'N/A',
+        cpuSpeed: device['CPU Speed (MHz)'] || 'N/A',
+        
+        // Memory
+        memoryGiB: device['Memory (GiB)'] || device.memory || 'N/A',
+        memoryBytes: device['Memory (Bytes)'] || 'N/A',
+        
+        // Storage
+        volumes: device.Volumes || device.diskSpace || 'N/A',
+        
+        // Timestamps
+        lastOnline: device['Last Online'] || formatDate(device.lastContact) || 'N/A',
+        lastUpdate: device['Last Update'] || formatDate(device.lastUpdate) || 'N/A',
+        lastBootTime: device['Last Boot Time'] || formatDate(device.lastBoot) || 'N/A',
+        agentInstall: device['Agent Install Timestamp'] || 'N/A',
+        
+        // Properties
+        domain: device['System Domain'] || device.domain || 'N/A',
+        timezone: device['Device Timezone'] || device.timezone || 'N/A',
+        tags: device.Tags || device.tags || 'N/A',
+        notes: device.Notes || device.description || 'N/A',
+        approvalStatus: device['Approval Status'] || 'N/A',
+        nodeClass: device['Node Class'] || 'N/A',
+        
+        // Monitoring & Security
+        healthStatus: device['Monitoring (Health State)'] || 'N/A',
+        antivirusStatus: device['Antivirus (Products & State)'] || 'N/A',
+        
+        // Custom Fields (TPM/Secure Boot)
+        hasTPM: device['HasTPM'] || 'N/A',
+        tpmEnabled: device['TPMEnabled'] || 'N/A',
+        tpmVersion: device['TPMVersion'] || 'N/A',
+        secureBootAvailable: device['SecureBootAvailable'] || 'N/A',
+        secureBootEnabled: device['SecureBootEnabled'] || 'N/A'
+    };
+}
+
+// Helper function to format dates
+function formatDate(timestamp) {
+    if (!timestamp || timestamp === 'N/A') return 'N/A';
+    
+    try {
+        // Handle Unix timestamps
+        if (typeof timestamp === 'number') {
+            return new Date(timestamp * 1000).toLocaleString();
+        }
+        return new Date(timestamp).toLocaleString();
+    } catch (e) {
+        return timestamp;
+    }
+}
+```
+
+#### **API Endpoint Integration**
+```python
+@app.route('/api/device-modal-data/<int:device_id>')
+def get_device_modal_data(device_id):
+    """Get complete modal data for a specific device"""
+    try:
+        api = NinjaRMMAPI()
+        
+        # Get device details
+        device = api.get_device_by_id(device_id)
+        if not device:
+            return jsonify({'error': 'Device not found'}), 404
+        
+        # Get organization and location names
+        organizations = api.get_organizations()
+        locations = api.get_locations()
+        
+        # Extract modal data
+        modal_data = get_modal_device_data(device)
+        
+        # Add organization and location names
+        org_map = {org['id']: org['name'] for org in organizations}
+        loc_map = {loc['id']: loc['name'] for loc in locations}
+        
+        modal_data['organizationName'] = org_map.get(device.get('organizationId'), 'N/A')
+        modal_data['location'] = loc_map.get(device.get('locationId'), 'N/A')
+        
+        # Get custom fields
+        modal_data['customFields'] = api._get_device_custom_fields(device_id)
+        
+        return jsonify({
+            'device': modal_data,
+            'last_updated': datetime.utcnow().isoformat() + 'Z'
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+```
+
+### Modal Data Processing & Field Mapping
+
+#### **Data Processing Pipeline**
+The modal data goes through several processing stages:
+
+1. **Raw API Data** → `GET /api/v2/devices-detailed`
+2. **Field Extraction** → Extract specific fields from nested objects
+3. **Data Transformation** → Convert formats (bytes to GiB, timestamps to dates)
+4. **Classification** → Apply business logic (device type, billable status)
+5. **Custom Fields** → Load TPM/Secure Boot data separately
+6. **Modal Display** → Format for table display
+
+#### **Field Mapping Reference**
+```python
+# Complete field mapping for modal display
+MODAL_FIELD_MAPPING = {
+    # Basic Information
+    'Organization': {
+        'api_path': 'device.organizationId',
+        'lookup': 'organizations[org_id].name',
+        'fallback': 'N/A'
+    },
+    'Location': {
+        'api_path': 'device.locationId', 
+        'lookup': 'locations[loc_id].name',
+        'fallback': 'N/A'
+    },
+    'System Name': {
+        'api_path': 'device.systemName',
+        'fallback': 'N/A'
+    },
+    'Display Name': {
+        'api_path': 'device.displayName',
+        'fallback': 'N/A'
+    },
+    
+    # Operating System
+    'OS Name': {
+        'api_path': 'device.os.name',
+        'fallback': 'N/A'
+    },
+    'OS Version': {
+        'api_path': 'device.os.version',
+        'fallback': 'N/A'
+    },
+    'OS Build': {
+        'api_path': 'device.os.build',
+        'fallback': 'N/A'
+    },
+    'OS Architecture': {
+        'api_path': 'device.os.architecture',
+        'fallback': 'N/A'
+    },
+    'OS Manufacturer': {
+        'api_path': 'device.os.manufacturer',
+        'fallback': 'N/A'
+    },
+    
+    # Hardware Information
+    'System Manufacturer': {
+        'api_path': 'device.system.manufacturer',
+        'fallback': 'N/A'
+    },
+    'System Model': {
+        'api_path': 'device.system.model',
+        'fallback': 'N/A'
+    },
+    'Serial Number': {
+        'api_path': 'device.system.serialNumber',
+        'fallback': 'N/A'
+    },
+    'BIOS Serial': {
+        'api_path': 'device.system.biosSerialNumber',
+        'fallback': 'N/A'
+    },
+    'MAC Addresses': {
+        'api_path': 'device.macAddress',
+        'fallback': 'N/A'
+    },
+    
+    # CPU Information
+    'CPU Model': {
+        'api_path': 'device.processors[0].name',
+        'fallback': 'N/A'
+    },
+    'CPU Cores': {
+        'api_path': 'device.processors[0].numCores',
+        'fallback': 'N/A'
+    },
+    'CPU Threads': {
+        'api_path': 'device.processors[0].numLogicalCores',
+        'fallback': 'N/A'
+    },
+    'CPU Speed (MHz)': {
+        'api_path': 'device.processors[0].maxClockSpeed',
+        'fallback': 'N/A'
+    },
+    
+    # Memory Information
+    'Memory (GiB)': {
+        'api_path': 'device.memory',
+        'transform': 'convert_to_gib',
+        'fallback': 'N/A'
+    },
+    'Memory (Bytes)': {
+        'api_path': 'device.memory',
+        'fallback': 'N/A'
+    },
+    
+    # Storage Information
+    'Volumes': {
+        'api_path': 'device.volumes',
+        'transform': 'format_volumes',
+        'fallback': 'N/A'
+    },
+    
+    # Timestamps
+    'Last Online': {
+        'api_path': 'device.lastContact',
+        'transform': 'format_timestamp',
+        'fallback': 'N/A'
+    },
+    'Last Update': {
+        'api_path': 'device.lastUpdate',
+        'transform': 'format_timestamp',
+        'fallback': 'N/A'
+    },
+    'Last Boot Time': {
+        'api_path': 'device.lastBootTime',
+        'transform': 'format_timestamp',
+        'fallback': 'N/A'
+    },
+    'Agent Install': {
+        'api_path': 'device.created',
+        'transform': 'format_timestamp',
+        'fallback': 'N/A'
+    },
+    
+    # Device Properties
+    'Domain': {
+        'api_path': 'device.system.domain',
+        'fallback': 'N/A'
+    },
+    'Timezone': {
+        'api_path': 'device.timezone',
+        'fallback': 'N/A'
+    },
+    'Tags': {
+        'api_path': 'device.tags',
+        'transform': 'format_tags',
+        'fallback': 'N/A'
+    },
+    'Notes': {
+        'api_path': 'device.description',
+        'fallback': 'N/A'
+    },
+    'Approval Status': {
+        'api_path': 'device.approvalStatus',
+        'fallback': 'N/A'
+    },
+    'Node Class': {
+        'api_path': 'device.nodeClass',
+        'fallback': 'N/A'
+    },
+    
+    # Custom Fields (TPM/Secure Boot)
+    'HasTPM': {
+        'api_path': 'custom_fields.hastpm',
+        'transform': 'interpret_tpm_value',
+        'fallback': 'Not Checked'
+    },
+    'TPMEnabled': {
+        'api_path': 'custom_fields.tpmenabled',
+        'transform': 'interpret_tpm_value',
+        'fallback': 'Not Checked'
+    },
+    'TPMVersion': {
+        'api_path': 'custom_fields.tpmversion',
+        'transform': 'interpret_tpm_version',
+        'fallback': 'Not Checked'
+    },
+    'SecureBootAvailable': {
+        'api_path': 'custom_fields.securebootavailable',
+        'transform': 'interpret_tpm_value',
+        'fallback': 'Not Checked'
+    },
+    'SecureBootEnabled': {
+        'api_path': 'custom_fields.securebootenabled',
+        'transform': 'interpret_tpm_value',
+        'fallback': 'Not Checked'
+    }
+}
+```
+
+#### **Data Transformation Functions**
+```python
+def convert_to_gib(bytes_value):
+    """Convert bytes to GiB for memory display"""
+    if not bytes_value or bytes_value == 0:
+        return 'N/A'
+    return round(bytes_value / (1024**3), 2)
+
+def format_timestamp(timestamp):
+    """Convert Unix timestamp to readable date"""
+    if not timestamp:
+        return 'N/A'
+    try:
+        from datetime import datetime
+        return datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+    except:
+        return str(timestamp)
+
+def format_volumes(volumes):
+    """Format storage volumes for display"""
+    if not volumes:
+        return 'N/A'
+    
+    formatted = []
+    for volume in volumes:
+        name = volume.get('name', 'Unknown')
+        size = volume.get('size', 0)
+        size_gb = round(size / (1024**3), 1) if size > 0 else 0
+        formatted.append(f"{name}: {size_gb}GB")
+    
+    return ', '.join(formatted)
+
+def format_tags(tags):
+    """Format tags array for display"""
+    if not tags:
+        return 'N/A'
+    return ', '.join(tags) if isinstance(tags, list) else str(tags)
+
+def interpret_tpm_value(value, field_name):
+    """Interpret TPM/Secure Boot boolean values"""
+    if not value or value == '':
+        return 'Not Checked'
+    
+    if value.lower() == 'true':
+        return 'Yes'
+    elif value.lower() == 'false':
+        return 'No'
+    else:
+        return 'Unknown'
+
+def interpret_tpm_version(value):
+    """Interpret TPM version values"""
+    if not value or value == '':
+        return 'Not Checked'
+    
+    if value == '0.0':
+        return 'No TPM'
+    else:
+        return value
+```
 
 ### Custom Fields Endpoints
 
@@ -477,11 +1094,11 @@ async function loadCustomFieldsForDevices(deviceIds) {
 }
 ```
 
-**API Endpoint for Wave Loading:**
+**API Endpoint for Optimal Chunking (75 devices):**
 ```python
 @app.route('/api/custom-fields', methods=['POST'])
 def api_custom_fields():
-    """API endpoint for custom fields data (TPM/Secure Boot) - Wave Loading"""
+    """API endpoint for custom fields data (TPM/Secure Boot) - OPTIMAL CHUNKING (75 devices)"""
     try:
         data = request.get_json()
         device_ids = data.get('deviceIds', [])
@@ -492,20 +1109,125 @@ def api_custom_fields():
                 'error': 'No device IDs provided'
             }), 400
         
+        print(f"🔍 [API] Loading custom fields for {len(device_ids)} devices")
+        start_time = time.time()
+        
         # Initialize NinjaRMM API client
         api = NinjaRMMAPI()
         
-        # Get custom fields for the specified devices (backend batch processing)
-        custom_fields_map = api._get_bulk_device_custom_fields(device_ids)
+        # Optimal chunking approach: Process all devices in chunk without delays
+        custom_fields_map = {}
+        processed = 0
+        
+        # Process devices in optimal chunks of 75 (tested to work reliably)
+        chunk_size = 75
+        for i in range(0, len(device_ids), chunk_size):
+            chunk = device_ids[i:i + chunk_size]
+            chunk_num = (i // chunk_size) + 1
+            total_chunks = (len(device_ids) + chunk_size - 1) // chunk_size
+            
+            print(f"🔍 [API] Processing chunk {chunk_num}/{total_chunks} ({len(chunk)} devices)")
+            chunk_start_time = time.time()
+            
+            for device_id in chunk:
+                try:
+                    custom_fields = api._get_device_custom_fields(device_id)
+                    custom_fields_map[str(device_id)] = custom_fields
+                    processed += 1
+                except Exception as e:
+                    print(f"⚠️ [API] Error fetching custom fields for device {device_id}: {e}")
+                    custom_fields_map[str(device_id)] = {}
+            
+            chunk_time = time.time() - chunk_start_time
+            print(f"✅ [API] Chunk {chunk_num} completed in {chunk_time:.2f}s")
+        
+        end_time = time.time()
+        processing_time = end_time - start_time
+        
+        print(f"✅ [API] Custom fields loading completed in {processing_time:.2f}s - {processed} devices")
         
         return jsonify({
             'custom_fields': custom_fields_map,
             'device_count': len(custom_fields_map),
+            'processing_time': f"{processing_time:.2f}s",
             'last_updated': datetime.utcnow().isoformat() + 'Z'
         })
         
     except Exception as e:
-        print(f"Error in custom fields API: {e}")
+        print(f"❌ [ERROR] Error in custom fields API: {e}")
+        return jsonify({
+            'error': str(e),
+            'custom_fields': {},
+            'device_count': 0,
+            'last_updated': datetime.utcnow().isoformat() + 'Z'
+        }), 500
+```
+
+**API Endpoint for Wave Loading (Conservative):**
+```python
+@app.route('/api/custom-fields-wave', methods=['POST'])
+def api_custom_fields_wave():
+    """API endpoint for custom fields data (TPM/Secure Boot) - WAVE LOADING (Conservative)"""
+    try:
+        data = request.get_json()
+        device_ids = data.get('deviceIds', [])
+        
+        if not device_ids:
+            return jsonify({
+                'custom_fields': {},
+                'error': 'No device IDs provided'
+            }), 400
+        
+        print(f"🌊 [WAVE API] Loading custom fields for {len(device_ids)} devices using wave method")
+        start_time = time.time()
+        
+        # Initialize NinjaRMM API client
+        api = NinjaRMMAPI()
+        
+        # Wave loading approach: Process devices with 0.1s delays
+        custom_fields_map = {}
+        processed = 0
+        
+        # Process devices in backend batches of 5 (documented approach)
+        backend_batch_size = 5
+        for i in range(0, len(device_ids), backend_batch_size):
+            batch = device_ids[i:i + backend_batch_size]
+            batch_num = (i // backend_batch_size) + 1
+            total_batches = (len(device_ids) + backend_batch_size - 1) // backend_batch_size
+            
+            print(f"🌊 [WAVE API] Processing backend batch {batch_num}/{total_batches} ({len(batch)} devices)")
+            batch_start_time = time.time()
+            
+            for device_id in batch:
+                try:
+                    custom_fields = api._get_device_custom_fields(device_id)
+                    custom_fields_map[str(device_id)] = custom_fields
+                    processed += 1
+                    
+                    # Add 0.1s delay between requests (documented approach)
+                    time.sleep(0.1)
+                    
+                except Exception as e:
+                    print(f"⚠️ [WAVE API] Error fetching custom fields for device {device_id}: {e}")
+                    custom_fields_map[str(device_id)] = {}
+            
+            batch_time = time.time() - batch_start_time
+            print(f"✅ [WAVE API] Backend batch {batch_num} completed in {batch_time:.2f}s")
+        
+        end_time = time.time()
+        processing_time = end_time - start_time
+        
+        print(f"✅ [WAVE API] Custom fields loading completed in {processing_time:.2f}s - {processed} devices")
+        
+        return jsonify({
+            'custom_fields': custom_fields_map,
+            'device_count': len(custom_fields_map),
+            'processing_time': f"{processing_time:.2f}s",
+            'last_updated': datetime.utcnow().isoformat() + 'Z'
+        })
+        
+    except Exception as e:
+        print(f"❌ [ERROR] Error in wave custom fields API: {e}")
         return jsonify({
             'error': str(e),
             'custom_fields': {},
@@ -515,6 +1237,88 @@ def api_custom_fields():
 ```
 
 ---
+
+## TPM/Secure Boot Custom Fields Retrieval
+
+### 🔐 Custom Fields Overview
+
+The Ninja Usage dashboard retrieves TPM (Trusted Platform Module) and Secure Boot custom fields from NinjaRMM devices. These fields are populated by PowerShell scripts running on the devices and provide security compliance information.
+
+#### **Custom Fields Retrieved:**
+- **HasTPM**: Whether the device has a TPM chip
+- **TPMEnabled**: Whether TPM is enabled on the device  
+- **TPMVersion**: TPM version information
+- **SecureBootAvailable**: Whether Secure Boot is available
+- **SecureBootEnabled**: Whether Secure Boot is enabled
+
+#### **API Endpoint for Custom Fields:**
+```
+GET /api/v2/device/{device_id}/custom-fields
+```
+
+#### **Custom Fields Data Structure:**
+```json
+{
+  "customFields": [
+    {
+      "id": 123,
+      "name": "HasTPM",
+      "value": "true",
+      "type": "boolean"
+    },
+    {
+      "id": 124, 
+      "name": "TPMEnabled",
+      "value": "true",
+      "type": "boolean"
+    },
+    {
+      "id": 125,
+      "name": "TPMVersion", 
+      "value": "2.0, 0, 1.38",
+      "type": "string"
+    },
+    {
+      "id": 126,
+      "name": "SecureBootAvailable",
+      "value": "true", 
+      "type": "boolean"
+    },
+    {
+      "id": 127,
+      "name": "SecureBootEnabled",
+      "value": "false",
+      "type": "boolean"
+    }
+  ]
+}
+```
+
+#### **Value Interpretation:**
+```python
+def _interpret_tpm_secureboot_value(self, value, field_name):
+    """Interpret TPM/Secure Boot custom field values according to specifications"""
+    if not value or value == '':
+        return 'Not Checked'  # PowerShell script not run
+    
+    # Handle boolean fields
+    if field_name in ['hastpm', 'tpmenabled', 'securebootavailable', 'securebootenabled']:
+        if value.lower() == 'true':
+            return 'Yes'
+        elif value.lower() == 'false':
+            return 'No'
+        else:
+            return 'Unknown'
+    
+    # Handle TPM version field
+    elif field_name == 'tpmversion':
+        if value == '0.0':
+            return 'No TPM'
+        else:
+            return value  # Return version string as-is
+    
+    return value
+```
 
 ## Custom Fields Loading Methods Comparison
 
@@ -543,25 +1347,148 @@ The NinjaRMM custom fields loading system supports two distinct approaches for l
 - **Backend Delay**: None (processes all 75 devices rapidly)
 - **API Endpoint**: `/api/custom-fields`
 
-#### **Implementation:**
+#### **Why 75 Devices Per Chunk?**
+The 75-device chunk size was determined through extensive testing and represents the optimal balance between:
+- **API Performance**: Maximum throughput without overwhelming the API
+- **Reliability**: 100% success rate in testing
+- **User Experience**: Fastest loading times (1.74 devices/second)
+- **Resource Management**: Efficient memory and network usage
+
+#### **Frontend Implementation (75-Device Chunking):**
 ```javascript
-// Frontend: 75-device chunks with 200ms delays
-const chunkSize = 75;
-for (let i = 0; i < deviceIds.length; i += chunkSize) {
-    const chunk = deviceIds.slice(i, i + chunkSize);
-    await fetch('/api/custom-fields', {
-        method: 'POST',
-        body: JSON.stringify({ deviceIds: chunk })
-    });
-    await new Promise(resolve => setTimeout(resolve, 200)); // 200ms delay
+// Load custom fields for devices - OPTIMAL CHUNKING (75 devices per chunk)
+async function loadCustomFieldsForDevices(deviceIds) {
+    console.log(`🔍 [MODAL] Loading custom fields for ${deviceIds.length} devices`);
+    
+    if (deviceIds.length === 0) {
+        console.log('🔍 [MODAL] No devices to load custom fields for');
+        return;
+    }
+    
+    const startTime = Date.now();
+    const startTimeFormatted = new Date().toLocaleTimeString();
+    
+    // Optimal chunking based on test results: 75 devices per chunk
+    const chunkSize = 75;
+    console.log(`🔍 [MODAL] Using optimal chunk size: ${chunkSize} for ${deviceIds.length} devices`);
+    console.log(`⏰ [TIMING] Custom fields loading started at: ${startTimeFormatted}`);
+    
+    // Split devices into chunks
+    const chunks = [];
+    for (let i = 0; i < deviceIds.length; i += chunkSize) {
+        chunks.push(deviceIds.slice(i, i + chunkSize));
+    }
+    
+    console.log(`🔍 [MODAL] Processing ${deviceIds.length} devices in ${chunks.length} chunks`);
+    console.log(`⏰ [TIMING] Estimated completion time: ${new Date(startTime + (deviceIds.length / 1.57 * 1000)).toLocaleTimeString()} (based on 1.57 dev/s rate)`);
+    
+    let allCustomFields = {};
+    let processedChunks = 0;
+    let totalErrors = 0;
+    let totalDevicesProcessed = 0;
+    
+    try {
+        for (let i = 0; i < chunks.length; i++) {
+            const chunkNum = i + 1;
+            const chunk = chunks[i];
+            
+            console.log(`🔍 [MODAL] Processing chunk ${chunkNum}/${chunks.length} (${chunk.length} devices)`);
+            
+            try {
+                const chunkStartTime = Date.now();
+                const chunkStartFormatted = new Date().toLocaleTimeString();
+                
+                console.log(`⏰ [TIMING] Chunk ${chunkNum} started at: ${chunkStartFormatted}`);
+                
+                const response = await fetch('/dashboard/ninja-usage/api/custom-fields', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ deviceIds: chunk })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                const chunkTime = Date.now() - chunkStartTime;
+                const chunkTimeSeconds = (chunkTime / 1000).toFixed(2);
+                const chunkRate = (chunk.length / (chunkTime / 1000)).toFixed(2);
+                
+                console.log(`✅ [MODAL] Chunk ${chunkNum} completed in ${chunkTime}ms (${chunkTimeSeconds}s) - ${data.device_count} devices`);
+                console.log(`⏰ [TIMING] Chunk ${chunkNum} rate: ${chunkRate} devices/second`);
+                
+                Object.assign(allCustomFields, data.custom_fields);
+                totalDevicesProcessed += data.device_count;
+                processedChunks++;
+                
+                // Update the modal table with custom fields data after each chunk
+                updateModalWithCustomFields(allCustomFields);
+                
+                // Add a delay between chunks to avoid overwhelming the API
+                if (i < chunks.length - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 200)); // 200ms delay
+                }
+                
+            } catch (chunkError) {
+                console.error(`❌ [MODAL] Error processing chunk ${chunkNum}:`, chunkError);
+                totalErrors++;
+                // Continue to next chunk even if one fails
+            }
+        }
+        
+        const endTime = Date.now();
+        const totalTime = endTime - startTime;
+        const totalTimeSeconds = (totalTime / 1000).toFixed(2);
+        const endTimeFormatted = new Date().toLocaleTimeString();
+        const overallRate = (totalDevicesProcessed / (totalTime / 1000)).toFixed(2);
+        
+        console.log(`🎉 [MODAL COMPLETION] Custom fields loading completed!`);
+        console.log(`⏰ [TIMING] Started: ${startTimeFormatted} | Ended: ${endTimeFormatted}`);
+        console.log(`⏰ [TIMING] Total time: ${totalTime}ms (${totalTimeSeconds}s)`);
+        console.log(`📊 [RESULTS] ${processedChunks}/${chunks.length} chunks successful, ${totalErrors} failed`);
+        console.log(`📊 [RESULTS] ${totalDevicesProcessed}/${deviceIds.length} devices processed`);
+        console.log(`📊 [RESULTS] Overall rate: ${overallRate} devices/second`);
+        
+    } catch (error) {
+        const totalTime = Date.now() - startTime;
+        const totalTimeSeconds = (totalTime / 1000).toFixed(2);
+        console.error(`❌ [MODAL] Error in chunked loading after ${totalTimeSeconds}s:`, error);
+    }
 }
 ```
 
+#### **Backend Implementation (75-Device Chunking):**
 ```python
 # Backend: Process all devices in chunk without delays
-for device_id in chunk:
-    custom_fields = api._get_device_custom_fields(device_id)
-    # No delay between devices within chunk
+# Process devices in optimal chunks of 75 (tested to work reliably)
+chunk_size = 75
+for i in range(0, len(device_ids), chunk_size):
+    chunk = device_ids[i:i + chunk_size]
+    chunk_num = (i // chunk_size) + 1
+    total_chunks = (len(device_ids) + chunk_size - 1) // chunk_size
+    
+    print(f"🔍 [API] Processing chunk {chunk_num}/{total_chunks} ({len(chunk)} devices)")
+    chunk_start_time = time.time()
+    
+    for device_id in chunk:
+        try:
+            custom_fields = api._get_device_custom_fields(device_id)
+            custom_fields_map[str(device_id)] = custom_fields
+            processed += 1
+        except Exception as e:
+            print(f"⚠️ [API] Error fetching custom fields for device {device_id}: {e}")
+            custom_fields_map[str(device_id)] = {}
+    
+    chunk_time = time.time() - chunk_start_time
+    print(f"✅ [API] Chunk {chunk_num} completed in {chunk_time:.2f}s")
 ```
 
 #### **Advantages:**
@@ -1273,7 +2200,7 @@ python3 test_focused_dashboard.py
 - [API Documentation](./API_DOCUMENTATION.md) - **AUTHORITATIVE** comprehensive API documentation for all integrations
 - [Dashboard Standards](./DASHBOARD_STANDARDS.md) - Dashboard implementation standards
 - [Development Guide](./DEVELOPMENT_GUIDE.md) - Development guidelines
-- [TPM & Secure Boot Documentation](../../NINJA_API_TPM_SECUREBOOT_DOCUMENTATION.md) - Custom fields documentation
+- [Custom Fields Integration](#custom-fields-integration) - TPM & Secure Boot custom fields documentation
 
 > **📖 Comprehensive API Documentation**: For complete API documentation including authentication methods, error handling, best practices, and troubleshooting procedures for all integrations (ConnectWise, Veeam VSPC, Veeam VBR, NinjaRMM, ThreatLocker, Fortigate), see [API Documentation](./API_DOCUMENTATION.md).
 
@@ -1383,6 +2310,109 @@ async function loadCustomFieldsForDevices(deviceIds) {
 }
 ```
 
+##### 6. Modal Data Fields Missing or Incorrect
+**Symptoms**: Modal shows "N/A" for fields that should have data, or displays wrong values  
+**Root Cause**: Incorrect API path mapping or data transformation issues  
+**Solution**: Verify field mapping and data transformation functions
+
+```python
+# Debug modal data extraction
+def debug_modal_data(device):
+    """Debug function to check modal data extraction"""
+    print("=== MODAL DATA DEBUG ===")
+    
+    # Check basic fields
+    print(f"System Name: {device.get('systemName', 'MISSING')}")
+    print(f"Display Name: {device.get('displayName', 'MISSING')}")
+    print(f"Status: {device.get('status', 'MISSING')}")
+    
+    # Check nested objects
+    os_data = device.get('os', {})
+    print(f"OS Name: {os_data.get('name', 'MISSING')}")
+    print(f"OS Version: {os_data.get('version', 'MISSING')}")
+    
+    system_data = device.get('system', {})
+    print(f"Manufacturer: {system_data.get('manufacturer', 'MISSING')}")
+    print(f"Model: {system_data.get('model', 'MISSING')}")
+    
+    # Check processors
+    processors = device.get('processors', [])
+    if processors:
+        print(f"CPU Model: {processors[0].get('name', 'MISSING')}")
+        print(f"CPU Cores: {processors[0].get('numCores', 'MISSING')}")
+    else:
+        print("CPU: NO PROCESSORS FOUND")
+    
+    # Check memory
+    memory = device.get('memory', 0)
+    print(f"Memory (bytes): {memory}")
+    print(f"Memory (GiB): {convert_to_gib(memory)}")
+    
+    # Check timestamps
+    print(f"Last Contact: {device.get('lastContact', 'MISSING')}")
+    print(f"Last Update: {device.get('lastUpdate', 'MISSING')}")
+    
+    return True
+```
+
+##### 7. Organization/Location Names Not Displaying
+**Symptoms**: Modal shows organization/location IDs instead of names  
+**Root Cause**: Missing organization/location lookup data  
+**Solution**: Ensure organization and location APIs are called
+
+```python
+# Fix organization/location name display
+def get_modal_data_with_names(device, organizations, locations):
+    """Get modal data with proper organization/location names"""
+    
+    # Create lookup maps
+    org_map = {org['id']: org['name'] for org in organizations}
+    loc_map = {loc['id']: loc['name'] for loc in locations}
+    
+    modal_data = get_modal_device_data(device)
+    
+    # Add proper names
+    modal_data['organizationName'] = org_map.get(device.get('organizationId'), 'N/A')
+    modal_data['location'] = loc_map.get(device.get('locationId'), 'N/A')
+    
+    return modal_data
+```
+
+##### 8. Memory/Storage Data Formatting Issues
+**Symptoms**: Memory shows as bytes instead of GiB, storage not formatted properly  
+**Root Cause**: Missing data transformation functions  
+**Solution**: Implement proper data transformation
+
+```python
+# Fix memory and storage formatting
+def format_memory_display(memory_bytes):
+    """Format memory for display"""
+    if not memory_bytes or memory_bytes == 0:
+        return 'N/A'
+    
+    # Convert to GiB
+    gib = round(memory_bytes / (1024**3), 2)
+    return f"{gib} GiB"
+
+def format_storage_display(volumes):
+    """Format storage volumes for display"""
+    if not volumes:
+        return 'N/A'
+    
+    formatted_volumes = []
+    for volume in volumes:
+        name = volume.get('name', 'Unknown')
+        size_bytes = volume.get('size', 0)
+        
+        if size_bytes > 0:
+            size_gb = round(size_bytes / (1024**3), 1)
+            formatted_volumes.append(f"{name}: {size_gb}GB")
+        else:
+            formatted_volumes.append(f"{name}: Unknown Size")
+    
+    return ', '.join(formatted_volumes)
+```
+
 #### Testing Custom Fields Integration
 
 ##### Manual Testing Steps
@@ -1452,6 +2482,6 @@ python3 test_focused_dashboard.py
 
 ---
 
-*Last Updated: 2025-01-11*
+*Last Updated: 2025-10-02*
 *Version: 1.1 (AI-Optimized)*
 *Maintained by: ES Dashboards Team*

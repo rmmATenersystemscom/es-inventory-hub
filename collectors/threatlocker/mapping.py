@@ -13,12 +13,13 @@ def normalize_threatlocker_device(raw: Dict[str, Any]) -> Dict[str, Any]:
     Returns:
         dict: Normalized device data ready for DB insert
     """
-    # Get vendor device key (use computer ID as unique identifier)
-    vendor_device_key = str(raw.get('computerId', ''))
-    
     # Get hostname (hostname field is required - no fallbacks)
     # Note: computerName contains user-friendly names like "CHI-4YHKJL3 | Keith Oneil" and is used for display_name
     hostname = raw.get('hostname', '')
+    
+    # Get vendor device key (use hostname as unique identifier)
+    # This ensures the same physical device always gets the same vendor_device_key
+    vendor_device_key = hostname
     
     # Validate that hostname is present - this is critical for device matching
     if not hostname or not hostname.strip():

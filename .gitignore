@@ -90,3 +90,4 @@ system-backups/
 temp_*.service
 temp_*.timer
 variances-*.service
+.env

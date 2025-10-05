@@ -16,13 +16,34 @@ import os
 import sys
 import json
 import subprocess
+import csv
+import io
 from datetime import date, datetime, timedelta
 from typing import Dict, List, Any, Optional
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
+
+# Export functionality imports
+try:
+    from reportlab.lib.pagesizes import letter, A4
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib import colors
+    from reportlab.lib.units import inch
+    REPORTLAB_AVAILABLE = True
+except ImportError:
+    REPORTLAB_AVAILABLE = False
+
+try:
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+    OPENPYXL_AVAILABLE = True
+except ImportError:
+    OPENPYXL_AVAILABLE = False
 
 # Add the project root to Python path
 sys.path.insert(0, '/opt/es-inventory-hub')
@@ -30,7 +51,12 @@ sys.path.insert(0, '/opt/es-inventory-hub')
 from collectors.checks.cross_vendor import run_cross_vendor_checks
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for cross-origin requests
+# Enable CORS for cross-origin requests with permissive settings for dashboard access
+CORS(app, 
+     origins=['*'],  # Allow all origins for now - can be restricted later
+     methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+     allow_headers=['Content-Type', 'Authorization', 'X-Requested-With'],
+     supports_credentials=True)
 
 # Database connection
 from common.config import get_dsn
@@ -57,6 +83,156 @@ def get_latest_matching_date() -> Optional[date]:
         
         result = session.execute(query).fetchone()
         return result[0] if result else None
+
+def get_organization_breakdown(session, exceptions, report_date):
+    """Get detailed breakdown of exceptions by organization for each variance type."""
+    # Get organization data for each exception
+    org_query = text("""
+        SELECT 
+            e.id,
+            e.type,
+            e.hostname,
+            e.details,
+            e.resolved,
+            COALESCE(
+                ds_tl.organization_name,
+                ds_ninja.organization_name,
+                'Unknown'
+            ) as organization_name,
+            COALESCE(
+                ds_tl.display_name,
+                ds_ninja.display_name,
+                e.hostname
+            ) as display_name,
+            COALESCE(
+                ds_tl.device_status,
+                ds_ninja.device_status,
+                'Unknown'
+            ) as billing_status,
+            CASE 
+                WHEN v_tl.name = 'ThreatLocker' THEN 'ThreatLocker'
+                WHEN v_ninja.name = 'Ninja' THEN 'Ninja'
+                ELSE 'Unknown'
+            END as vendor
+        FROM exceptions e
+        LEFT JOIN device_snapshot ds_tl ON ds_tl.hostname = e.hostname 
+            AND ds_tl.snapshot_date = :report_date
+            AND ds_tl.vendor_id = (SELECT id FROM vendor WHERE name = 'ThreatLocker')
+        LEFT JOIN vendor v_tl ON ds_tl.vendor_id = v_tl.id
+        LEFT JOIN device_snapshot ds_ninja ON ds_ninja.hostname = e.hostname 
+            AND ds_ninja.snapshot_date = :report_date
+            AND ds_ninja.vendor_id = (SELECT id FROM vendor WHERE name = 'Ninja')
+        LEFT JOIN vendor v_ninja ON ds_ninja.vendor_id = v_ninja.id
+        WHERE e.date_found = :report_date
+        ORDER BY e.type, organization_name, e.hostname
+    """)
+    
+    org_results = session.execute(org_query, {'report_date': report_date}).fetchall()
+    
+    # Group by type and organization
+    by_organization = {}
+    
+    for row in org_results:
+        exc_id, exc_type, hostname, details, resolved, org_name, display_name, billing_status, vendor = row
+        
+        # Map exception types to dashboard format
+        dashboard_type = None
+        if exc_type == "MISSING_NINJA":
+            dashboard_type = "missing_in_ninja"
+        elif exc_type == "DUPLICATE_TL":
+            dashboard_type = "threatlocker_duplicates"
+        elif exc_type == "SPARE_MISMATCH":
+            dashboard_type = "ninja_duplicates"
+        elif exc_type == "DISPLAY_NAME_MISMATCH":
+            dashboard_type = "display_name_mismatches"
+        
+        if not dashboard_type:
+            continue
+            
+        if dashboard_type not in by_organization:
+            by_organization[dashboard_type] = {
+                "total_count": 0,
+                "by_organization": {}
+            }
+        
+        # For Missing in Ninja, ThreatLocker Duplicates, and Ninja Duplicates, extract organization from details if not found in device_snapshot
+        if exc_type in ["MISSING_NINJA", "DUPLICATE_TL", "SPARE_MISMATCH"] and org_name == "Unknown" and details:
+            # Extract organization from the details JSONB field
+            details_dict = details if isinstance(details, dict) else {}
+            
+            # For SPARE_MISMATCH (Ninja Duplicates), prefer ninja_org_name over tl_org_name
+            if exc_type == "SPARE_MISMATCH":
+                ninja_org = details_dict.get('ninja_org_name', '')
+                tl_org = details_dict.get('tl_org_name', '')
+                
+                # Use ninja_org if it exists and is not empty, otherwise use tl_org, otherwise 'Unknown'
+                if ninja_org and ninja_org.strip():
+                    org_name = ninja_org
+                    vendor = 'Ninja'
+                elif tl_org and tl_org.strip():
+                    org_name = tl_org
+                    vendor = 'ThreatLocker'
+                else:
+                    org_name = 'Unknown'
+            else:
+                # For MISSING_NINJA and DUPLICATE_TL, use tl_org_name
+                org_name = details_dict.get('tl_org_name', 'Unknown')
+                if details_dict.get('tl_org_name'):
+                    vendor = 'ThreatLocker'
+            
+            # Update display_name from site information
+            if details_dict.get('tl_site_name'):
+                display_name = f"{hostname} ({details_dict.get('tl_site_name')})"
+            elif details_dict.get('ninja_site'):
+                display_name = f"{hostname} ({details_dict.get('ninja_site')})"
+        
+        # For Display Name Mismatches, extract display name information from details
+        if exc_type == "DISPLAY_NAME_MISMATCH" and details:
+            details_dict = details if isinstance(details, dict) else {}
+            
+            # Extract organization from details (prefer ninja_org_name)
+            ninja_org = details_dict.get('ninja_org_name', '')
+            tl_org = details_dict.get('tl_org_name', '')
+            
+            if ninja_org and ninja_org.strip():
+                org_name = ninja_org
+                vendor = 'Ninja'
+            elif tl_org and tl_org.strip():
+                org_name = tl_org
+                vendor = 'ThreatLocker'
+            
+            # Use the Ninja display name as the primary display name for the modal
+            ninja_display = details_dict.get('ninja_display_name', '')
+            if ninja_display and ninja_display.strip():
+                display_name = ninja_display
+        
+        if org_name not in by_organization[dashboard_type]["by_organization"]:
+            by_organization[dashboard_type]["by_organization"][org_name] = []
+        
+        # Create device entry
+        device_entry = {
+            "hostname": hostname,
+            "vendor": vendor,
+            "display_name": display_name,
+            "organization": org_name,
+            "billing_status": billing_status,
+            "action": "Investigate"
+        }
+        
+        # For Display Name Mismatches, add specific display name information for the modal
+        if exc_type == "DISPLAY_NAME_MISMATCH" and details:
+            details_dict = details if isinstance(details, dict) else {}
+            device_entry.update({
+                "ninja_display_name": details_dict.get('ninja_display_name', ''),
+                "threatlocker_display_name": details_dict.get('tl_display_name', ''),
+                "ninja_hostname": details_dict.get('ninja_hostname', ''),
+                "threatlocker_hostname": details_dict.get('tl_hostname', '')
+            })
+        
+        by_organization[dashboard_type]["by_organization"][org_name].append(device_entry)
+        by_organization[dashboard_type]["total_count"] += 1
+    
+    return by_organization
 
 def get_data_status() -> Dict[str, Any]:
     """Determine the status of the data (current, stale, out_of_sync)."""
@@ -204,6 +380,29 @@ def get_latest_variance_report():
         # Get collection timestamps
         collection_info = _get_collection_timestamps(session, latest_date)
         
+        # Get detailed organization breakdown
+        org_breakdown = get_organization_breakdown(session, exceptions, latest_date)
+        
+        # Update dashboard format with organization data
+        enhanced_dashboard_format = {
+            "missing_in_ninja": org_breakdown.get("missing_in_ninja", {
+                "total_count": exception_counts.get("MISSING_NINJA", 0),
+                "by_organization": {}
+            }),
+            "threatlocker_duplicates": org_breakdown.get("threatlocker_duplicates", {
+                "total_count": exception_counts.get("DUPLICATE_TL", 0),
+                "by_organization": {}
+            }),
+            "ninja_duplicates": org_breakdown.get("ninja_duplicates", {
+                "total_count": exception_counts.get("SPARE_MISMATCH", 0),
+                "by_organization": {}
+            }),
+            "display_name_mismatches": org_breakdown.get("display_name_mismatches", {
+                "total_count": exception_counts.get("DISPLAY_NAME_MISMATCH", 0),
+                "by_organization": {}
+            })
+        }
+        
         return jsonify({
             "report_date": latest_date.isoformat(),
             "data_status": get_data_status(),
@@ -221,8 +420,8 @@ def get_latest_variance_report():
                 "last_collection": collection_info["last_collection"],
                 "data_freshness": collection_info["data_freshness"]
             },
-            # Dashboard-compatible format
-            **dashboard_format
+            # Enhanced dashboard-compatible format with organization breakdown
+            **enhanced_dashboard_format
         })
 
 @app.route('/api/variance-report/<date_str>', methods=['GET'])
@@ -284,6 +483,9 @@ def get_variance_report_by_date(date_str: str):
                 'resolved': exc[5]
             })
         
+        # Get collection timestamps
+        collection_info = _get_collection_timestamps(session, report_date)
+        
         return jsonify({
             "report_date": report_date.isoformat(),
             "summary": {
@@ -292,7 +494,8 @@ def get_variance_report_by_date(date_str: str):
                 "resolved_count": sum(1 for exc in exceptions if exc[5])
             },
             "exceptions_by_type": by_type,
-            "exception_counts": {exc_type: len(devices) for exc_type, devices in by_type.items()}
+            "exception_counts": {exc_type: len(devices) for exc_type, devices in by_type.items()},
+            "collection_info": collection_info
         })
 
 @app.route('/api/collectors/run', methods=['POST'])
@@ -398,6 +601,137 @@ def get_collector_status():
         return jsonify({
             'error': str(e)
         }), 500
+
+@app.route('/api/collectors/history', methods=['GET'])
+def get_collection_history():
+    """
+    Get collection history for the last 10 runs.
+    
+    Returns collection runs with timestamps, status, and duration.
+    """
+    limit = int(request.args.get('limit', 10))
+    
+    with get_session() as session:
+        # Get recent job runs
+        query = text("""
+            SELECT 
+                job_name,
+                started_at,
+                ended_at,
+                status,
+                message,
+                CASE 
+                    WHEN ended_at IS NOT NULL THEN 
+                        EXTRACT(EPOCH FROM (ended_at - started_at))::INTEGER
+                    ELSE NULL
+                END as duration_seconds
+            FROM job_runs
+            WHERE job_name IN ('ninja-collector', 'threatlocker-collector')
+            ORDER BY started_at DESC
+            LIMIT :limit
+        """)
+        
+        results = session.execute(query, {'limit': limit}).fetchall()
+        
+        # Format results
+        history = []
+        for row in results:
+            job_name, started_at, ended_at, status, message, duration_seconds = row
+            
+            # Calculate duration
+            duration_str = None
+            if duration_seconds is not None:
+                if duration_seconds < 60:
+                    duration_str = f"{duration_seconds}s"
+                elif duration_seconds < 3600:
+                    minutes = duration_seconds // 60
+                    seconds = duration_seconds % 60
+                    duration_str = f"{minutes}m {seconds}s"
+                else:
+                    hours = duration_seconds // 3600
+                    minutes = (duration_seconds % 3600) // 60
+                    duration_str = f"{hours}h {minutes}m"
+            
+            history.append({
+                'job_name': job_name,
+                'started_at': started_at.isoformat() if started_at else None,
+                'ended_at': ended_at.isoformat() if ended_at else None,
+                'status': status,
+                'message': message,
+                'duration': duration_str,
+                'duration_seconds': duration_seconds
+            })
+        
+        return jsonify({
+            'collection_history': history,
+            'total_runs': len(history),
+            'generated_at': datetime.now().isoformat()
+        })
+
+@app.route('/api/collectors/progress', methods=['GET'])
+def get_collection_progress():
+    """
+    Get real-time collection progress if collectors are currently running.
+    
+    Returns progress information for active collection jobs.
+    """
+    with get_session() as session:
+        # Check for active collections
+        query = text("""
+            SELECT 
+                job_name,
+                started_at,
+                status,
+                message
+            FROM job_runs
+            WHERE job_name IN ('ninja-collector', 'threatlocker-collector')
+            AND status IN ('running', 'started')
+            AND started_at >= CURRENT_DATE
+            ORDER BY started_at DESC
+        """)
+        
+        results = session.execute(query).fetchall()
+        
+        # Check systemd service status for additional info
+        active_collections = []
+        for row in results:
+            job_name, started_at, status, message = row
+            
+            # Get systemd status
+            service_name = f"{job_name}.service"
+            if job_name == 'threatlocker-collector':
+                service_name = "threatlocker-collector@rene.service"
+            
+            try:
+                systemd_result = subprocess.run([
+                    'systemctl', 'is-active', service_name
+                ], capture_output=True, text=True)
+                
+                is_active = systemd_result.stdout.strip() == 'active'
+            except:
+                is_active = False
+            
+            # Calculate elapsed time
+            elapsed_seconds = None
+            if started_at:
+                elapsed = datetime.now() - started_at
+                elapsed_seconds = int(elapsed.total_seconds())
+            
+            active_collections.append({
+                'job_name': job_name,
+                'started_at': started_at.isoformat() if started_at else None,
+                'status': status,
+                'message': message,
+                'is_active': is_active,
+                'elapsed_seconds': elapsed_seconds,
+                'elapsed_time': f"{elapsed_seconds // 60}m {elapsed_seconds % 60}s" if elapsed_seconds else None
+            })
+        
+        return jsonify({
+            'active_collections': active_collections,
+            'total_active': len(active_collections),
+            'generated_at': datetime.now().isoformat()
+        })
 
 @app.route('/api/exceptions', methods=['GET'])
 def get_exceptions():
@@ -884,26 +1218,37 @@ def _get_collection_timestamps(session, latest_date: date) -> dict:
         FROM job_runs 
         WHERE status = 'completed'
         AND job_name IN ('ninja-collector', 'threatlocker-collector')
-        AND DATE(started_at) = :collection_date
         ORDER BY started_at DESC
     """)
     
-    results = session.execute(collection_query, {'collection_date': latest_date}).fetchall()
+    results = session.execute(collection_query).fetchall()
     
     # Initialize timestamps
     ninja_collected = None
     threatlocker_collected = None
     last_collection = None
     
-    # Process results
+    # Process results - take the most recent for each collector type
     for job_name, started_at, ended_at in results:
         # Use ended_at if available, otherwise started_at
         timestamp = ended_at if ended_at else started_at
         
-        if job_name == 'ninja-collector':
-            ninja_collected = timestamp.isoformat() + 'Z'
-        elif job_name == 'threatlocker-collector':
-            threatlocker_collected = timestamp.isoformat() + 'Z'
+        # Format timestamp properly (ISO 8601 with Z suffix)
+        # Remove any existing timezone info and add Z for UTC
+        if timestamp.tzinfo is not None:
+            # Convert to UTC and format
+            utc_timestamp = timestamp.astimezone().replace(tzinfo=None)
+            formatted_timestamp = utc_timestamp.isoformat() + 'Z'
+        else:
+            # Already UTC, just add Z
+            formatted_timestamp = timestamp.isoformat() + 'Z'
+        
+        # Only set if we haven't found a timestamp for this collector yet
+        # (since results are ordered by started_at DESC, first occurrence is most recent)
+        if job_name == 'ninja-collector' and ninja_collected is None:
+            ninja_collected = formatted_timestamp
+        elif job_name == 'threatlocker-collector' and threatlocker_collected is None:
+            threatlocker_collected = formatted_timestamp
     
     # Determine the latest collection time
     timestamps = [t for t in [ninja_collected, threatlocker_collected] if t]
@@ -912,7 +1257,9 @@ def _get_collection_timestamps(session, latest_date: date) -> dict:
         parsed_times = []
         for ts in timestamps:
             try:
-                parsed_times.append(datetime.fromisoformat(ts.replace('Z', '+00:00')))
+                # Remove Z suffix and parse as datetime
+                clean_ts = ts.replace('Z', '')
+                parsed_times.append(datetime.fromisoformat(clean_ts))
             except:
                 continue
         
@@ -1157,6 +1504,1127 @@ def search_devices():
             'warning': 'Some hostnames may be truncated due to Ninja 15-character limit' if truncated_count > 0 else None
         })
 
+# Export Endpoints
+
+@app.route('/api/variances/export/csv', methods=['GET'])
+def export_variances_csv():
+    """
+    Export variance data to CSV format.
+    
+    Query parameters:
+    - date: Specific date (YYYY-MM-DD) or 'latest' (default)
+    - include_resolved: Include resolved exceptions (default: false)
+    - variance_type: Filter by exception type (optional)
+    """
+    # Get query parameters
+    date_param = request.args.get('date', 'latest')
+    include_resolved = request.args.get('include_resolved', 'false').lower() == 'true'
+    exception_type = request.args.get('variance_type', request.args.get('type', ''))
+    
+    # Determine report date
+    if date_param == 'latest':
+        report_date = get_latest_matching_date()
+        if not report_date:
+            return jsonify({
+                "error": "No matching data found between vendors",
+                "status": "out_of_sync"
+            }), 400
+    else:
+        try:
+            report_date = datetime.strptime(date_param, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
+    
+    with get_session() as session:
+        # Check if data exists for this date
+        check_query = text("""
+            SELECT COUNT(DISTINCT vendor_id) as vendor_count
+            FROM device_snapshot
+            WHERE snapshot_date = :report_date
+        """)
+        
+        result = session.execute(check_query, {'report_date': report_date}).fetchone()
+        
+        if result[0] < 2:
+            return jsonify({
+                "error": f"Insufficient data for {date_param}. Found {result[0]} vendors, need 2.",
+                "status": "insufficient_data"
+            }), 400
+        
+        # Build query for exceptions
+        query_str = """
+            SELECT 
+                e.id,
+                e.date_found,
+                e.type,
+                e.hostname,
+                e.details,
+                e.resolved,
+                e.resolved_date,
+                e.resolved_by,
+                e.manually_updated_at,
+                e.manually_updated_by,
+                e.variance_status,
+                e.update_type,
+                e.old_value,
+                e.new_value
+            FROM exceptions e
+            WHERE e.date_found = :report_date
+        """
+        
+        params = {'report_date': report_date}
+        
+        # Add filters
+        if not include_resolved:
+            query_str += " AND e.resolved = FALSE"
+        
+        if exception_type:
+            query_str += " AND e.type = :exception_type"
+            params['exception_type'] = exception_type
+        
+        query_str += " ORDER BY e.type, e.hostname"
+        
+        query = text(query_str)
+        
+        exceptions = session.execute(query, params).fetchall()
+        
+        # Generate CSV content
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Write header
+        writer.writerow([
+            'ID', 'Date Found', 'Type', 'Hostname', 'Resolved', 'Resolved Date',
+            'Resolved By', 'Manually Updated At', 'Manually Updated By',
+            'Variance Status', 'Update Type', 'Organization', 'Details'
+        ])
+        
+        # Write data rows
+        for exc in exceptions:
+            details = exc[4] if exc[4] else {}
+            org_name = details.get('tl_org_name', details.get('ninja_org_name', 'Unknown'))
+            
+            writer.writerow([
+                exc[0],  # ID
+                exc[1].isoformat() if exc[1] else '',  # Date Found
+                exc[2],  # Type
+                exc[3],  # Hostname
+                'Yes' if exc[5] else 'No',  # Resolved
+                exc[6].isoformat() if exc[6] else '',  # Resolved Date
+                exc[7] or '',  # Resolved By
+                exc[8].isoformat() if exc[8] else '',  # Manually Updated At
+                exc[9] or '',  # Manually Updated By
+                exc[10] or 'active',  # Variance Status
+                exc[11] or '',  # Update Type
+                org_name,  # Organization
+                json.dumps(details) if details else ''  # Details
+            ])
+        
+        # Create response
+        csv_content = output.getvalue()
+        output.close()
+        
+        # Generate filename
+        filename = f"variances-{report_date.isoformat()}.csv"
+        if exception_type:
+            filename = f"variances-{exception_type.lower()}-{report_date.isoformat()}.csv"
+        
+        response = Response(
+            csv_content,
+            mimetype='text/csv',
+            headers={
+                'Content-Disposition': f'attachment; filename={filename}',
+                'Content-Type': 'text/csv; charset=utf-8'
+            }
+        )
+        
+        return response
+
+@app.route('/api/variances/available-dates', methods=['GET'])
+def get_available_dates():
+    """
+    Get available analysis dates where both vendors have data.
+    
+    Returns list of dates with data quality status.
+    """
+    with get_session() as session:
+        # Get dates with both vendors
+        query = text("""
+            SELECT 
+                snapshot_date,
+                COUNT(DISTINCT vendor_id) as vendor_count,
+                COUNT(DISTINCT CASE WHEN v.name = 'Ninja' THEN ds.vendor_id END) as ninja_count,
+                COUNT(DISTINCT CASE WHEN v.name = 'ThreatLocker' THEN ds.vendor_id END) as threatlocker_count
+            FROM device_snapshot ds
+            JOIN vendor v ON ds.vendor_id = v.id
+            WHERE snapshot_date >= CURRENT_DATE - INTERVAL '30 days'
+            GROUP BY snapshot_date
+            HAVING COUNT(DISTINCT vendor_id) = 2
+            ORDER BY snapshot_date DESC
+        """)
+        
+        results = session.execute(query).fetchall()
+        
+        # Get exception counts for each date
+        dates_with_exceptions = []
+        for row in results:
+            snapshot_date = row[0]
+            ninja_count = row[2]
+            threatlocker_count = row[3]
+            
+            # Get exception count for this date
+            exception_query = text("""
+                SELECT 
+                    COUNT(*) as total_exceptions,
+                    COUNT(CASE WHEN resolved = FALSE THEN 1 END) as unresolved_exceptions
+                FROM exceptions
+                WHERE date_found = :snapshot_date
+            """)
+            
+            exception_result = session.execute(exception_query, {'snapshot_date': snapshot_date}).fetchone()
+            total_exceptions = exception_result[0] if exception_result else 0
+            unresolved_exceptions = exception_result[1] if exception_result else 0
+            
+            # Determine data quality
+            days_old = (date.today() - snapshot_date).days
+            if days_old <= 1:
+                quality_status = "current"
+            elif days_old <= 3:
+                quality_status = "recent"
+            else:
+                quality_status = "stale"
+            
+            dates_with_exceptions.append({
+                'date': snapshot_date.isoformat(),
+                'ninja_devices': ninja_count,
+                'threatlocker_devices': threatlocker_count,
+                'total_exceptions': total_exceptions,
+                'unresolved_exceptions': unresolved_exceptions,
+                'data_quality': quality_status,
+                'days_old': days_old
+            })
+        
+        return jsonify({
+            'available_dates': dates_with_exceptions,
+            'date_range': {
+                'earliest': dates_with_exceptions[-1]['date'] if dates_with_exceptions else None,
+                'latest': dates_with_exceptions[0]['date'] if dates_with_exceptions else None
+            },
+            'total_dates': len(dates_with_exceptions)
+        })
+
+@app.route('/api/variances/historical/<date_str>', methods=['GET'])
+def get_historical_variance_data(date_str: str):
+    """
+    Get variance data for a specific historical date.
+    
+    Same structure as /api/variance-report/latest but for historical date.
+    """
+    # Get query parameters
+    include_resolved = request.args.get('include_resolved', 'false').lower() == 'true'
+    
+    try:
+        report_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
+    
+    with get_session() as session:
+        # Check if data exists for this date
+        check_query = text("""
+            SELECT COUNT(DISTINCT vendor_id) as vendor_count
+            FROM device_snapshot
+            WHERE snapshot_date = :report_date
+        """)
+        
+        result = session.execute(check_query, {'report_date': report_date}).fetchone()
+        
+        if result[0] < 2:
+            return jsonify({
+                "error": f"Insufficient data for {date_str}. Found {result[0]} vendors, need 2.",
+                "status": "insufficient_data"
+            }), 400
+        
+        # Get exceptions for the date
+        if include_resolved:
+            query = text("""
+                SELECT id, date_found, type, hostname, details, resolved
+                FROM exceptions
+                WHERE date_found = :report_date
+                ORDER BY type, hostname
+            """)
+        else:
+            query = text("""
+                SELECT id, date_found, type, hostname, details, resolved
+                FROM exceptions
+                WHERE date_found = :report_date
+                AND resolved = FALSE
+                ORDER BY type, hostname
+            """)
+        
+        exceptions = session.execute(query, {'report_date': report_date}).fetchall()
+        
+        # Group by type
+        by_type = {}
+        for exc in exceptions:
+            exc_type = exc[2]
+            if exc_type not in by_type:
+                by_type[exc_type] = []
+            by_type[exc_type].append({
+                'id': exc[0],
+                'hostname': exc[3],
+                'details': exc[4],
+                'resolved': exc[5]
+            })
+        
+        # Calculate totals
+        total_exceptions = len(exceptions)
+        unresolved_count = sum(1 for exc in exceptions if not exc[5])
+        
+        # Get device counts for this date
+        device_query = text("""
+            SELECT v.name as vendor, COUNT(*) as count
+            FROM device_snapshot ds
+            JOIN vendor v ON ds.vendor_id = v.id
+            WHERE ds.snapshot_date = :report_date
+            GROUP BY v.name
+        """)
+        
+        device_counts = {row[0]: row[1] for row in session.execute(device_query, {'report_date': report_date}).fetchall()}
+        
+        # Get detailed organization breakdown
+        org_breakdown = get_organization_breakdown(session, exceptions, report_date)
+        
+        # Create enhanced format with organization data
+        enhanced_format = {
+            "missing_in_ninja": org_breakdown.get("missing_in_ninja", {
+                "total_count": 0,
+                "by_organization": {}
+            }),
+            "threatlocker_duplicates": org_breakdown.get("threatlocker_duplicates", {
+                "total_count": 0,
+                "by_organization": {}
+            }),
+            "ninja_duplicates": org_breakdown.get("ninja_duplicates", {
+                "total_count": 0,
+                "by_organization": {}
+            }),
+            "display_name_mismatches": org_breakdown.get("display_name_mismatches", {
+                "total_count": 0,
+                "by_organization": {}
+            })
+        }
+        
+        return jsonify({
+            "report_date": report_date.isoformat(),
+            "summary": {
+                "total_exceptions": total_exceptions,
+                "unresolved_count": unresolved_count,
+                "resolved_count": total_exceptions - unresolved_count
+            },
+            "exceptions_by_type": by_type,
+            "exception_counts": {exc_type: len(devices) for exc_type, devices in by_type.items()},
+            "device_counts": device_counts,
+            "data_status": {
+                "status": "historical",
+                "message": f"Historical data for {date_str}",
+                "latest_date": report_date.isoformat()
+            },
+            # Enhanced format with organization breakdown
+            **enhanced_format
+        })
+
+@app.route('/api/variances/trends', methods=['GET'])
+def get_variance_trends():
+    """
+    Get trend analysis for variance data over time.
+    
+    Query parameters:
+    - start_date: Start date (YYYY-MM-DD)
+    - end_date: End date (YYYY-MM-DD)
+    - type: Exception type filter (optional)
+    """
+    start_date_str = request.args.get('start_date')
+    end_date_str = request.args.get('end_date')
+    exception_type = request.args.get('type', '')
+    
+    if not start_date_str or not end_date_str:
+        return jsonify({"error": "start_date and end_date are required"}), 400
+    
+    try:
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
+    
+    if start_date > end_date:
+        return jsonify({"error": "start_date must be before end_date"}), 400
+    
+    with get_session() as session:
+        # Build trend query
+        query = text("""
+            SELECT 
+                date_found,
+                type,
+                COUNT(*) as total_count,
+                COUNT(CASE WHEN resolved = FALSE THEN 1 END) as unresolved_count,
+                COUNT(CASE WHEN resolved = TRUE THEN 1 END) as resolved_count
+            FROM exceptions
+            WHERE date_found BETWEEN :start_date AND :end_date
+        """)
+        
+        params = {'start_date': start_date, 'end_date': end_date}
+        
+        if exception_type:
+            query += " AND type = :exception_type"
+            params['exception_type'] = exception_type
+        
+        query += """
+            GROUP BY date_found, type
+            ORDER BY date_found DESC, type
+        """
+        
+        results = session.execute(query, params).fetchall()
+        
+        # Group by date and type
+        trends_by_date = {}
+        trends_by_type = {}
+        
+        for row in results:
+            date_found = row[0]
+            exc_type = row[1]
+            total_count = row[2]
+            unresolved_count = row[3]
+            resolved_count = row[4]
+            
+            # Group by date
+            if date_found not in trends_by_date:
+                trends_by_date[date_found] = {}
+            trends_by_date[date_found][exc_type] = {
+                'total': total_count,
+                'unresolved': unresolved_count,
+                'resolved': resolved_count
+            }
+            
+            # Group by type
+            if exc_type not in trends_by_type:
+                trends_by_type[exc_type] = []
+            trends_by_type[exc_type].append({
+                'date': date_found.isoformat(),
+                'total': total_count,
+                'unresolved': unresolved_count,
+                'resolved': resolved_count
+            })
+        
+        # Calculate summary statistics
+        total_exceptions = sum(row[2] for row in results)
+        total_unresolved = sum(row[3] for row in results)
+        total_resolved = sum(row[4] for row in results)
+        
+        # Get unique dates and types
+        unique_dates = sorted(set(row[0] for row in results), reverse=True)
+        unique_types = sorted(set(row[1] for row in results))
+        
+        return jsonify({
+            'trends_by_date': {date.isoformat(): data for date, data in trends_by_date.items()},
+            'trends_by_type': trends_by_type,
+            'summary': {
+                'total_exceptions': total_exceptions,
+                'total_unresolved': total_unresolved,
+                'total_resolved': total_resolved,
+                'date_range': {
+                    'start': start_date.isoformat(),
+                    'end': end_date.isoformat()
+                },
+                'unique_dates': len(unique_dates),
+                'unique_types': unique_types
+            },
+            'date_range': {
+                'start_date': start_date.isoformat(),
+                'end_date': end_date.isoformat(),
+                'days': (end_date - start_date).days + 1
+            }
+        })
+
+# Enhanced Export Endpoints
+
+@app.route('/api/variances/export/pdf', methods=['GET'])
+def export_variances_pdf():
+    """
+    Export variance data to PDF format.
+    
+    Query parameters:
+    - date: Specific date (YYYY-MM-DD) or 'latest' (default)
+    - include_resolved: Include resolved exceptions (default: false)
+    - variance_type: Filter by exception type (optional)
+    """
+    if not REPORTLAB_AVAILABLE:
+        return jsonify({
+            "error": "PDF export not available. Install reportlab: pip install reportlab"
+        }), 500
+    
+    # Get query parameters
+    date_param = request.args.get('date', 'latest')
+    include_resolved = request.args.get('include_resolved', 'false').lower() == 'true'
+    exception_type = request.args.get('variance_type', request.args.get('type', ''))
+    
+    # Determine report date
+    if date_param == 'latest':
+        report_date = get_latest_matching_date()
+        if not report_date:
+            return jsonify({
+                "error": "No matching data found between vendors",
+                "status": "out_of_sync"
+            }), 400
+    else:
+        try:
+            report_date = datetime.strptime(date_param, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
+    
+    with get_session() as session:
+        # Check if data exists for this date
+        check_query = text("""
+            SELECT COUNT(DISTINCT vendor_id) as vendor_count
+            FROM device_snapshot
+            WHERE snapshot_date = :report_date
+        """)
+        
+        result = session.execute(check_query, {'report_date': report_date}).fetchone()
+        
+        if result[0] < 2:
+            return jsonify({
+                "error": f"Insufficient data for {date_param}. Found {result[0]} vendors, need 2.",
+                "status": "insufficient_data"
+            }), 400
+        
+        # Get exceptions data
+        query_str = """
+            SELECT 
+                e.id,
+                e.date_found,
+                e.type,
+                e.hostname,
+                e.details,
+                e.resolved,
+                e.resolved_date,
+                e.resolved_by,
+                e.manually_updated_at,
+                e.manually_updated_by,
+                e.variance_status
+            FROM exceptions e
+            WHERE e.date_found = :report_date
+        """
+        
+        params = {'report_date': report_date}
+        
+        # Add filters
+        if not include_resolved:
+            query_str += " AND e.resolved = FALSE"
+        
+        if exception_type:
+            query_str += " AND e.type = :exception_type"
+            params['exception_type'] = exception_type
+        
+        query_str += " ORDER BY e.type, e.hostname"
+        
+        query = text(query_str)
+        
+        exceptions = session.execute(query, params).fetchall()
+        
+        # Generate PDF
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4)
+        styles = getSampleStyleSheet()
+        story = []
+        
+        # Title
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=16,
+            spaceAfter=30,
+            alignment=1  # Center
+        )
+        story.append(Paragraph(f"Variance Report - {report_date.isoformat()}", title_style))
+        story.append(Spacer(1, 12))
+        
+        # Summary
+        total_exceptions = len(exceptions)
+        unresolved_count = sum(1 for exc in exceptions if not exc[5])
+        resolved_count = total_exceptions - unresolved_count
+        
+        summary_data = [
+            ['Total Exceptions', str(total_exceptions)],
+            ['Unresolved', str(unresolved_count)],
+            ['Resolved', str(resolved_count)],
+            ['Report Date', report_date.isoformat()],
+            ['Generated', datetime.now().strftime('%Y-%m-%d %H:%M:%S')]
+        ]
+        
+        summary_table = Table(summary_data, colWidths=[2*inch, 1.5*inch])
+        summary_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.lightgrey),
+            ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        
+        story.append(Paragraph("Summary", styles['Heading2']))
+        story.append(summary_table)
+        story.append(Spacer(1, 20))
+        
+        # Exceptions table
+        if exceptions:
+            story.append(Paragraph("Exception Details", styles['Heading2']))
+            
+            # Prepare table data
+            table_data = [['ID', 'Type', 'Hostname', 'Status', 'Organization']]
+            
+            for exc in exceptions:
+                details = exc[4] if exc[4] else {}
+                org_name = details.get('tl_org_name', details.get('ninja_org_name', 'Unknown'))
+                status = 'Resolved' if exc[5] else 'Active'
+                
+                table_data.append([
+                    str(exc[0]),
+                    exc[2],
+                    exc[3],
+                    status,
+                    org_name
+                ])
+            
+            # Create table
+            exceptions_table = Table(table_data, colWidths=[0.5*inch, 1.2*inch, 1.5*inch, 0.8*inch, 1.5*inch])
+            exceptions_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.beige, colors.white])
+            ]))
+            
+            story.append(exceptions_table)
+        else:
+            story.append(Paragraph("No exceptions found for the specified criteria.", styles['Normal']))
+        
+        # Build PDF
+        doc.build(story)
+        buffer.seek(0)
+        
+        # Generate filename
+        filename = f"variances-{report_date.isoformat()}.pdf"
+        if exception_type:
+            filename = f"variances-{exception_type.lower()}-{report_date.isoformat()}.pdf"
+        
+        return Response(
+            buffer.getvalue(),
+            mimetype='application/pdf',
+            headers={
+                'Content-Disposition': f'attachment; filename={filename}',
+                'Content-Type': 'application/pdf'
+            }
+        )
+
+@app.route('/api/variances/export/excel', methods=['GET'])
+def export_variances_excel():
+    """
+    Export variance data to Excel format with multiple sheets.
+    
+    Query parameters:
+    - date: Specific date (YYYY-MM-DD) or 'latest' (default)
+    - include_resolved: Include resolved exceptions (default: false)
+    - variance_type: Filter by exception type (optional)
+    """
+    if not OPENPYXL_AVAILABLE:
+        return jsonify({
+            "error": "Excel export not available. Install openpyxl: pip install openpyxl"
+        }), 500
+    
+    # Get query parameters
+    date_param = request.args.get('date', 'latest')
+    include_resolved = request.args.get('include_resolved', 'false').lower() == 'true'
+    exception_type = request.args.get('variance_type', request.args.get('type', ''))
+    
+    # Determine report date
+    if date_param == 'latest':
+        report_date = get_latest_matching_date()
+        if not report_date:
+            return jsonify({
+                "error": "No matching data found between vendors",
+                "status": "out_of_sync"
+            }), 400
+    else:
+        try:
+            report_date = datetime.strptime(date_param, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
+    
+    with get_session() as session:
+        # Check if data exists for this date
+        check_query = text("""
+            SELECT COUNT(DISTINCT vendor_id) as vendor_count
+            FROM device_snapshot
+            WHERE snapshot_date = :report_date
+        """)
+        
+        result = session.execute(check_query, {'report_date': report_date}).fetchone()
+        
+        if result[0] < 2:
+            return jsonify({
+                "error": f"Insufficient data for {date_param}. Found {result[0]} vendors, need 2.",
+                "status": "insufficient_data"
+            }), 400
+        
+        # Get exceptions data
+        query_str = """
+            SELECT 
+                e.id,
+                e.date_found,
+                e.type,
+                e.hostname,
+                e.details,
+                e.resolved,
+                e.resolved_date,
+                e.resolved_by,
+                e.manually_updated_at,
+                e.manually_updated_by,
+                e.variance_status,
+                e.update_type
+            FROM exceptions e
+            WHERE e.date_found = :report_date
+        """
+        
+        params = {'report_date': report_date}
+        
+        # Add filters
+        if not include_resolved:
+            query_str += " AND e.resolved = FALSE"
+        
+        if exception_type:
+            query_str += " AND e.type = :exception_type"
+            params['exception_type'] = exception_type
+        
+        query_str += " ORDER BY e.type, e.hostname"
+        
+        query = text(query_str)
+        
+        exceptions = session.execute(query, params).fetchall()
+        
+        # Create Excel workbook
+        wb = openpyxl.Workbook()
+        
+        # Remove default sheet
+        wb.remove(wb.active)
+        
+        # Create Summary sheet
+        summary_ws = wb.create_sheet("Summary")
+        summary_ws.title = "Summary"
+        
+        # Summary data
+        total_exceptions = len(exceptions)
+        unresolved_count = sum(1 for exc in exceptions if not exc[5])
+        resolved_count = total_exceptions - unresolved_count
+        
+        summary_data = [
+            ['Variance Report Summary'],
+            [''],
+            ['Report Date', report_date.isoformat()],
+            ['Generated', datetime.now().strftime('%Y-%m-%d %H:%M:%S')],
+            [''],
+            ['Total Exceptions', total_exceptions],
+            ['Unresolved', unresolved_count],
+            ['Resolved', resolved_count],
+            [''],
+            ['Exception Types:']
+        ]
+        
+        # Add exception type breakdown
+        type_counts = {}
+        for exc in exceptions:
+            exc_type = exc[2]
+            type_counts[exc_type] = type_counts.get(exc_type, 0) + 1
+        
+        for exc_type, count in sorted(type_counts.items()):
+            summary_data.append([exc_type, count])
+        
+        # Write summary data
+        for row_idx, row_data in enumerate(summary_data, 1):
+            for col_idx, cell_value in enumerate(row_data, 1):
+                cell = summary_ws.cell(row=row_idx, column=col_idx, value=cell_value)
+                if row_idx == 1:  # Title
+                    cell.font = Font(bold=True, size=14)
+                elif row_idx in [3, 4, 6, 7, 8]:  # Data rows
+                    cell.font = Font(bold=True)
+        
+        # Create detailed exceptions sheet
+        details_ws = wb.create_sheet("Exceptions")
+        details_ws.title = "Exceptions"
+        
+        # Headers
+        headers = [
+            'ID', 'Date Found', 'Type', 'Hostname', 'Resolved',
+            'Resolved Date', 'Resolved By', 'Manually Updated At',
+            'Manually Updated By', 'Variance Status', 'Update Type', 'Organization'
+        ]
+        
+        for col_idx, header in enumerate(headers, 1):
+            cell = details_ws.cell(row=1, column=col_idx, value=header)
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill(start_color="CCCCCC", end_color="CCCCCC", fill_type="solid")
+        
+        # Data rows
+        for row_idx, exc in enumerate(exceptions, 2):
+            details = exc[4] if exc[4] else {}
+            org_name = details.get('tl_org_name', details.get('ninja_org_name', 'Unknown'))
+            
+            row_data = [
+                exc[0],  # ID
+                exc[1].isoformat() if exc[1] else '',  # Date Found
+                exc[2],  # Type
+                exc[3],  # Hostname
+                'Yes' if exc[5] else 'No',  # Resolved
+                exc[6].isoformat() if exc[6] else '',  # Resolved Date
+                exc[7] or '',  # Resolved By
+                exc[8].isoformat() if exc[8] else '',  # Manually Updated At
+                exc[9] or '',  # Manually Updated By
+                exc[10] or 'active',  # Variance Status
+                exc[11] or '',  # Update Type
+                org_name  # Organization
+            ]
+            
+            for col_idx, value in enumerate(row_data, 1):
+                details_ws.cell(row=row_idx, column=col_idx, value=value)
+        
+        # Auto-adjust column widths
+        for ws in [summary_ws, details_ws]:
+            for column in ws.columns:
+                max_length = 0
+                column_letter = get_column_letter(column[0].column)
+                for cell in column:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(str(cell.value))
+                    except:
+                        pass
+                adjusted_width = min(max_length + 2, 50)
+                ws.column_dimensions[column_letter].width = adjusted_width
+        
+        # Save to buffer
+        buffer = io.BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+        
+        # Generate filename
+        filename = f"variances-{report_date.isoformat()}.xlsx"
+        if exception_type:
+            filename = f"variances-{exception_type.lower()}-{report_date.isoformat()}.xlsx"
+        
+        return Response(
+            buffer.getvalue(),
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            headers={
+                'Content-Disposition': f'attachment; filename={filename}',
+                'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            }
+        )
+
+
+# Windows 11 24H2 Assessment Endpoints
+@app.route('/api/windows-11-24h2/status', methods=['GET'])
+def get_windows_11_24h2_status():
+    """Get Windows 11 24H2 compatibility status summary"""
+    try:
+        with get_session() as session:
+            # Query database for Windows 11 24H2 assessment results with enhanced status breakdown
+            query = text("""
+            SELECT 
+                COUNT(*) as total_windows_devices,
+                COUNT(CASE WHEN windows_11_24h2_capable = true THEN 1 END) as total_compatible_devices,
+                COUNT(CASE WHEN windows_11_24h2_capable = false THEN 1 END) as incompatible_devices,
+                COUNT(CASE WHEN windows_11_24h2_capable IS NULL THEN 1 END) as not_assessed_devices,
+                COUNT(CASE WHEN windows_11_24h2_capable = true 
+                          AND jsonb_extract_path_text(windows_11_24h2_deficiencies, 'passed_requirements') LIKE '%Windows 11 24H2 Already Installed%' 
+                          THEN 1 END) as already_compatible_devices,
+                COUNT(CASE WHEN windows_11_24h2_capable = true 
+                          AND (jsonb_extract_path_text(windows_11_24h2_deficiencies, 'passed_requirements') NOT LIKE '%Windows 11 24H2 Already Installed%' 
+                               OR jsonb_extract_path_text(windows_11_24h2_deficiencies, 'passed_requirements') IS NULL)
+                          THEN 1 END) as compatible_for_upgrade_devices
+            FROM device_snapshot ds
+            JOIN vendor v ON ds.vendor_id = v.id
+            WHERE v.name = 'Ninja' 
+            AND ds.snapshot_date = (
+                SELECT MAX(snapshot_date)
+                FROM device_snapshot ds2
+                JOIN vendor v2 ON ds2.vendor_id = v2.id
+                WHERE v2.name = 'Ninja'
+            )
+            AND ds.os_name ILIKE '%windows%'
+            AND ds.os_name NOT ILIKE '%server%'
+            AND (ds.device_type_id IN (SELECT id FROM device_type WHERE code IN ('workstation')))
+            AND ds.windows_11_24h2_capable IS NOT NULL
+            """)
+            
+            result = session.execute(query).fetchone()
+            
+            # Get last assessment date
+            last_assessment_query = text("""
+            SELECT MAX(assessment_date) as last_assessment
+            FROM (
+                SELECT jsonb_extract_path_text(windows_11_24h2_deficiencies, 'assessment_date') as assessment_date
+                FROM device_snapshot 
+                WHERE windows_11_24h2_deficiencies IS NOT NULL 
+                AND windows_11_24h2_deficiencies != '{}'
+            ) as assessments
+            """)
+            
+            last_assessment_result = session.execute(last_assessment_query).fetchone()
+            last_assessment = last_assessment_result.last_assessment if last_assessment_result else None
+            
+            return jsonify({
+                "total_windows_devices": result.total_windows_devices,
+                "total_compatible_devices": result.total_compatible_devices,
+                "already_compatible_devices": result.already_compatible_devices,
+                "compatible_for_upgrade_devices": result.compatible_for_upgrade_devices,
+                "incompatible_devices": result.incompatible_devices,
+                "not_assessed_devices": result.not_assessed_devices,
+                "compatibility_rate": round((result.total_compatible_devices / result.total_windows_devices * 100), 1) if result.total_windows_devices > 0 else 0,
+                "last_assessment": last_assessment
+            })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/windows-11-24h2/incompatible', methods=['GET'])
+def get_incompatible_devices():
+    """Get list of devices that are incompatible with Windows 11 24H2"""
+    try:
+        with get_session() as session:
+            query = text("""
+            SELECT 
+                ds.hostname,
+                ds.display_name,
+                ds.organization_name,
+                ds.location_name,
+                ds.device_type_name,
+                ds.billable_status_name,
+                ds.os_name,
+                ds.os_build,
+                ds.os_release_id,
+                ds.memory_gib,
+                ds.memory_bytes,
+                ds.created_at,
+                ds.windows_11_24h2_deficiencies
+            FROM device_snapshot ds
+            JOIN vendor v ON ds.vendor_id = v.id
+            WHERE v.name = 'Ninja'
+            AND ds.snapshot_date = (
+                SELECT MAX(snapshot_date)
+                FROM device_snapshot ds2
+                JOIN vendor v2 ON ds2.vendor_id = v2.id
+                WHERE v2.name = 'Ninja'
+            )
+            AND ds.os_name ILIKE '%windows%'
+            AND ds.os_name NOT ILIKE '%server%'
+            AND ds.windows_11_24h2_capable IS NOT NULL
+            AND ds.windows_11_24h2_capable = false
+            AND (ds.device_type_id IN (SELECT id FROM device_type WHERE code IN ('workstation')))
+            ORDER BY ds.organization_name, ds.hostname
+            """)
+            
+            results = session.execute(query).fetchall()
+            
+            devices = []
+            for row in results:
+                deficiencies = row.windows_11_24h2_deficiencies if row.windows_11_24h2_deficiencies else {}
+                
+                devices.append({
+                    # Modal column mapping - using database fields
+                    "organization": row.organization_name if row.organization_name and row.organization_name.strip() else "Unknown",
+                    "location": row.location_name or "Main Office",
+                    "system_name": row.hostname,  # System hostname/identifier
+                    "display_name": row.display_name or row.hostname,  # User-friendly device name
+                    "device_type": row.device_type_name or "Desktop",  # Physical device type
+                    "billable_status": row.billable_status_name or "Active",  # Billing status
+                    "status": "Incompatible",  # Clear status
+                    
+                    # Additional fields for reference
+                    "hostname": row.hostname,
+                    "os_name": row.os_name,
+                    "os_version": row.os_release_id,  # Use os_release_id as version
+                    "os_build": row.os_build,
+                    "deficiencies": deficiencies.get('deficiencies', []),
+                    "assessment_date": deficiencies.get('assessment_date', 'Unknown'),
+                    
+                    # New fields requested by Dashboard AI
+                    "last_update": row.created_at.isoformat() + 'Z' if row.created_at else None,
+                    "memory_gib": float(row.memory_gib) if row.memory_gib else None,
+                    "memory_bytes": int(row.memory_bytes) if row.memory_bytes else None,
+                    "system_manufacturer": "Not Available",  # Not available in database
+                    "system_model": "Not Available"  # Not available in database
+                })
+            
+            return jsonify({
+                "incompatible_devices": devices,
+                "total_count": len(devices),
+                "data_source": "Database (NinjaRMM fields populated)",
+                "last_updated": datetime.utcnow().isoformat() + 'Z'
+            })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/windows-11-24h2/compatible', methods=['GET'])
+def get_compatible_devices():
+    """Get list of devices that are compatible with Windows 11 24H2"""
+    try:
+        
+        with get_session() as session:
+            # Get compatible devices from database
+            query = text("""
+            SELECT 
+                ds.hostname,
+                ds.display_name,
+                ds.organization_name,
+                ds.location_name,
+                ds.device_type_name,
+                ds.billable_status_name,
+                ds.os_name,
+                ds.os_build,
+                ds.os_release_id,
+                ds.memory_gib,
+                ds.memory_bytes,
+                ds.created_at,
+                ds.windows_11_24h2_deficiencies
+            FROM device_snapshot ds
+            JOIN vendor v ON ds.vendor_id = v.id
+            WHERE v.name = 'Ninja'
+            AND ds.snapshot_date = (
+                SELECT MAX(snapshot_date)
+                FROM device_snapshot ds2
+                JOIN vendor v2 ON ds2.vendor_id = v2.id
+                WHERE v2.name = 'Ninja'
+            )
+            AND ds.os_name ILIKE '%windows%'
+            AND ds.os_name NOT ILIKE '%server%'
+            AND ds.windows_11_24h2_capable IS NOT NULL
+            AND ds.windows_11_24h2_capable = true
+            AND (jsonb_extract_path_text(ds.windows_11_24h2_deficiencies, 'passed_requirements') NOT LIKE '%Windows 11 24H2 Already Installed%' 
+                 OR jsonb_extract_path_text(ds.windows_11_24h2_deficiencies, 'passed_requirements') IS NULL)
+            AND (ds.device_type_id IN (SELECT id FROM device_type WHERE code IN ('workstation')))
+            ORDER BY ds.organization_name, ds.hostname
+            """)
+            
+            results = session.execute(query).fetchall()
+            
+            devices = []
+            for row in results:
+                assessment_data = row.windows_11_24h2_deficiencies if row.windows_11_24h2_deficiencies else {}
+                
+                devices.append({
+                    # Modal column mapping - using database fields
+                    "organization": row.organization_name if row.organization_name and row.organization_name.strip() else "Unknown",
+                    "location": row.location_name or "Main Office",
+                    "system_name": row.hostname,  # System hostname/identifier
+                    "display_name": row.display_name or row.hostname,  # User-friendly device name
+                    "device_type": row.device_type_name or "Desktop",  # Physical device type
+                    "billable_status": row.billable_status_name or "Active",  # Billing status
+                    "status": "Compatible for Upgrade",  # Clear status
+                    
+                    # Additional fields for reference
+                    "hostname": row.hostname,
+                    "os_name": row.os_name,
+                    "os_version": row.os_release_id,  # Use os_release_id as version
+                    "os_build": row.os_build,
+                    "passed_requirements": assessment_data.get('passed_requirements', []),
+                    "assessment_date": assessment_data.get('assessment_date', 'Unknown'),
+                    
+                    # New fields requested by Dashboard AI
+                    "last_update": row.created_at.isoformat() + 'Z' if row.created_at else None,
+                    "memory_gib": float(row.memory_gib) if row.memory_gib else None,
+                    "memory_bytes": int(row.memory_bytes) if row.memory_bytes else None,
+                    "system_manufacturer": "Not Available",  # Not available in database
+                    "system_model": "Not Available"  # Not available in database
+                })
+            
+            return jsonify({
+                "compatible_devices": devices,
+                "total_count": len(devices),
+                "data_source": "Database (NinjaRMM fields populated)",
+                "last_updated": datetime.utcnow().isoformat() + 'Z'
+            })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/windows-11-24h2/run', methods=['POST'])
+def run_windows_11_24h2_assessment():
+    """Manually trigger Windows 11 24H2 assessment"""
+    try:
+        import subprocess
+        import os
+        
+        # Run the assessment script
+        script_path = '/opt/es-inventory-hub/collectors/assessments/windows_11_24h2_assessment.py'
+        
+        if not os.path.exists(script_path):
+            return jsonify({"error": "Assessment script not found"}), 404
+        
+        # Execute the assessment script
+        result = subprocess.run([
+            '/opt/es-inventory-hub/.venv/bin/python3',
+            script_path
+        ], capture_output=True, text=True, cwd='/opt/es-inventory-hub')
+        
+        if result.returncode == 0:
+            return jsonify({
+                "status": "success",
+                "message": "Windows 11 24H2 assessment completed successfully",
+                "output": result.stdout,
+                "timestamp": datetime.utcnow().isoformat() + 'Z'
+            })
+        else:
+            return jsonify({
+                "status": "error",
+                "message": "Assessment failed",
+                "error": result.stderr,
+                "output": result.stdout
+            }), 500
+            
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# Documentation endpoints
+@app.route('/api/docs', methods=['GET'])
+def get_documentation():
+    """Serve the main integration guide"""
+    try:
+        from flask import send_from_directory
+        docs_dir = '/opt/es-inventory-hub/docs'
+        return send_from_directory(docs_dir, 'HOW_TO_INTEGRATE_TO_DATABASE_GUIDE.md')
+    except Exception as e:
+        return jsonify({"error": f"Documentation not available: {str(e)}"}), 404
+
+@app.route('/api/docs/<filename>', methods=['GET'])
+def get_doc_file(filename):
+    """Serve specific documentation files"""
+    try:
+        from flask import send_from_directory
+        docs_dir = '/opt/es-inventory-hub/docs'
+        return send_from_directory(docs_dir, filename)
+    except Exception as e:
+        return jsonify({"error": f"Documentation file '{filename}' not available: {str(e)}"}), 404
+
+
 if __name__ == '__main__':
     print("Starting ES Inventory Hub API Server...")
     print("Available endpoints:")
@@ -1167,6 +2635,8 @@ if __name__ == '__main__':
     print("  GET  /api/variance-report/filtered - Filtered variance report for dashboard")
     print("  POST /api/collectors/run - Trigger collector runs")
     print("  GET  /api/collectors/status - Collector service status")
+    print("  GET  /api/collectors/history - Collection history (last 10 runs)")
+    print("  GET  /api/collectors/progress - Real-time collection progress")
     print("  GET  /api/exceptions - Get exceptions with filtering")
     print("  POST /api/exceptions/{id}/resolve - Resolve an exception")
     print("  POST /api/exceptions/{id}/mark-manually-fixed - Mark as manually fixed (NEW)")
@@ -1175,6 +2645,38 @@ if __name__ == '__main__':
     print("  GET  /api/exceptions/status-summary - Exception status summary (NEW)")
     print("  GET  /api/devices/search?q={hostname} - Search devices (handles hostname truncation)")
     print()
-    print("Server will run on http://localhost:5400")
+    print("NEW EXPORT ENDPOINTS:")
+    print("  GET  /api/variances/export/csv - Export variance data to CSV")
+    print("  GET  /api/variances/export/pdf - Export variance data to PDF")
+    print("  GET  /api/variances/export/excel - Export variance data to Excel")
+    print("  GET  /api/variances/available-dates - Get available analysis dates")
+    print("  GET  /api/variances/historical/{date} - Get historical variance data")
+    print("  GET  /api/variances/trends - Get variance trends over time")
+    print()
+    print("WINDOWS 11 24H2 ASSESSMENT ENDPOINTS:")
+    print("  GET  /api/windows-11-24h2/status - Windows 11 24H2 compatibility status summary")
+    print("  GET  /api/windows-11-24h2/incompatible - List of incompatible devices")
+    print("  GET  /api/windows-11-24h2/compatible - List of compatible devices")
+    print("  POST /api/windows-11-24h2/run - Manually trigger Windows 11 24H2 assessment")
+    print()
+    print("DOCUMENTATION ENDPOINTS:")
+    print("  GET  /api/docs - Main integration documentation")
+    print("  GET  /api/docs/<filename> - Specific documentation files")
+    print()
+    print("Server will run on:")
+    print("  HTTP:  http://localhost:5400")
+    print("  HTTPS: https://localhost:5400 (if SSL certificates are available)")
     
-    app.run(host='0.0.0.0', port=5400, debug=True)
+    # Check for SSL certificates
+    ssl_cert = '/opt/es-inventory-hub/ssl/api.crt'
+    ssl_key = '/opt/es-inventory-hub/ssl/api.key'
+    
+    if os.path.exists(ssl_cert) and os.path.exists(ssl_key):
+        print(f"SSL certificates found. Starting HTTPS server...")
+        app.run(host='0.0.0.0', port=5400, debug=True, ssl_context=(ssl_cert, ssl_key))
+    else:
+        print(f"SSL certificates not found. Starting HTTP server...")
+        print(f"To enable HTTPS, place SSL certificates at:")
+        print(f"  Certificate: {ssl_cert}")
+        print(f"  Private Key: {ssl_key}")
+        app.run(host='0.0.0.0', port=5400, debug=True)

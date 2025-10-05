@@ -12,6 +12,7 @@ from common.job_logging import log_job_start, log_job_completion, log_job_failur
 
 from .api import NinjaAPI
 from .mapping import normalize_ninja_device
+from .ninja_api import NinjaRMMAPI
 
 
 def main():
@@ -59,11 +60,19 @@ def main():
         logger.info("Initializing Ninja API client")
         ninja_api = NinjaAPI()
         
+        # Initialize enhanced NinjaRMM API for organization/location mapping
+        try:
+            ninja_rmm_api = NinjaRMMAPI()
+            logger.info("Enhanced NinjaRMM API client initialized")
+        except Exception as e:
+            logger.warning(f"Enhanced NinjaRMM API not available: {e}")
+            ninja_rmm_api = None
+        
         # Process devices
         if args.dry_run:
             run_dry_run(ninja_api, args.limit, logger)
         else:
-            run_collection(ninja_api, snapshot_date, args.limit, logger)
+            run_collection(ninja_api, ninja_rmm_api, snapshot_date, args.limit, logger)
             
         logger.info("Ninja collection completed successfully")
         
@@ -101,7 +110,7 @@ def run_dry_run(ninja_api: NinjaAPI, limit: Optional[int], logger) -> None:
     logger.info(f"Dry run completed. Processed {device_count} devices.")
 
 
-def run_collection(ninja_api: NinjaAPI, snapshot_date: date, limit: Optional[int], logger) -> None:
+def run_collection(ninja_api: NinjaAPI, ninja_rmm_api: Optional[NinjaRMMAPI], snapshot_date: date, limit: Optional[int], logger) -> None:
     """Run actual collection: fetch, normalize, and save devices to database."""
     logger.info("Starting real collection - saving to database")
     
@@ -140,15 +149,36 @@ def run_collection(ninja_api: NinjaAPI, snapshot_date: date, limit: Optional[int
         # Ensure required reference data exists
         _ensure_reference_data(session, logger)
         
+        # Get organization and location mappings if enhanced API is available
+        org_map = {}
+        loc_map = {}
+        if ninja_rmm_api:
+            try:
+                logger.info("Fetching organization and location mappings")
+                organizations = ninja_rmm_api.get_organizations()
+                locations = ninja_rmm_api.get_locations()
+                org_map = {org['id']: org['name'] for org in organizations}
+                loc_map = {loc['id']: loc['name'] for loc in locations}
+                logger.info(f"Loaded {len(org_map)} organizations and {len(loc_map)} locations")
+            except Exception as e:
+                logger.warning(f"Could not fetch organization/location mappings: {e}")
+        
         for raw_device in ninja_api.list_devices(limit=limit):
             device_count += 1
             device_name = raw_device.get('systemName', f'Device-{device_count}')
             
+            # Skip VM guests to avoid hostname conflicts across physical hosts
+            device_type = raw_device.get('deviceType', '').lower()
+            node_class = raw_device.get('nodeClass', '').lower()
+            if device_type == 'vmguest' or node_class == 'vmware_vm_guest':
+                logger.debug(f"Skipping VM guest: {device_name}")
+                continue
+            
             try:
                 logger.info(f"Processing device {device_count}: {device_name}")
                 
-                # Normalize the device
-                normalized = normalize_ninja_device(raw_device, ninja_api)
+                # Normalize the device with organization/location mappings
+                normalized = normalize_ninja_device(raw_device, ninja_api, org_map, loc_map)
                 
                 # Upsert device identity
                 device_identity_id = upsert_device_identity(

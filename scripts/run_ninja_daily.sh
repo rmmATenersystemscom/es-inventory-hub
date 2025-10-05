@@ -5,7 +5,7 @@ set -euo pipefail
 mkdir -p /var/log/es-inventory-hub
 
 # Log file path
-LOG_FILE="/var/log/es-inventory-hub/ninja_daily.log"
+LOG_FILE="/tmp/ninja_daily.log"
 
 # Function to log with timestamp
 log_message() {
@@ -17,7 +17,7 @@ log_message "Starting Ninja daily collection"
 
 # Load environment variables
 set -a
-. /opt/dashboard-project/es-dashboards/.env
+. /opt/es-inventory-hub/.env
 set +a
 
 # Activate virtual environment

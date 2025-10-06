@@ -204,7 +204,7 @@ The `windows_11_24h2_deficiencies` field contains a JSONB object with the follow
       "current_value": "64-bit"
     }
   ],
-  "assessment_date": "2025-10-03T00:52:25.745981Z"
+  "assessment_date": "2025-10-03T00:52:25Z"
 }
 ```
 
@@ -237,7 +237,7 @@ The assessment results are exposed through the following API endpoints:
   "incompatible_devices": 338,
   "not_assessed_devices": 0,
   "compatibility_rate": 46.7,
-  "last_assessment": "2025-10-03T00:52:31.441Z"
+  "last_assessment": "2025-10-03T00:52:31Z"
 }
 ```
 
@@ -253,7 +253,7 @@ The assessment results are exposed through the following API endpoints:
     "organization_name": "Example Corp",
     "os_name": "Windows 11 Professional",
     "cpu_model": "Intel(R) Core(TM) i7-4600U",
-    "last_contact": "2025-10-05T16:28:26.187000+00:00Z",
+           "last_contact": "2025-10-05T16:28:26Z",
     "deficiencies": [
       {
         "requirement": "CPU Support",

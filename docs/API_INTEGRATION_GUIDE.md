@@ -309,7 +309,7 @@ async function runWindows11Assessment() {
   "status": "success",
   "message": "Windows 11 24H2 assessment completed successfully",
   "output": "2025-10-02 19:52:31,441 - INFO - Assessment complete:\n  - Total devices assessed: 634\n  - Compatible devices: 296\n  - Incompatible devices: 338\n  - Compatibility rate: 46.7%",
-  "timestamp": "2025-10-03T00:52:31.441Z"
+  "timestamp": "2025-10-03T00:52:31Z"
 }
 ```
 

@@ -84,7 +84,7 @@ The Windows 11 24H2 API endpoints now provide enhanced field data through NinjaR
   "os_name": "Windows 10 Pro",               // Operating system
   "os_version": "22H2",                       // OS version (e.g., "22H2", "23H2")
   "os_build": "19045",                        // OS build number (e.g., "19045", "22631")
-  "last_update": "2025-10-05T00:21:56.199Z", // Last data update timestamp
+  "last_update": "2025-10-05T00:21:56Z", // Last data update timestamp
   "memory_gib": 15.92,                        // Memory in GiB (Gigabytes)
   "memory_bytes": null,                       // Memory in bytes (if available)
   "system_manufacturer": "Not Available",     // System manufacturer (not available)
@@ -132,7 +132,7 @@ The Windows 11 24H2 API endpoints now provide enhanced field data through NinjaR
       "os_name": "Windows 10 Pro",
       "os_version": "22H2",
       "os_build": "19045",
-      "last_update": "2025-10-05T00:21:56.199Z",
+      "last_update": "2025-10-05T00:21:56Z",
       "memory_gib": 15.92,
       "memory_bytes": null,
       "system_manufacturer": "Not Available",

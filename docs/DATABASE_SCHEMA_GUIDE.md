@@ -91,6 +91,8 @@ CREATE TABLE device_snapshot (
     -- Hardware Information (Ninja-specific)
     os_architecture VARCHAR(100) DEFAULT NULL,
     cpu_model VARCHAR(255) DEFAULT NULL,
+    system_manufacturer VARCHAR(255) DEFAULT NULL,
+    system_model VARCHAR(255) DEFAULT NULL,
     memory_gib NUMERIC(10, 2) DEFAULT NULL,
     volumes TEXT DEFAULT NULL,
     
@@ -247,6 +249,8 @@ SELECT
     ds.organization_name,
     ds.os_name,
     ds.cpu_model,
+    ds.system_manufacturer,
+    ds.system_model,
     ds.memory_gib,
     ds.volumes
 FROM device_snapshot ds
@@ -275,6 +279,8 @@ CREATE INDEX idx_device_snapshot_device_type ON device_snapshot(device_type_id);
 -- Hardware Information indexes
 CREATE INDEX idx_device_snapshot_os_architecture ON device_snapshot(os_architecture);
 CREATE INDEX idx_device_snapshot_cpu_model ON device_snapshot(cpu_model);
+CREATE INDEX idx_device_snapshot_system_manufacturer ON device_snapshot(system_manufacturer);
+CREATE INDEX idx_device_snapshot_system_model ON device_snapshot(system_model);
 CREATE INDEX idx_device_snapshot_memory_gib ON device_snapshot(memory_gib);
 
 -- Windows 11 24H2 Assessment indexes
@@ -339,6 +345,8 @@ BEGIN;
 
 ALTER TABLE device_snapshot ADD COLUMN os_architecture VARCHAR(100) DEFAULT NULL;
 ALTER TABLE device_snapshot ADD COLUMN cpu_model VARCHAR(255) DEFAULT NULL;
+ALTER TABLE device_snapshot ADD COLUMN system_manufacturer VARCHAR(255) DEFAULT NULL;
+ALTER TABLE device_snapshot ADD COLUMN system_model VARCHAR(255) DEFAULT NULL;
 ALTER TABLE device_snapshot ADD COLUMN memory_gib NUMERIC(10, 2) DEFAULT NULL;
 ALTER TABLE device_snapshot ADD COLUMN volumes TEXT DEFAULT NULL;
 
@@ -462,6 +470,8 @@ AND ds.os_name ILIKE '%windows%';
 SELECT 
     COUNT(*) as total_devices,
     COUNT(CASE WHEN cpu_model IS NOT NULL THEN 1 END) as devices_with_cpu,
+    COUNT(CASE WHEN system_manufacturer IS NOT NULL THEN 1 END) as devices_with_manufacturer,
+    COUNT(CASE WHEN system_model IS NOT NULL THEN 1 END) as devices_with_model,
     COUNT(CASE WHEN memory_gib IS NOT NULL THEN 1 END) as devices_with_memory,
     COUNT(CASE WHEN volumes IS NOT NULL THEN 1 END) as devices_with_volumes,
     COUNT(CASE WHEN os_architecture IS NOT NULL THEN 1 END) as devices_with_architecture

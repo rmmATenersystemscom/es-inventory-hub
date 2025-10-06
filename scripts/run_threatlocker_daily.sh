@@ -38,7 +38,7 @@ from collectors.checks.cross_vendor import run_cross_vendor_checks
 
 # Connect to database
 import os
-dsn = os.getenv('DB_DSN', 'postgresql://postgres:mK2D282lRrs6bTpXWe7@localhost:5432/es_inventory_hub')
+dsn = os.getenv('DB_DSN', 'postgresql://username:password@hostname:port/database_name')
 engine = create_engine(dsn)
 Session = sessionmaker(bind=engine)
 session = Session()

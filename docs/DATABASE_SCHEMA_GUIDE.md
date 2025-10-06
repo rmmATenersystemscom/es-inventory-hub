@@ -12,17 +12,17 @@
 
 ### **Connection Details**
 ```
-Host: 192.168.99.246 (Database AI Server)
+Host: your_database_host_here
 Port: 5432
-Database: es_inventory_hub
-Username: postgres
-Password: Xat162gT2Qsg4WDlO5r
+Database: your_database_name_here
+Username: your_database_username_here
+Password: your_database_password_here
 ```
 
 ### **⚠️ IMPORTANT FOR DASHBOARD AI**
-- **Your Server**: 192.168.99.245 (Dashboard AI)
-- **Database AI Server**: 192.168.99.246 (API Server)
-- **YOU MUST use**: `https://db-api.enersystems.com:5400` (HTTPS API server)
+- **Your Server**: your_dashboard_server_ip_here (Dashboard AI)
+- **Database AI Server**: your_database_server_ip_here (API Server)
+- **YOU MUST use**: `https://your-api-domain.com:5400` (HTTPS API server)
 - **YOU MUST NOT use**: Port 5432 (direct database access)
 - **HTTPS Required**: Mixed content security requires HTTPS for dashboard integration
 

@@ -1,6 +1,6 @@
 # ES Inventory Hub
 
-**Current Version**: v1.19.1 (stable)
+**Current Version**: v1.19.2 (stable)
 
 A centralized inventory management system for collecting and storing data from various sources including Ninja and ThreatLocker.
 
@@ -44,9 +44,9 @@ If ES Inventory Hub needs dashboard-related changes, put your request in a text 
 - Provide dashboards for analysis (seat counts, spares, billing vs non-billing, etc.).
 - Highlight mismatches and exceptions (e.g., ThreatLocker device missing in Ninja).
 
-## Current Version (v1.19.1)
+## Current Version (v1.19.2)
 
-This release includes updated system backup documentation to reflect actual current configuration, removed obsolete shared documentation file, synchronized systemd service files with installed configuration, created proper backup system with version control, and updated all service names and file paths to match production environment.
+This release includes critical security improvements by removing all hardcoded credentials from documentation, systemd service files, and scripts. All sensitive information has been replaced with secure placeholder values to prevent credential exposure in version control. This addresses the highest priority security vulnerability identified in the comprehensive security review.
 
 ## Current State
 
@@ -89,14 +89,14 @@ The ES Inventory Hub system uses environment variables from multiple sources:
 
 #### **For Ninja Collector:**
 ```bash
-NINJA_CLIENT_ID=amRqddIagVDindNeMH9j5JiQd2A
-NINJA_CLIENT_SECRET=6Ak8J2P4_H3JpBfh0qpPaoK1lsUoTJbXK8o_heUy7uSnUDHZaHQxCg
-NINJA_REFRESH_TOKEN=ebb3f730-ea7e-4103-b40e-16baf6b1cd41.YiBFmmCW_fNCIvAwllY446MZboP5MlU9vIGG_KlsSN8
+NINJA_CLIENT_ID=your_ninja_client_id_here
+NINJA_CLIENT_SECRET=your_ninja_client_secret_here
+NINJA_REFRESH_TOKEN=your_ninja_refresh_token_here
 ```
 
 #### **For Database Connection:**
 ```bash
-DB_DSN=postgresql://postgres:password@localhost:5432/es_inventory_hub
+DB_DSN=postgresql://username:password@hostname:port/database_name
 ```
 
 ### **Manual Testing Commands**

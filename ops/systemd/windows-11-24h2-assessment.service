@@ -10,7 +10,7 @@ WorkingDirectory=/opt/es-inventory-hub
 ExecStart=/opt/es-inventory-hub/.venv/bin/python3 /opt/es-inventory-hub/collectors/assessments/windows_11_24h2_assessment.py
 StandardOutput=journal
 StandardError=journal
-Environment=DB_DSN=postgresql://postgres:mK2D282lRrs6bTpXWe7@localhost:5432/es_inventory_hub
+Environment=DB_DSN=postgresql://username:password@hostname:port/database_name
 
 [Install]
 WantedBy=multi-user.target

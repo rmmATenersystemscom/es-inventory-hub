@@ -124,7 +124,7 @@ sudo journalctl -u es-inventory-api.service -f
 sudo systemctl status postgresql
 
 # Check database connectivity
-psql postgresql://postgres:Xat162gT2Qsg4WDlO5r@192.168.99.246:5432/es_inventory_hub
+psql postgresql://username:password@hostname:port/database_name
 
 # Check database logs
 sudo journalctl -u postgresql -f
@@ -189,7 +189,7 @@ curl -k https://192.168.99.246:5400/api/variance-report/latest
 #### **Database Debugging**
 ```bash
 # Check database connection (from Dashboard AI server 192.168.99.245)
-psql postgresql://postgres:Xat162gT2Qsg4WDlO5r@192.168.99.246:5432/es_inventory_hub
+psql postgresql://username:password@hostname:port/database_name
 
 # Check database status
 sudo systemctl status postgresql
@@ -303,7 +303,7 @@ curl https://db-api.enersystems.com:5400/api/collectors/status
 ### **Weekly Maintenance**
 ```bash
 # Check database size
-psql postgresql://postgres:Xat162gT2Qsg4WDlO5r@192.168.99.246:5432/es_inventory_hub -c "SELECT pg_size_pretty(pg_database_size('es_inventory_hub'));"
+psql postgresql://username:password@hostname:port/database_name -c "SELECT pg_size_pretty(pg_database_size('es_inventory_hub'));"
 
 # Check log file sizes
 du -sh /opt/es-inventory-hub/logs/*
@@ -321,7 +321,7 @@ sudo apt update && sudo apt upgrade -y
 openssl x509 -in /opt/es-inventory-hub/ssl/api.crt -noout -dates
 
 # Backup database
-pg_dump postgresql://postgres:Xat162gT2Qsg4WDlO5r@192.168.99.246:5432/es_inventory_hub > backup_$(date +%Y%m%d).sql
+pg_dump postgresql://username:password@hostname:port/database_name > backup_$(date +%Y%m%d).sql
 ```
 
 ---

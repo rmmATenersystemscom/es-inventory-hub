@@ -25,9 +25,9 @@
 ### **NinjaRMM API Configuration**
 ```bash
 # Required for Ninja collector
-NINJA_CLIENT_ID=amRqddIagVDindNeMH9j5JiQd2A
-NINJA_CLIENT_SECRET=6Ak8J2P4_H3JpBfh0qpPaoK1lsUoTJbXK8o_heUy7uSnUDHZaHQxCg
-NINJA_REFRESH_TOKEN=ebb3f730-ea7e-4103-b40e-16baf6b1cd41.YiBFmmCW_fNCIvAwllY446MZboP5MlU9vIGG_KlsSN8
+NINJA_CLIENT_ID=your_ninja_client_id_here
+NINJA_CLIENT_SECRET=your_ninja_client_secret_here
+NINJA_REFRESH_TOKEN=your_ninja_refresh_token_here
 NINJA_BASE_URL=https://app.ninjarmm.com
 ```
 
@@ -36,24 +36,24 @@ NINJA_BASE_URL=https://app.ninjarmm.com
 # Required for ThreatLocker collector
 THREATLOCKER_API_KEY=your_threatlocker_api_key
 THREATLOCKER_API_SECRET=your_threatlocker_api_secret
-THREATLOCKER_ORG_ID=dd850352-ee85-436b-8e41-818bdb52712c
+THREATLOCKER_ORG_ID=your_threatlocker_org_id_here
 ```
 
 ### **Database Configuration**
 ```bash
 # Required for database connection
-DB_DSN=postgresql://postgres:password@localhost:5432/es_inventory_hub
-DATABASE_URL=postgresql://postgres:password@localhost:5432/es_inventory_hub
+DB_DSN=postgresql://username:password@hostname:port/database_name
+DATABASE_URL=postgresql://username:password@hostname:port/database_name
 ```
 
 ### **ConnectWise Configuration**
 ```bash
 # Optional: ConnectWise integration
-CONNECTWISE_SERVER=helpme.enersystems.com
-CONNECTWISE_COMPANY_ID=enersystems
-CONNECTWISE_CLIENT_ID=5aa0e7b6-5500-48fb-90a8-8410802df04c
-CONNECTWISE_PUBLIC_KEY=s9QF8u12JFPE22R7
-CONNECTWISE_PRIVATE_KEY=vgo8s3P0mvpnPXBn
+CONNECTWISE_SERVER=your_connectwise_server_here
+CONNECTWISE_COMPANY_ID=your_company_id_here
+CONNECTWISE_CLIENT_ID=your_connectwise_client_id_here
+CONNECTWISE_PUBLIC_KEY=your_connectwise_public_key_here
+CONNECTWISE_PRIVATE_KEY=your_connectwise_private_key_here
 ```
 
 ---
@@ -73,7 +73,7 @@ source /opt/dashboard-project/es-dashboards/.env
 source .venv/bin/activate
 
 # Set database connection
-export DB_DSN="postgresql://postgres:password@localhost:5432/es_inventory_hub"
+export DB_DSN="postgresql://username:password@hostname:port/database_name"
 
 # Run collectors
 python3 -m collectors.ninja.main --limit 5
@@ -86,10 +86,10 @@ cd /opt/es-inventory-hub
 source .venv/bin/activate
 
 # Set all required environment variables explicitly
-export NINJA_CLIENT_ID="amRqddIagVDindNeMH9j5JiQd2A"
-export NINJA_CLIENT_SECRET="6Ak8J2P4_H3JpBfh0qpPaoK1lsUoTJbXK8o_heUy7uSnUDHZaHQxCg"
-export NINJA_REFRESH_TOKEN="ebb3f730-ea7e-4103-b40e-16baf6b1cd41.YiBFmmCW_fNCIvAwllY446MZboP5MlU9vIGG_KlsSN8"
-export DB_DSN="postgresql://postgres:password@localhost:5432/es_inventory_hub"
+export NINJA_CLIENT_ID="your_ninja_client_id_here"
+export NINJA_CLIENT_SECRET="your_ninja_client_secret_here"
+export NINJA_REFRESH_TOKEN="your_ninja_refresh_token_here"
+export DB_DSN="postgresql://username:password@hostname:port/database_name"
 
 # Run collectors
 python3 -m collectors.ninja.main --limit 5
@@ -100,7 +100,7 @@ python3 -m collectors.threatlocker.main --limit 5
 ```bash
 cd /opt/es-inventory-hub
 source .venv/bin/activate
-export DB_DSN="postgresql://postgres:password@localhost:5432/es_inventory_hub"
+export DB_DSN="postgresql://username:password@hostname:port/database_name"
 
 python3 -c "
 from collectors.checks.cross_vendor import run_cross_vendor_checks
@@ -176,7 +176,7 @@ python3 -c "import os; print(os.getenv('NINJA_CLIENT_ID'))"
 **Solution**:
 ```bash
 # Set database connection string
-export DB_DSN="postgresql://postgres:password@localhost:5432/es_inventory_hub"
+export DB_DSN="postgresql://username:password@hostname:port/database_name"
 
 # Test database connection
 python3 -c "from common.db import engine; print('Database connected:', engine)"

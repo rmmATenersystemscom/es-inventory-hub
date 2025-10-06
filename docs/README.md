@@ -148,7 +148,7 @@ Host: db-api.enersystems.com
 Port: 5432
 Database: es_inventory_hub
 Username: postgres
-Password: Xat162gT2Qsg4WDlO5r
+Password: your_database_password_here
 ```
 
 ---
@@ -192,7 +192,7 @@ journalctl -u threatlocker-collector@rene.service
 ### **3. For Database Access**
 ```bash
 # Connect to database
-psql postgresql://postgres:Xat162gT2Qsg4WDlO5r@localhost:5432/es_inventory_hub
+psql postgresql://username:password@hostname:port/database_name
 
 # Run variance queries (see DASHBOARD_INTEGRATION_GUIDE.md)
 ```

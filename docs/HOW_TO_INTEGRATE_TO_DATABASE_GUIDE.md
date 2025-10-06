@@ -219,7 +219,7 @@ The Windows 11 24H2 API endpoints now provide enhanced field data through NinjaR
 curl -k https://192.168.99.246:5400/api/health
 
 # Check database connection (from Dashboard AI server 192.168.99.245)
-psql postgresql://postgres:Xat162gT2Qsg4WDlO5r@192.168.99.246:5432/es_inventory_hub
+psql postgresql://username:password@hostname:port/database_name
 
 # Test collectors (from Dashboard AI server 192.168.99.245)
 curl -k -X POST https://192.168.99.246:5400/api/collectors/run \

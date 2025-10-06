@@ -8,7 +8,7 @@ Type=simple
 User=rene
 Group=rene
 WorkingDirectory=/opt/es-inventory-hub
-Environment=DB_DSN=postgresql+psycopg2://postgres:Xat162gT2Qsg4WDlO5r@localhost:5432/es_inventory_hub
+Environment=DB_DSN=postgresql+psycopg2://username:password@hostname:port/database_name
 ExecStart=/usr/bin/python3 /opt/es-inventory-hub/api/api_server.py
 Restart=always
 RestartSec=10

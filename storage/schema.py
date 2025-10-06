@@ -178,6 +178,8 @@ class DeviceSnapshot(Base):
     os_build = Column(String(100), nullable=True)
     os_release_id = Column(String(100), nullable=True)
     cpu_model = Column(String(255), nullable=True)
+    system_manufacturer = Column(String(255), nullable=True)
+    system_model = Column(String(255), nullable=True)
     memory_gib = Column(Numeric(10, 2), nullable=True)
     volumes = Column(Text, nullable=True)
     

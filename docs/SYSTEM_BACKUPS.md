@@ -2,7 +2,7 @@
 
 **Purpose**: This document explains the system backup files maintained in the ES Inventory Hub project and their relationship to active system files.
 
-**Last Updated**: September 22, 2025  
+**Last Updated**: October 5, 2025  
 **Status**: ✅ **ACTIVE** - System backups properly organized and version controlled
 
 ---
@@ -19,19 +19,19 @@ This directory contains backup copies of system configuration files that are ins
 
 ### **Systemd Service Files**
 
-#### **ninja-collector.service**
-- **Backup Location**: `/opt/es-inventory-hub/system-backups/ninja-collector.service`
-- **Active Location**: `/opt/es-inventory-hub/ops/systemd/ninja-collector.service`
-- **Installed Location**: `/etc/systemd/system/ninja-collector@.service`
-- **Purpose**: Systemd service definition for Ninja collector
-- **Installation Command**: `sudo cp ops/systemd/ninja-collector.service /etc/systemd/system/`
+#### **es-inventory-ninja.service**
+- **Backup Location**: `/opt/es-inventory-hub/system-backups/es-inventory-ninja.service`
+- **Active Location**: `/opt/es-inventory-hub/ops/systemd/es-inventory-ninja.service`
+- **Installed Location**: `/etc/systemd/system/es-inventory-ninja.service`
+- **Purpose**: Systemd service definition for ES Inventory Hub Ninja collector
+- **Installation Command**: `sudo cp ops/systemd/es-inventory-ninja.service /etc/systemd/system/`
 
-#### **ninja-collector.timer**
-- **Backup Location**: `/opt/es-inventory-hub/system-backups/ninja-collector.timer`
-- **Active Location**: `/opt/es-inventory-hub/ops/systemd/ninja-collector.timer`
-- **Installed Location**: `/etc/systemd/system/ninja-collector@.timer`
-- **Purpose**: Systemd timer for scheduling Ninja collector runs
-- **Installation Command**: `sudo cp ops/systemd/ninja-collector.timer /etc/systemd/system/`
+#### **es-inventory-ninja.timer**
+- **Backup Location**: `/opt/es-inventory-hub/system-backups/es-inventory-ninja.timer`
+- **Active Location**: `/opt/es-inventory-hub/ops/systemd/es-inventory-ninja.timer`
+- **Installed Location**: `/etc/systemd/system/es-inventory-ninja.timer`
+- **Purpose**: Systemd timer for scheduling ES Inventory Hub Ninja collector runs
+- **Installation Command**: `sudo cp ops/systemd/es-inventory-ninja.timer /etc/systemd/system/`
 
 ---
 
@@ -73,23 +73,23 @@ system-backups/ → ops/systemd/ → /etc/systemd/system/
 ### **From Active Files** (Recommended):
 ```bash
 # Copy from ops/systemd/ (active working copies)
-sudo cp ops/systemd/ninja-collector.service /etc/systemd/system/
-sudo cp ops/systemd/ninja-collector.timer /etc/systemd/system/
+sudo cp ops/systemd/es-inventory-ninja.service /etc/systemd/system/
+sudo cp ops/systemd/es-inventory-ninja.timer /etc/systemd/system/
 
 # Reload systemd and enable
 sudo systemctl daemon-reload
-sudo systemctl enable --now ninja-collector@${USER}.timer
+sudo systemctl enable --now es-inventory-ninja.timer
 ```
 
 ### **From Backup Files** (If needed):
 ```bash
 # Copy from system-backups/ (backup copies)
-sudo cp system-backups/ninja-collector.service /etc/systemd/system/
-sudo cp system-backups/ninja-collector.timer /etc/systemd/system/
+sudo cp system-backups/es-inventory-ninja.service /etc/systemd/system/
+sudo cp system-backups/es-inventory-ninja.timer /etc/systemd/system/
 
 # Reload systemd and enable
 sudo systemctl daemon-reload
-sudo systemctl enable --now ninja-collector@${USER}.timer
+sudo systemctl enable --now es-inventory-ninja.timer
 ```
 
 ---
@@ -102,22 +102,22 @@ sudo systemctl enable --now ninja-collector@${USER}.timer
 ls -la system-backups/
 
 # Compare backup vs active files (should be identical)
-diff system-backups/ninja-collector.service ops/systemd/ninja-collector.service
-diff system-backups/ninja-collector.timer ops/systemd/ninja-collector.timer
+diff system-backups/es-inventory-ninja.service ops/systemd/es-inventory-ninja.service
+diff system-backups/es-inventory-ninja.timer ops/systemd/es-inventory-ninja.timer
 
 # Check installed files
-sudo systemctl cat ninja-collector@${USER}.service
-sudo systemctl cat ninja-collector@${USER}.timer
+sudo systemctl cat es-inventory-ninja.service
+sudo systemctl cat es-inventory-ninja.timer
 ```
 
 ### **Check Service Status**:
 ```bash
 # Verify services are running
-systemctl status ninja-collector@${USER}.service
-systemctl status ninja-collector@${USER}.timer
+systemctl status es-inventory-ninja.service
+systemctl status es-inventory-ninja.timer
 
 # Check timer schedule
-systemctl list-timers | grep ninja
+systemctl list-timers | grep es-inventory
 ```
 
 ---
@@ -134,8 +134,8 @@ systemctl list-timers | grep ninja
 # 1. Make changes to active files in ops/systemd/
 # 2. Test the changes
 # 3. Copy to backup location
-cp ops/systemd/ninja-collector.service system-backups/
-cp ops/systemd/ninja-collector.timer system-backups/
+cp ops/systemd/es-inventory-ninja.service system-backups/
+cp ops/systemd/es-inventory-ninja.timer system-backups/
 
 # 4. Commit to git
 git add system-backups/

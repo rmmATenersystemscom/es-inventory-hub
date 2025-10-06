@@ -2419,6 +2419,8 @@ def get_incompatible_devices():
                 ds.os_release_id,
                 ds.memory_gib,
                 ds.memory_bytes,
+                ds.cpu_model,
+                ds.last_online,
                 ds.created_at,
                 ds.windows_11_24h2_deficiencies
             FROM device_snapshot ds
@@ -2464,6 +2466,8 @@ def get_incompatible_devices():
                     
                     # New fields requested by Dashboard AI
                     "last_update": row.created_at.isoformat() + 'Z' if row.created_at else None,
+                    "last_contact": row.last_online.isoformat() + 'Z' if row.last_online else None,
+                    "cpu_model": row.cpu_model or "Unknown",
                     "memory_gib": float(row.memory_gib) if row.memory_gib else None,
                     "memory_bytes": int(row.memory_bytes) if row.memory_bytes else None,
                     "system_manufacturer": "Not Available",  # Not available in database
@@ -2501,6 +2505,8 @@ def get_compatible_devices():
                 ds.os_release_id,
                 ds.memory_gib,
                 ds.memory_bytes,
+                ds.cpu_model,
+                ds.last_online,
                 ds.created_at,
                 ds.windows_11_24h2_deficiencies
             FROM device_snapshot ds
@@ -2548,6 +2554,8 @@ def get_compatible_devices():
                     
                     # New fields requested by Dashboard AI
                     "last_update": row.created_at.isoformat() + 'Z' if row.created_at else None,
+                    "last_contact": row.last_online.isoformat() + 'Z' if row.last_online else None,
+                    "cpu_model": row.cpu_model or "Unknown",
                     "memory_gib": float(row.memory_gib) if row.memory_gib else None,
                     "memory_bytes": int(row.memory_bytes) if row.memory_bytes else None,
                     "system_manufacturer": "Not Available",  # Not available in database

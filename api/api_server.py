@@ -51,6 +51,26 @@ sys.path.insert(0, '/opt/es-inventory-hub')
 from collectors.checks.cross_vendor import run_cross_vendor_checks
 
 app = Flask(__name__)
+
+def _format_date_string(date_str):
+    """Format date string to consistent ISO 8601 format without microseconds"""
+    if not date_str or date_str == 'Unknown':
+        return 'Unknown'
+    
+    try:
+        # Parse the date string and reformat without microseconds
+        if isinstance(date_str, str):
+            # Handle various date formats
+            if 'T' in date_str:
+                # ISO format - remove microseconds and timezone offset
+                dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+                return dt.replace(microsecond=0).replace(tzinfo=None).isoformat() + 'Z'
+            else:
+                return date_str
+        return date_str
+    except (ValueError, TypeError):
+        return date_str
+
 # Enable CORS for cross-origin requests with permissive settings for dashboard access
 CORS(app, 
      origins=['*'],  # Allow all origins for now - can be restricted later
@@ -2462,11 +2482,11 @@ def get_incompatible_devices():
                     "os_version": row.os_release_id,  # Use os_release_id as version
                     "os_build": row.os_build,
                     "deficiencies": deficiencies.get('deficiencies', []),
-                    "assessment_date": deficiencies.get('assessment_date', 'Unknown'),
+                    "assessment_date": _format_date_string(deficiencies.get('assessment_date', 'Unknown')),
                     
                     # New fields requested by Dashboard AI
-                    "last_update": row.created_at.isoformat() + 'Z' if row.created_at else None,
-                    "last_contact": row.last_online.isoformat() + 'Z' if row.last_online else None,
+                    "last_update": row.created_at.replace(microsecond=0).replace(tzinfo=None).isoformat() + 'Z' if row.created_at else None,
+                    "last_contact": row.last_online.replace(microsecond=0).replace(tzinfo=None).isoformat() + 'Z' if row.last_online else None,
                     "cpu_model": row.cpu_model or "Unknown",
                     "memory_gib": float(row.memory_gib) if row.memory_gib else None,
                     "memory_bytes": int(row.memory_bytes) if row.memory_bytes else None,
@@ -2550,11 +2570,11 @@ def get_compatible_devices():
                     "os_version": row.os_release_id,  # Use os_release_id as version
                     "os_build": row.os_build,
                     "passed_requirements": assessment_data.get('passed_requirements', []),
-                    "assessment_date": assessment_data.get('assessment_date', 'Unknown'),
+                    "assessment_date": _format_date_string(assessment_data.get('assessment_date', 'Unknown')),
                     
                     # New fields requested by Dashboard AI
-                    "last_update": row.created_at.isoformat() + 'Z' if row.created_at else None,
-                    "last_contact": row.last_online.isoformat() + 'Z' if row.last_online else None,
+                    "last_update": row.created_at.replace(microsecond=0).replace(tzinfo=None).isoformat() + 'Z' if row.created_at else None,
+                    "last_contact": row.last_online.replace(microsecond=0).replace(tzinfo=None).isoformat() + 'Z' if row.last_online else None,
                     "cpu_model": row.cpu_model or "Unknown",
                     "memory_gib": float(row.memory_gib) if row.memory_gib else None,
                     "memory_bytes": int(row.memory_bytes) if row.memory_bytes else None,

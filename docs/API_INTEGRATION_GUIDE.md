@@ -208,6 +208,7 @@ const VARIANCE_TYPES = {
 - ✅ **Detailed Deficiency Reporting**: Specific reasons why devices fail requirements with remediation suggestions
 - ✅ **Organization Breakdown**: Incompatible devices grouped by organization
 - ✅ **Real-time Status**: Current compatibility rates and assessment status
+- ✅ **Hardware Information**: Includes `cpu_model` and `last_contact` fields for detailed device information
 
 **Usage Example:**
 ```javascript

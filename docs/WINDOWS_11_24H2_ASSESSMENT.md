@@ -252,6 +252,8 @@ The assessment results are exposed through the following API endpoints:
     "display_name": "ENERSYS-PC00FY6",
     "organization_name": "Example Corp",
     "os_name": "Windows 11 Professional",
+    "cpu_model": "Intel(R) Core(TM) i7-4600U",
+    "last_contact": "2025-10-05T16:28:26.187000+00:00Z",
     "deficiencies": [
       {
         "requirement": "CPU Support",
@@ -269,7 +271,8 @@ The assessment results are exposed through the following API endpoints:
 #### 3. Compatible Devices
 - **Endpoint**: `GET /api/windows-11-24h2/compatible`
 - **Description**: Get list of compatible devices
-- **Response**: Similar structure to incompatible devices but with empty deficiencies array
+- **Response**: Similar structure to incompatible devices but with `passed_requirements` array instead of `deficiencies`
+- **Additional Fields**: Includes `cpu_model` and `last_contact` fields for hardware and connectivity information
 
 ## Automation
 

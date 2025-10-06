@@ -2442,7 +2442,9 @@ def get_incompatible_devices():
                 ds.cpu_model,
                 ds.last_online,
                 ds.created_at,
-                ds.windows_11_24h2_deficiencies
+                ds.windows_11_24h2_deficiencies,
+                ds.system_manufacturer,
+                ds.system_model
             FROM device_snapshot ds
             JOIN vendor v ON ds.vendor_id = v.id
             WHERE v.name = 'Ninja'
@@ -2490,8 +2492,8 @@ def get_incompatible_devices():
                     "cpu_model": row.cpu_model or "Unknown",
                     "memory_gib": float(row.memory_gib) if row.memory_gib else None,
                     "memory_bytes": int(row.memory_bytes) if row.memory_bytes else None,
-                    "system_manufacturer": "Not Available",  # Not available in database
-                    "system_model": "Not Available"  # Not available in database
+                    "system_manufacturer": row.system_manufacturer or "Not Available",
+                    "system_model": row.system_model or "Not Available"
                 })
             
             return jsonify({
@@ -2528,7 +2530,9 @@ def get_compatible_devices():
                 ds.cpu_model,
                 ds.last_online,
                 ds.created_at,
-                ds.windows_11_24h2_deficiencies
+                ds.windows_11_24h2_deficiencies,
+                ds.system_manufacturer,
+                ds.system_model
             FROM device_snapshot ds
             JOIN vendor v ON ds.vendor_id = v.id
             WHERE v.name = 'Ninja'
@@ -2578,8 +2582,8 @@ def get_compatible_devices():
                     "cpu_model": row.cpu_model or "Unknown",
                     "memory_gib": float(row.memory_gib) if row.memory_gib else None,
                     "memory_bytes": int(row.memory_bytes) if row.memory_bytes else None,
-                    "system_manufacturer": "Not Available",  # Not available in database
-                    "system_model": "Not Available"  # Not available in database
+                    "system_manufacturer": row.system_manufacturer or "Not Available",
+                    "system_model": row.system_model or "Not Available"
                 })
             
             return jsonify({

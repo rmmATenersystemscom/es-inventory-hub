@@ -198,6 +198,8 @@ def insert_snapshot(
         'cpu_model': normalized.get('cpu_model'),
         'memory_gib': normalized.get('memory_gib'),
         'volumes': normalized.get('volumes'),
+        'system_manufacturer': normalized.get('system_manufacturer'),
+        'system_model': normalized.get('system_model'),
     }
     
     # Perform PostgreSQL upsert
@@ -253,6 +255,8 @@ def insert_snapshot(
         'cpu_model': stmt.excluded.cpu_model,
         'memory_gib': stmt.excluded.memory_gib,
         'volumes': stmt.excluded.volumes,
+        'system_manufacturer': stmt.excluded.system_manufacturer,
+        'system_model': stmt.excluded.system_model,
     }
     
     # Add ON CONFLICT clause for the unique constraint

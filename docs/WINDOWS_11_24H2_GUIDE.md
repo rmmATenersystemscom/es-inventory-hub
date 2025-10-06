@@ -106,6 +106,11 @@ The Windows 11 24H2 API endpoints now provide enhanced field data through NinjaR
 - **`os_version`**: OS version identifier (e.g., "22H2", "23H2", "21H2")
 - **`os_build`**: OS build number (e.g., "19045", "22631", "22000")
 - **`last_update`**: Last data update timestamp (ISO 8601 format)
+
+### **Date Field Distinctions:**
+- **`last_contact`**: When the device was last online/active (from Ninja RMM)
+- **`last_update`**: When we last updated this device record in our database
+- **`assessment_date`**: When the Windows 11 24H2 compatibility assessment was performed
 - **`memory_gib`**: Memory in GiB (Gigabytes) - Available in database
 - **`memory_bytes`**: Memory in bytes - Available in database (may be null)
 - **`system_manufacturer`**: System manufacturer - Not available in database

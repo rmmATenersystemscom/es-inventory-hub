@@ -210,6 +210,11 @@ const VARIANCE_TYPES = {
 - ✅ **Real-time Status**: Current compatibility rates and assessment status
 - ✅ **Hardware Information**: Includes `cpu_model` and `last_contact` fields for detailed device information
 
+### **Date Field Distinctions:**
+- **`last_contact`**: When the device was last online/active (from Ninja RMM)
+- **`last_update`**: When we last updated this device record in our database  
+- **`assessment_date`**: When the Windows 11 24H2 compatibility assessment was performed
+
 **Usage Example:**
 ```javascript
 // Get Windows 11 24H2 compatibility status

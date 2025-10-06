@@ -274,6 +274,11 @@ The assessment results are exposed through the following API endpoints:
 - **Response**: Similar structure to incompatible devices but with `passed_requirements` array instead of `deficiencies`
 - **Additional Fields**: Includes `cpu_model` and `last_contact` fields for hardware and connectivity information
 
+### **Date Field Distinctions:**
+- **`last_contact`**: When the device was last online/active (from Ninja RMM)
+- **`last_update`**: When we last updated this device record in our database
+- **`assessment_date`**: When the Windows 11 24H2 compatibility assessment was performed
+
 ## Automation
 
 ### Systemd Service Configuration

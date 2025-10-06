@@ -208,7 +208,7 @@ const VARIANCE_TYPES = {
 - ✅ **Detailed Deficiency Reporting**: Specific reasons why devices fail requirements with remediation suggestions
 - ✅ **Organization Breakdown**: Incompatible devices grouped by organization
 - ✅ **Real-time Status**: Current compatibility rates and assessment status
-- ✅ **Hardware Information**: Includes `cpu_model` and `last_contact` fields for detailed device information
+- ✅ **Hardware Information**: Includes `cpu_model`, `last_contact`, `system_manufacturer`, and `system_model` fields for detailed device information
 
 ### **Date Field Distinctions:**
 - **`last_contact`**: When the device was last online/active (from Ninja RMM)

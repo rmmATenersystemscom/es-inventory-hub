@@ -253,7 +253,9 @@ The assessment results are exposed through the following API endpoints:
     "organization_name": "Example Corp",
     "os_name": "Windows 11 Professional",
     "cpu_model": "Intel(R) Core(TM) i7-4600U",
-           "last_contact": "2025-10-05T16:28:26Z",
+    "system_manufacturer": "Dell Inc.",
+    "system_model": "OptiPlex 7090",
+    "last_contact": "2025-10-05T16:28:26Z",
     "deficiencies": [
       {
         "requirement": "CPU Support",
@@ -272,7 +274,7 @@ The assessment results are exposed through the following API endpoints:
 - **Endpoint**: `GET /api/windows-11-24h2/compatible`
 - **Description**: Get list of compatible devices
 - **Response**: Similar structure to incompatible devices but with `passed_requirements` array instead of `deficiencies`
-- **Additional Fields**: Includes `cpu_model` and `last_contact` fields for hardware and connectivity information
+- **Additional Fields**: Includes `cpu_model`, `last_contact`, `system_manufacturer`, and `system_model` fields for hardware and connectivity information
 
 ### **Date Field Distinctions:**
 - **`last_contact`**: When the device was last online/active (from Ninja RMM)

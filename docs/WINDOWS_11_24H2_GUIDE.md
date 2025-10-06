@@ -113,8 +113,8 @@ The Windows 11 24H2 API endpoints now provide enhanced field data through NinjaR
 - **`assessment_date`**: When the Windows 11 24H2 compatibility assessment was performed
 - **`memory_gib`**: Memory in GiB (Gigabytes) - Available in database
 - **`memory_bytes`**: Memory in bytes - Available in database (may be null)
-- **`system_manufacturer`**: System manufacturer - Not available in database
-- **`system_model`**: System model - Not available in database
+- **`system_manufacturer`**: System manufacturer (e.g., "Dell Inc.", "HP", "Lenovo")
+- **`system_model`**: System model (e.g., "OptiPlex 7090", "ProBook 450", "ThinkPad X1")
 
 ### **Data Source Enhancement:**
 - **Response includes**: `"data_source": "Database + NinjaRMM API"`

@@ -71,12 +71,13 @@ def _format_date_string(date_str):
     except (ValueError, TypeError):
         return date_str
 
-# Enable CORS for cross-origin requests with permissive settings for dashboard access
+# Enable CORS for cross-origin requests with specific dashboard access
 CORS(app, 
-     origins=['*'],  # Allow all origins for now - can be restricted later
+     origins=['https://dashboards.enersystems.com', 'http://localhost:3000', 'http://localhost:8080'],
      methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-     allow_headers=['Content-Type', 'Authorization', 'X-Requested-With'],
-     supports_credentials=True)
+     allow_headers=['Content-Type', 'Authorization', 'X-Requested-With', 'X-API-Key', 'Cache-Control', 'Pragma'],
+     supports_credentials=True,
+     max_age=86400)
 
 # Database connection
 from common.config import get_dsn
@@ -162,7 +163,7 @@ def get_organization_breakdown(session, exceptions, report_date):
         elif exc_type == "DUPLICATE_TL":
             dashboard_type = "threatlocker_duplicates"
         elif exc_type == "SPARE_MISMATCH":
-            dashboard_type = "ninja_duplicates"
+            dashboard_type = "devices_that_should_not_have_threatlocker"
         elif exc_type == "DISPLAY_NAME_MISMATCH":
             dashboard_type = "display_name_mismatches"
         
@@ -175,12 +176,12 @@ def get_organization_breakdown(session, exceptions, report_date):
                 "by_organization": {}
             }
         
-        # For Missing in Ninja, ThreatLocker Duplicates, and Ninja Duplicates, extract organization from details if not found in device_snapshot
+        # For Missing in Ninja, ThreatLocker Duplicates, and DevicesThatShouldNotHaveThreatlocker, extract organization from details if not found in device_snapshot
         if exc_type in ["MISSING_NINJA", "DUPLICATE_TL", "SPARE_MISMATCH"] and org_name == "Unknown" and details:
             # Extract organization from the details JSONB field
             details_dict = details if isinstance(details, dict) else {}
             
-            # For SPARE_MISMATCH (Ninja Duplicates), prefer ninja_org_name over tl_org_name
+            # For SPARE_MISMATCH (DevicesThatShouldNotHaveThreatlocker), prefer ninja_org_name over tl_org_name
             if exc_type == "SPARE_MISMATCH":
                 ninja_org = details_dict.get('ninja_org_name', '')
                 tl_org = details_dict.get('tl_org_name', '')
@@ -389,7 +390,7 @@ def get_latest_variance_report():
             "threatlocker_duplicates": {
                 "total_count": exception_counts.get("DUPLICATE_TL", 0)
             },
-            "ninja_duplicates": {
+            "devices_that_should_not_have_threatlocker": {
                 "total_count": exception_counts.get("SPARE_MISMATCH", 0)
             },
             "display_name_mismatches": {
@@ -413,7 +414,7 @@ def get_latest_variance_report():
                 "total_count": exception_counts.get("DUPLICATE_TL", 0),
                 "by_organization": {}
             }),
-            "ninja_duplicates": org_breakdown.get("ninja_duplicates", {
+            "devices_that_should_not_have_threatlocker": org_breakdown.get("devices_that_should_not_have_threatlocker", {
                 "total_count": exception_counts.get("SPARE_MISMATCH", 0),
                 "by_organization": {}
             }),
@@ -520,64 +521,121 @@ def get_variance_report_by_date(date_str: str):
 
 @app.route('/api/collectors/run', methods=['POST'])
 def run_collectors():
-    """Trigger collector runs."""
+    """Trigger collector runs with batch and job tracking."""
+    import uuid
+    from datetime import datetime, timedelta
+    
     data = request.get_json() or {}
-    collector_type = data.get('collector', 'both')  # 'ninja', 'threatlocker', or 'both'
+    collectors = data.get('collectors', ['ninja', 'threatlocker'])
+    priority = data.get('priority', 'normal')
     run_cross_vendor = data.get('run_cross_vendor', True)
     
-    results = {}
+    # Generate unique IDs
+    batch_id = f"bc_{uuid.uuid4().hex[:8]}"
+    now = datetime.utcnow()
     
     try:
-        if collector_type in ['ninja', 'both']:
-            # Run Ninja collector (passwordless sudo configured)
-            result = subprocess.run([
-                'sudo', 'systemctl', 'start', 'ninja-collector.service'
-            ], capture_output=True, text=True, timeout=300)
+        with get_session() as session:
+            # Create batch record
+            batch_query = text("""
+                INSERT INTO job_batches (batch_id, created_at, status, priority, started_at, message)
+                VALUES (:batch_id, :created_at, :status, :priority, :started_at, :message)
+            """)
+            session.execute(batch_query, {
+                'batch_id': batch_id,
+                'created_at': now,
+                'status': 'queued',
+                'priority': priority,
+                'started_at': now,
+                'message': f"Starting collectors: {', '.join(collectors)}"
+            })
             
-            results['ninja'] = {
-                'success': result.returncode == 0,
-                'stdout': result.stdout,
-                'stderr': result.stderr
-            }
-        
-        if collector_type in ['threatlocker', 'both']:
-            # Run ThreatLocker collector (passwordless sudo configured)
-            result = subprocess.run([
-                'sudo', 'systemctl', 'start', 'threatlocker-collector@rene.service'
-            ], capture_output=True, text=True, timeout=300)
+            # Create job records
+            job_runs = []
+            for collector in collectors:
+                job_id = f"{collector[:2]}_{uuid.uuid4().hex[:8]}"
+                job_name = f"{collector}-collector"
+                
+                job_query = text("""
+                    INSERT INTO job_runs (job_id, batch_id, job_name, status, started_at, updated_at, message)
+                    VALUES (:job_id, :batch_id, :job_name, :status, :started_at, :updated_at, :message)
+                """)
+                session.execute(job_query, {
+                    'job_id': job_id,
+                    'batch_id': batch_id,
+                    'job_name': job_name,
+                    'status': 'queued',
+                    'started_at': now,
+                    'updated_at': now,
+                    'message': f"Queued {collector} collector"
+                })
+                
+                job_runs.append({
+                    'job_name': job_name,
+                    'job_id': job_id,
+                    'status': 'queued',
+                    'started_at': now.isoformat() + 'Z'
+                })
             
-            results['threatlocker'] = {
-                'success': result.returncode == 0,
-                'stdout': result.stdout,
-                'stderr': result.stderr
-            }
-        
-        # Run cross-vendor checks if requested
-        if run_cross_vendor:
-            try:
-                with get_session() as session:
-                    cross_vendor_results = run_cross_vendor_checks(session, date.today())
-                    results['cross_vendor'] = {
-                        'success': True,
-                        'results': cross_vendor_results
-                    }
-            except Exception as e:
-                results['cross_vendor'] = {
-                    'success': False,
-                    'error': str(e)
-                }
-        
-        return jsonify({
-            'success': True,
-            'message': 'Collectors triggered successfully',
-            'results': results
-        })
-        
-    except subprocess.TimeoutExpired:
-        return jsonify({
-            'success': False,
-            'error': 'Collector execution timed out'
-        }), 500
+            session.commit()
+            
+            # Start collectors asynchronously and update job status
+            for collector in collectors:
+                try:
+                    if collector == 'ninja':
+                        result = subprocess.run([
+                            'sudo', 'systemctl', 'start', 'ninja-collector.service'
+                        ], capture_output=True, text=True, timeout=30)
+                        
+                        # Update job status based on result
+                        if result.returncode == 0:
+                            # Find the job and update it to running
+                            for job in job_runs:
+                                if job['job_name'] == 'ninja-collector':
+                                    from api.progress_tracker import update_job_progress
+                                    update_job_progress(job['job_id'], 'running', 10, 'Ninja collector started')
+                                    break
+                        else:
+                            # Update job to failed
+                            for job in job_runs:
+                                if job['job_name'] == 'ninja-collector':
+                                    from api.progress_tracker import update_job_progress
+                                    update_job_progress(job['job_id'], 'failed', 0, f'Failed to start: {result.stderr}')
+                                    break
+                                    
+                    elif collector == 'threatlocker':
+                        result = subprocess.run([
+                            'sudo', 'systemctl', 'start', 'threatlocker-collector@rene.service'
+                        ], capture_output=True, text=True, timeout=30)
+                        
+                        # Update job status based on result
+                        if result.returncode == 0:
+                            # Find the job and update it to running
+                            for job in job_runs:
+                                if job['job_name'] == 'threatlocker-collector':
+                                    from api.progress_tracker import update_job_progress
+                                    update_job_progress(job['job_id'], 'running', 10, 'ThreatLocker collector started')
+                                    break
+                        else:
+                            # Update job to failed
+                            for job in job_runs:
+                                if job['job_name'] == 'threatlocker-collector':
+                                    from api.progress_tracker import update_job_progress
+                                    update_job_progress(job['job_id'], 'failed', 0, f'Failed to start: {result.stderr}')
+                                    break
+                except Exception as e:
+                    # Update job to failed
+                    for job in job_runs:
+                        if job['job_name'] == f'{collector}-collector':
+                            from api.progress_tracker import update_job_progress
+                            update_job_progress(job['job_id'], 'failed', 0, f'Error starting collector: {str(e)}')
+                            break
+            
+            return jsonify({
+                'batch_id': batch_id,
+                'collectors': job_runs
+            }), 201
+            
     except Exception as e:
         return jsonify({
             'success': False,
@@ -632,14 +690,17 @@ def get_collection_history():
     limit = int(request.args.get('limit', 10))
     
     with get_session() as session:
-        # Get recent job runs
+        # Get recent job runs including running jobs
         query = text("""
             SELECT 
+                job_id,
                 job_name,
                 started_at,
                 ended_at,
                 status,
                 message,
+                progress_percent,
+                updated_at,
                 CASE 
                     WHEN ended_at IS NOT NULL THEN 
                         EXTRACT(EPOCH FROM (ended_at - started_at))::INTEGER
@@ -656,7 +717,7 @@ def get_collection_history():
         # Format results
         history = []
         for row in results:
-            job_name, started_at, ended_at, status, message, duration_seconds = row
+            job_id, job_name, started_at, ended_at, status, message, progress_percent, updated_at, duration_seconds = row
             
             # Calculate duration
             duration_str = None
@@ -673,11 +734,14 @@ def get_collection_history():
                     duration_str = f"{hours}h {minutes}m"
             
             history.append({
+                'job_id': job_id,
                 'job_name': job_name,
-                'started_at': started_at.isoformat() if started_at else None,
-                'ended_at': ended_at.isoformat() if ended_at else None,
+                'started_at': started_at.isoformat() + 'Z' if started_at else None,
+                'ended_at': ended_at.isoformat() + 'Z' if ended_at else None,
                 'status': status,
                 'message': message,
+                'progress_percent': progress_percent,
+                'updated_at': updated_at.isoformat() + 'Z' if updated_at else None,
                 'duration': duration_str,
                 'duration_seconds': duration_seconds
             })
@@ -752,6 +816,248 @@ def get_collection_progress():
             'total_active': len(active_collections),
             'generated_at': datetime.now().isoformat()
         })
+
+@app.route('/api/collectors/runs/batch/<batch_id>', methods=['GET', 'OPTIONS'])
+def get_batch_status(batch_id):
+    """Get status of a specific batch run."""
+    try:
+        with get_session() as session:
+            # Get batch info
+            batch_query = text("""
+                SELECT batch_id, created_at, status, priority, started_at, ended_at, 
+                       progress_percent, estimated_completion, message, error, duration_seconds
+                FROM job_batches 
+                WHERE batch_id = :batch_id
+            """)
+            batch_result = session.execute(batch_query, {'batch_id': batch_id}).fetchone()
+            
+            if not batch_result:
+                return jsonify({'error': 'Batch not found'}), 404
+            
+            # Get job runs for this batch
+            jobs_query = text("""
+                SELECT job_id, job_name, status, started_at, updated_at, ended_at,
+                       progress_percent, message, error, duration_seconds
+                FROM job_runs 
+                WHERE batch_id = :batch_id
+                ORDER BY started_at
+            """)
+            jobs_results = session.execute(jobs_query, {'batch_id': batch_id}).fetchall()
+            
+            # Format response
+            collectors = []
+            for job in jobs_results:
+                collectors.append({
+                    'job_name': job.job_name,
+                    'job_id': job.job_id,
+                    'status': job.status,
+                    'started_at': job.started_at.isoformat() + 'Z' if job.started_at else None,
+                    'updated_at': job.updated_at.isoformat() + 'Z' if job.updated_at else None,
+                    'ended_at': job.ended_at.isoformat() + 'Z' if job.ended_at else None,
+                    'progress_percent': job.progress_percent,
+                    'message': job.message,
+                    'error': job.error,
+                    'duration_seconds': job.duration_seconds
+                })
+            
+            return jsonify({
+                'batch_id': batch_result.batch_id,
+                'status': batch_result.status,
+                'progress_percent': batch_result.progress_percent,
+                'estimated_completion': batch_result.estimated_completion.isoformat() + 'Z' if batch_result.estimated_completion else None,
+                'started_at': batch_result.started_at.isoformat() + 'Z' if batch_result.started_at else None,
+                'updated_at': datetime.utcnow().isoformat() + 'Z',
+                'ended_at': batch_result.ended_at.isoformat() + 'Z' if batch_result.ended_at else None,
+                'message': batch_result.message,
+                'error': batch_result.error,
+                'collectors': collectors,
+                'duration_seconds': batch_result.duration_seconds
+            })
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/collectors/runs/latest', methods=['GET', 'OPTIONS'])
+def get_latest_runs():
+    """Get latest active or most recent terminal runs for specified collectors."""
+    collectors_param = request.args.get('collectors', 'ninja,threatlocker')
+    collectors = [c.strip() for c in collectors_param.split(',')]
+    
+    try:
+        with get_session() as session:
+            # Get latest runs for each collector
+            latest_runs = []
+            for collector in collectors:
+                job_name = f"{collector}-collector"
+                
+                # First try to get active runs
+                active_query = text("""
+                    SELECT jr.job_id, jr.batch_id, jr.job_name, jr.status, jr.started_at,
+                           jr.updated_at, jr.ended_at, jr.progress_percent, jr.message,
+                           jr.error, jr.duration_seconds,
+                           jb.status as batch_status, jb.progress_percent as batch_progress,
+                           jb.estimated_completion, jb.message as batch_message
+                    FROM job_runs jr
+                    JOIN job_batches jb ON jr.batch_id = jb.batch_id
+                    WHERE jr.job_name = :job_name AND jr.status IN ('queued', 'running')
+                    ORDER BY jr.started_at DESC
+                    LIMIT 1
+                """)
+                active_result = session.execute(active_query, {'job_name': job_name}).fetchone()
+                
+                if active_result:
+                    latest_runs.append({
+                        'job_id': active_result.job_id,
+                        'batch_id': active_result.batch_id,
+                        'job_name': active_result.job_name,
+                        'status': active_result.status,
+                        'started_at': active_result.started_at.isoformat() + 'Z' if active_result.started_at else None,
+                        'updated_at': active_result.updated_at.isoformat() + 'Z' if active_result.updated_at else None,
+                        'ended_at': active_result.ended_at.isoformat() + 'Z' if active_result.ended_at else None,
+                        'progress_percent': active_result.progress_percent,
+                        'message': active_result.message,
+                        'error': active_result.error,
+                        'duration_seconds': active_result.duration_seconds,
+                        'batch_status': active_result.batch_status,
+                        'batch_progress_percent': active_result.batch_progress,
+                        'estimated_completion': active_result.estimated_completion.isoformat() + 'Z' if active_result.estimated_completion else None,
+                        'batch_message': active_result.batch_message
+                    })
+                else:
+                    # Get most recent terminal run
+                    terminal_query = text("""
+                        SELECT jr.job_id, jr.batch_id, jr.job_name, jr.status, jr.started_at,
+                               jr.updated_at, jr.ended_at, jr.progress_percent, jr.message,
+                               jr.error, jr.duration_seconds,
+                               jb.status as batch_status, jb.progress_percent as batch_progress,
+                               jb.estimated_completion, jb.message as batch_message
+                        FROM job_runs jr
+                        JOIN job_batches jb ON jr.batch_id = jb.batch_id
+                        WHERE jr.job_name = :job_name AND jr.status IN ('completed', 'failed', 'cancelled')
+                        ORDER BY jr.started_at DESC
+                        LIMIT 1
+                    """)
+                    terminal_result = session.execute(terminal_query, {'job_name': job_name}).fetchone()
+                    
+                    if terminal_result:
+                        latest_runs.append({
+                            'job_id': terminal_result.job_id,
+                            'batch_id': terminal_result.batch_id,
+                            'job_name': terminal_result.job_name,
+                            'status': terminal_result.status,
+                            'started_at': terminal_result.started_at.isoformat() + 'Z' if terminal_result.started_at else None,
+                            'updated_at': terminal_result.updated_at.isoformat() + 'Z' if terminal_result.updated_at else None,
+                            'ended_at': terminal_result.ended_at.isoformat() + 'Z' if terminal_result.ended_at else None,
+                            'progress_percent': terminal_result.progress_percent,
+                            'message': terminal_result.message,
+                            'error': terminal_result.error,
+                            'duration_seconds': terminal_result.duration_seconds,
+                            'batch_status': terminal_result.batch_status,
+                            'batch_progress_percent': terminal_result.batch_progress,
+                            'estimated_completion': terminal_result.estimated_completion.isoformat() + 'Z' if terminal_result.estimated_completion else None,
+                            'batch_message': terminal_result.batch_message
+                        })
+            
+            return jsonify({
+                'latest_runs': latest_runs,
+                'total_runs': len(latest_runs),
+                'generated_at': datetime.utcnow().isoformat() + 'Z'
+            })
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/collectors/runs/job/<job_id>', methods=['GET', 'OPTIONS'])
+def get_job_status(job_id):
+    """Get status of a specific job run."""
+    try:
+        with get_session() as session:
+            # Get job info
+            job_query = text("""
+                SELECT jr.job_id, jr.batch_id, jr.job_name, jr.status, jr.started_at, 
+                       jr.updated_at, jr.ended_at, jr.progress_percent, jr.message, 
+                       jr.error, jr.duration_seconds,
+                       jb.status as batch_status, jb.progress_percent as batch_progress,
+                       jb.estimated_completion, jb.message as batch_message
+                FROM job_runs jr
+                JOIN job_batches jb ON jr.batch_id = jb.batch_id
+                WHERE jr.job_id = :job_id
+            """)
+            job_result = session.execute(job_query, {'job_id': job_id}).fetchone()
+            
+            if not job_result:
+                return jsonify({'error': 'Job not found'}), 404
+            
+            return jsonify({
+                'job_id': job_result.job_id,
+                'batch_id': job_result.batch_id,
+                'job_name': job_result.job_name,
+                'status': job_result.status,
+                'started_at': job_result.started_at.isoformat() + 'Z' if job_result.started_at else None,
+                'updated_at': job_result.updated_at.isoformat() + 'Z' if job_result.updated_at else None,
+                'ended_at': job_result.ended_at.isoformat() + 'Z' if job_result.ended_at else None,
+                'progress_percent': job_result.progress_percent,
+                'message': job_result.message,
+                'error': job_result.error,
+                'duration_seconds': job_result.duration_seconds,
+                'batch_status': job_result.batch_status,
+                'batch_progress_percent': job_result.batch_progress,
+                'estimated_completion': job_result.estimated_completion.isoformat() + 'Z' if job_result.estimated_completion else None,
+                'batch_message': job_result.batch_message
+            })
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/docs/dashboard-ai-guide', methods=['GET'])
+def get_dashboard_ai_guide():
+    """Serve Dashboard AI integration guide."""
+    try:
+        with open('/opt/es-inventory-hub/docs/DASHBOARD_AI_COLLECTOR_TRACKING_GUIDE.md', 'r') as f:
+            content = f.read()
+        return content, 200, {'Content-Type': 'text/markdown; charset=utf-8'}
+    except FileNotFoundError:
+        return "Documentation not found", 404
+    except Exception as e:
+        return f"Error reading documentation: {str(e)}", 500
+
+@app.route('/api/docs/dashboard-ai-prompt', methods=['GET'])
+def get_dashboard_ai_prompt():
+    """Serve Dashboard AI quick prompt."""
+    try:
+        with open('/opt/es-inventory-hub/docs/DASHBOARD_AI_PROMPT.md', 'r') as f:
+            content = f.read()
+        return content, 200, {'Content-Type': 'text/markdown; charset=utf-8'}
+    except FileNotFoundError:
+        return "Documentation not found", 404
+    except Exception as e:
+        return f"Error reading documentation: {str(e)}", 500
+
+@app.route('/api/docs/collector-tracking-api', methods=['GET'])
+def get_collector_tracking_api():
+    """Serve collector tracking API documentation."""
+    try:
+        with open('/opt/es-inventory-hub/docs/COLLECTOR_RUN_TRACKING_API.md', 'r') as f:
+            content = f.read()
+        return content, 200, {'Content-Type': 'text/markdown; charset=utf-8'}
+    except FileNotFoundError:
+        return "Documentation not found", 404
+    except Exception as e:
+        return f"Error reading documentation: {str(e)}", 500
+
+@app.route('/api/docs', methods=['GET'])
+def get_docs_index():
+    """Serve documentation index."""
+    docs = {
+        "dashboard_ai_guide": "/api/docs/dashboard-ai-guide",
+        "dashboard_ai_prompt": "/api/docs/dashboard-ai-prompt", 
+        "collector_tracking_api": "/api/docs/collector-tracking-api"
+    }
+    return jsonify({
+        "message": "ES Inventory Hub API Documentation",
+        "available_docs": docs,
+        "base_url": "https://db-api.enersystems.com:5400"
+    })
 
 @app.route('/api/exceptions', methods=['GET'])
 def get_exceptions():
@@ -1166,7 +1472,7 @@ def get_filtered_variance_report():
             }
         
         if 'SPARE_MISMATCH' in by_type:
-            response["ninja_duplicates"] = {
+            response["devices_that_should_not_have_threatlocker"] = {
                 "total_count": len(by_type['SPARE_MISMATCH']),
                 "by_organization": _group_by_organization(by_type['SPARE_MISMATCH'])
             }
@@ -1193,7 +1499,7 @@ def _get_action_for_exception_type(exc_type: str) -> str:
         'DISPLAY_NAME_MISMATCH': 'Investigate - Reconcile naming differences',
         'MISSING_NINJA': 'Add device to Ninja or remove from ThreatLocker',
         'DUPLICATE_TL': 'Remove duplicate ThreatLocker entries',
-        'SPARE_MISMATCH': 'Update billing status or remove from ThreatLocker',
+        'SPARE_MISMATCH': 'Remove ThreatLocker from spare devices or update billing status',
         'SITE_MISMATCH': 'Reconcile site assignments between vendors'
     }
     return actions.get(exc_type, 'Investigate and resolve')
@@ -2369,11 +2675,11 @@ def get_windows_11_24h2_status():
                 COUNT(CASE WHEN windows_11_24h2_capable = false THEN 1 END) as incompatible_devices,
                 COUNT(CASE WHEN windows_11_24h2_capable IS NULL THEN 1 END) as not_assessed_devices,
                 COUNT(CASE WHEN windows_11_24h2_capable = true 
-                          AND jsonb_extract_path_text(windows_11_24h2_deficiencies, 'passed_requirements') LIKE '%Windows 11 24H2 Already Installed%' 
+                          AND windows_11_24h2_deficiencies::jsonb->>'passed_requirements' LIKE '%Windows 11 24H2 Already Installed%' 
                           THEN 1 END) as already_compatible_devices,
                 COUNT(CASE WHEN windows_11_24h2_capable = true 
-                          AND (jsonb_extract_path_text(windows_11_24h2_deficiencies, 'passed_requirements') NOT LIKE '%Windows 11 24H2 Already Installed%' 
-                               OR jsonb_extract_path_text(windows_11_24h2_deficiencies, 'passed_requirements') IS NULL)
+                          AND (windows_11_24h2_deficiencies::jsonb->>'passed_requirements' NOT LIKE '%Windows 11 24H2 Already Installed%' 
+                               OR windows_11_24h2_deficiencies::jsonb->>'passed_requirements' IS NULL)
                           THEN 1 END) as compatible_for_upgrade_devices
             FROM device_snapshot ds
             JOIN vendor v ON ds.vendor_id = v.id
@@ -2396,7 +2702,7 @@ def get_windows_11_24h2_status():
             last_assessment_query = text("""
             SELECT MAX(assessment_date) as last_assessment
             FROM (
-                SELECT jsonb_extract_path_text(windows_11_24h2_deficiencies, 'assessment_date') as assessment_date
+                SELECT windows_11_24h2_deficiencies::jsonb->>'assessment_date' as assessment_date
                 FROM device_snapshot 
                 WHERE windows_11_24h2_deficiencies IS NOT NULL 
                 AND windows_11_24h2_deficiencies != '{}'
@@ -2438,7 +2744,6 @@ def get_incompatible_devices():
                 ds.os_build,
                 ds.os_release_id,
                 ds.memory_gib,
-                ds.memory_bytes,
                 ds.cpu_model,
                 ds.last_online,
                 ds.created_at,
@@ -2466,7 +2771,13 @@ def get_incompatible_devices():
             
             devices = []
             for row in results:
-                deficiencies = row.windows_11_24h2_deficiencies if row.windows_11_24h2_deficiencies else {}
+                deficiencies = {}
+                if row.windows_11_24h2_deficiencies:
+                    try:
+                        import json
+                        deficiencies = json.loads(row.windows_11_24h2_deficiencies)
+                    except (json.JSONDecodeError, TypeError):
+                        deficiencies = {}
                 
                 devices.append({
                     # Modal column mapping - using database fields
@@ -2491,7 +2802,6 @@ def get_incompatible_devices():
                     "last_contact": row.last_online.replace(microsecond=0).replace(tzinfo=None).isoformat() + 'Z' if row.last_online else None,
                     "cpu_model": row.cpu_model or "Unknown",
                     "memory_gib": float(row.memory_gib) if row.memory_gib else None,
-                    "memory_bytes": int(row.memory_bytes) if row.memory_bytes else None,
                     "system_manufacturer": row.system_manufacturer or "Not Available",
                     "system_model": row.system_model or "Not Available"
                 })
@@ -2526,7 +2836,6 @@ def get_compatible_devices():
                 ds.os_build,
                 ds.os_release_id,
                 ds.memory_gib,
-                ds.memory_bytes,
                 ds.cpu_model,
                 ds.last_online,
                 ds.created_at,
@@ -2546,8 +2855,8 @@ def get_compatible_devices():
             AND ds.os_name NOT ILIKE '%server%'
             AND ds.windows_11_24h2_capable IS NOT NULL
             AND ds.windows_11_24h2_capable = true
-            AND (jsonb_extract_path_text(ds.windows_11_24h2_deficiencies, 'passed_requirements') NOT LIKE '%Windows 11 24H2 Already Installed%' 
-                 OR jsonb_extract_path_text(ds.windows_11_24h2_deficiencies, 'passed_requirements') IS NULL)
+            AND (ds.windows_11_24h2_deficiencies::jsonb->>'passed_requirements' NOT LIKE '%Windows 11 24H2 Already Installed%' 
+                 OR ds.windows_11_24h2_deficiencies::jsonb->>'passed_requirements' IS NULL)
             AND (ds.device_type_id IN (SELECT id FROM device_type WHERE code IN ('workstation')))
             ORDER BY ds.organization_name, ds.hostname
             """)
@@ -2556,7 +2865,13 @@ def get_compatible_devices():
             
             devices = []
             for row in results:
-                assessment_data = row.windows_11_24h2_deficiencies if row.windows_11_24h2_deficiencies else {}
+                assessment_data = {}
+                if row.windows_11_24h2_deficiencies:
+                    try:
+                        import json
+                        assessment_data = json.loads(row.windows_11_24h2_deficiencies)
+                    except (json.JSONDecodeError, TypeError):
+                        assessment_data = {}
                 
                 devices.append({
                     # Modal column mapping - using database fields
@@ -2581,7 +2896,6 @@ def get_compatible_devices():
                     "last_contact": row.last_online.replace(microsecond=0).replace(tzinfo=None).isoformat() + 'Z' if row.last_online else None,
                     "cpu_model": row.cpu_model or "Unknown",
                     "memory_gib": float(row.memory_gib) if row.memory_gib else None,
-                    "memory_bytes": int(row.memory_bytes) if row.memory_bytes else None,
                     "system_manufacturer": row.system_manufacturer or "Not Available",
                     "system_model": row.system_model or "Not Available"
                 })

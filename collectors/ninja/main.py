@@ -149,6 +149,16 @@ def run_collection(ninja_api: NinjaAPI, ninja_rmm_api: Optional[NinjaRMMAPI], sn
         # Ensure required reference data exists
         _ensure_reference_data(session, logger)
         
+        # Delete existing snapshots for this date to ensure clean daily data
+        logger.info(f"Deleting existing snapshots for {snapshot_date}")
+        from storage.schema import DeviceSnapshot
+        deleted_count = session.query(DeviceSnapshot).filter(
+            DeviceSnapshot.snapshot_date == snapshot_date,
+            DeviceSnapshot.vendor_id == vendor_id
+        ).delete()
+        session.commit()
+        logger.info(f"Deleted {deleted_count} existing snapshots for {snapshot_date}")
+        
         # Get organization and location mappings if enhanced API is available
         org_map = {}
         loc_map = {}

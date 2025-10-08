@@ -271,7 +271,7 @@ curl -k -X POST https://192.168.99.246:5400/api/collectors/run \
 6. **Data Quality Fixes**
    - **Missing in Ninja**: Fixed organization field showing "Unknown" → now shows actual ThreatLocker organization names
    - **ThreatLocker Duplicates**: Fixed organization field showing "Unknown" → now shows actual ThreatLocker organization names
-   - **Ninja Duplicates**: Fixed organization field showing "Unknown" → now shows actual organization names from both Ninja and ThreatLocker
+   - **DevicesThatShouldNotHaveThreatlocker**: Fixed organization field showing "Unknown" → now shows actual organization names from both Ninja and ThreatLocker
    - **All Variance Types**: Organization data is now properly populated and accurate
 
 ### **🎯 DASHBOARD AI INTEGRATION READY**
@@ -293,7 +293,7 @@ The ES Inventory Hub API at `https://db-api.enersystems.com:5400` now provides:
 - ✅ Complete modal functionality
 - ✅ Missing in Ninja organization data fixed
 - ✅ ThreatLocker Duplicates organization data fixed
-- ✅ Ninja Duplicates organization data fixed
+- ✅ DevicesThatShouldNotHaveThreatlocker organization data fixed
 - ✅ All variance types have accurate organization information
 - ✅ Windows 11 24H2 Assessment system operational
 - ✅ Manual trigger functionality working

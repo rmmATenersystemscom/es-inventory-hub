@@ -313,11 +313,11 @@ async function getHistoricalVarianceReport(date) {
   - Updated `get_organization_breakdown` function to extract organization data for ThreatLocker Duplicates
 - **Result**: ✅ **FIXED** - Now shows correct organization names like "BFM Corp LLC", "Ener Systems", and "Gulf South Engineering and Testing Inc."
 
-### **Ninja Duplicates Organization Fix**
+### **DevicesThatShouldNotHaveThreatlocker Organization Fix**
 - **Issue**: Organization field showing "Unknown" for 44 out of 45 devices instead of actual organization names
 - **Solution**: 
   - Enhanced `check_spare_mismatch` function to collect and store organization data from both Ninja and ThreatLocker in `details` JSONB field
-  - Updated `get_organization_breakdown` function to extract organization data for Ninja Duplicates with preference for Ninja organization data
+  - Updated `get_organization_breakdown` function to extract organization data for DevicesThatShouldNotHaveThreatlocker with preference for Ninja organization data
 - **Result**: ✅ **FIXED** - Now shows correct organization names like "ChillCo", "Ener Systems", "BFM Corp LLC", "Quality Plumbing", and many more
 
 ---

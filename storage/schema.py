@@ -6,6 +6,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlalchemy.orm import relationship
 from datetime import datetime
+import uuid
 
 # Create the base class for all models
 Base = declarative_base()
@@ -175,6 +176,10 @@ class DeviceSnapshot(Base):
     
     # Hardware Information (Ninja-specific)
     os_architecture = Column(String(100), nullable=True)
+    
+    # Windows 11 24H2 Assessment fields
+    windows_11_24h2_capable = Column(Boolean, nullable=True)
+    windows_11_24h2_deficiencies = Column(Text, nullable=True)
     os_build = Column(String(100), nullable=True)
     os_release_id = Column(String(100), nullable=True)
     cpu_model = Column(String(255), nullable=True)
@@ -301,18 +306,49 @@ class ChangeLog(Base):
     vendor = relationship("Vendor", back_populates="change_logs")
 
 
+class JobBatches(Base):
+    """Job batches table - represents batch execution tracking"""
+    __tablename__ = 'job_batches'
+    
+    batch_id = Column(String(50), primary_key=True)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow)
+    status = Column(String(20), nullable=False, default='queued')
+    priority = Column(String(20), nullable=False, default='normal')
+    started_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    ended_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    progress_percent = Column(Integer, nullable=True)
+    estimated_completion = Column(TIMESTAMP(timezone=True), nullable=True)
+    message = Column(Text, nullable=True)
+    error = Column(Text, nullable=True)
+    duration_seconds = Column(Integer, nullable=True)
+    
+    __table_args__ = (
+        Index('idx_job_batches_status', 'status'),
+        Index('idx_job_batches_created_at', 'created_at'),
+    )
+
+
 class JobRuns(Base):
     """Job runs table - represents job execution history"""
     __tablename__ = 'job_runs'
     
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    job_name = Column(Text, nullable=False)
+    job_id = Column(String(50), primary_key=True)
+    batch_id = Column(String(50), ForeignKey('job_batches.batch_id'), nullable=True)
+    job_name = Column(String(50), nullable=False)
+    status = Column(String(20), nullable=False, default='queued')
     started_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow)
+    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow)
     ended_at = Column(TIMESTAMP(timezone=True), nullable=True)
-    status = Column(Text, nullable=False)  # 'running', 'completed', 'failed'
+    progress_percent = Column(Integer, nullable=True)
     message = Column(Text, nullable=True)
+    error = Column(Text, nullable=True)
+    duration_seconds = Column(Integer, nullable=True)
+    
+    # Foreign key relationship
+    batch = relationship("JobBatches", backref="job_runs")
     
     __table_args__ = (
+        Index('idx_job_runs_batch_id', 'batch_id'),
         Index('idx_job_runs_job_name', 'job_name'),
         Index('idx_job_runs_started_at', 'started_at'),
         Index('idx_job_runs_status', 'status'),

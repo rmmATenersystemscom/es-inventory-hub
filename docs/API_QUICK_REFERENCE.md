@@ -172,6 +172,6 @@ curl -X POST https://db-api.enersystems.com:5400/api/exceptions/123/resolve \
 
 ## 📝 **Notes**
 - All dates use `YYYY-MM-DD` format
-- Exception types: `MISSING_NINJA`, `DUPLICATE_TL`, `SITE_MISMATCH`, `SPARE_MISMATCH`
+- Exception types: `MISSING_NINJA`, `DUPLICATE_TL`, `SITE_MISMATCH`, `SPARE_MISMATCH` (DevicesThatShouldNotHaveThreatlocker)
 - Data status: `current`, `stale_data`, `out_of_sync`
 - API server must be running for endpoints to work

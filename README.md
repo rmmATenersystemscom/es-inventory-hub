@@ -1,6 +1,6 @@
 # ES Inventory Hub
 
-**Current Version**: v1.19.2 (stable)
+**Current Version**: v1.19.3 (stable)
 
 A centralized inventory management system for collecting and storing data from various sources including Ninja and ThreatLocker.
 
@@ -44,7 +44,7 @@ If ES Inventory Hub needs dashboard-related changes, put your request in a text 
 - Provide dashboards for analysis (seat counts, spares, billing vs non-billing, etc.).
 - Highlight mismatches and exceptions (e.g., ThreatLocker device missing in Ninja).
 
-## Current Version (v1.19.2)
+## Current Version (v1.19.3)
 
 This release includes critical security improvements by removing all hardcoded credentials from documentation, systemd service files, and scripts. All sensitive information has been replaced with secure placeholder values to prevent credential exposure in version control. This addresses the highest priority security vulnerability identified in the comprehensive security review.
 
@@ -206,7 +206,7 @@ The system automatically detects discrepancies between Ninja and ThreatLocker de
 - **MISSING_NINJA**: Devices in ThreatLocker but not in Ninja
 - **DUPLICATE_TL**: Duplicate hostnames in ThreatLocker
 - **SITE_MISMATCH**: Same device assigned to different sites
-- **SPARE_MISMATCH**: Spare devices still present in ThreatLocker
+- **SPARE_MISMATCH**: DevicesThatShouldNotHaveThreatlocker - spare devices still present in ThreatLocker
 
 **Hostname Matching:**
 - Uses robust canonical keys with 15-character hostname normalization

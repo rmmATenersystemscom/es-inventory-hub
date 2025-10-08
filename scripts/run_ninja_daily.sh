@@ -5,7 +5,7 @@ set -euo pipefail
 mkdir -p /var/log/es-inventory-hub
 
 # Log file path
-LOG_FILE="/tmp/ninja_daily.log"
+LOG_FILE="/var/log/es-inventory-hub/ninja_daily.log"
 
 # Function to log with timestamp
 log_message() {

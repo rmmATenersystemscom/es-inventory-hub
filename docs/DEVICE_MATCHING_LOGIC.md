@@ -203,7 +203,7 @@ HAVING COUNT(*) > 1
 - Ninja: `SERVER-01` in site "Office B"
 - **Result**: SITE_MISMATCH exception
 
-### **4. SPARE_MISMATCH**
+### **4. SPARE_MISMATCH (DevicesThatShouldNotHaveThreatlocker)**
 **Purpose**: Find devices marked as "spare" in Ninja but still present in ThreatLocker.
 
 **Logic**:
@@ -214,7 +214,7 @@ HAVING COUNT(*) > 1
 **Example**:
 - ThreatLocker: `OLD-SERVER` still present
 - Ninja: `OLD-SERVER` marked as spare
-- **Result**: SPARE_MISMATCH exception (cleanup opportunity)
+- **Result**: SPARE_MISMATCH exception (DevicesThatShouldNotHaveThreatlocker - cleanup opportunity)
 
 ---
 
@@ -256,6 +256,7 @@ def check_site_mismatch(session: Session, vendor_ids: Dict[str, int], snapshot_d
 def check_spare_mismatch(session: Session, vendor_ids: Dict[str, int], snapshot_date: date) -> int:
     """
     Check for spare mismatch: ThreatLocker present but Ninja marks as spare.
+    (DevicesThatShouldNotHaveThreatlocker)
     """
 ```
 

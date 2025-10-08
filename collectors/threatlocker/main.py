@@ -76,6 +76,18 @@ def run_collection(session: Any, devices: list, snapshot_date: date) -> Dict[str
     
     vendor_id = vendor.id
     
+    # Delete existing snapshots for this date to ensure clean daily data
+    from storage.schema import DeviceSnapshot
+    from common.logging import get_logger
+    logger = get_logger(__name__)
+    
+    deleted_count = session.query(DeviceSnapshot).filter(
+        DeviceSnapshot.snapshot_date == snapshot_date,
+        DeviceSnapshot.vendor_id == vendor_id
+    ).delete()
+    session.commit()
+    logger.info(f"Deleted {deleted_count} existing ThreatLocker snapshots for {snapshot_date}")
+    
     for device in devices:
         processed += 1
         

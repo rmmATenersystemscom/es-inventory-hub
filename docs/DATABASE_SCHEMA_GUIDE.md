@@ -2,8 +2,8 @@
 
 **Complete database reference for ES Inventory Hub schema, tables, and queries.**
 
-**Last Updated**: October 2, 2025  
-**ES Inventory Hub Version**: v1.15.0  
+**Last Updated**: October 8, 2025  
+**ES Inventory Hub Version**: v1.19.2  
 **Status**: ✅ **FULLY OPERATIONAL**
 
 ---
@@ -25,6 +25,46 @@ Password: your_database_password_here
 - **YOU MUST use**: `https://your-api-domain.com:5400` (HTTPS API server)
 - **YOU MUST NOT use**: Port 5432 (direct database access)
 - **HTTPS Required**: Mixed content security requires HTTPS for dashboard integration
+
+---
+
+## 🔄 **DAILY DATA COLLECTION BEHAVIOR**
+
+### **Multiple Runs Per Day Support**
+
+The ES Inventory Hub collectors are designed to handle **multiple runs per day** while maintaining **one dataset per day**. This ensures data accuracy and prevents duplicates.
+
+#### **Daily Data Update Logic**
+
+**For each day, the system follows this pattern:**
+
+1. **Delete Existing Data**: Before collecting new data, all existing snapshots for the current day are deleted
+2. **Insert Fresh Data**: New snapshots are inserted representing the current state
+3. **Result**: Each day has exactly one set of data representing the end-of-day state
+
+#### **Example Scenario**
+
+**October 7th, 2025 - Multiple Ninja Collector Runs:**
+
+- **Run 1 (9 AM)**: Deletes existing Oct 7th snapshots → Inserts 717 new snapshots
+- **Run 2 (2 PM)**: Deletes existing Oct 7th snapshots → Inserts 720 new snapshots (3 new devices)
+- **Run 3 (6 PM)**: Deletes existing Oct 7th snapshots → Inserts 715 new snapshots (5 devices deleted)
+
+**Final Result**: Only 715 snapshots exist for October 7th (representing the final state)
+
+#### **Device Deletion Handling**
+
+- **Current Day**: Deleted devices are removed from the current day's data
+- **Historical Days**: Previous days' data remains completely untouched
+- **Data Integrity**: Each day represents the actual state at the end of that day
+
+#### **Benefits of This Approach**
+
+- ✅ **No Duplicates**: Each device has exactly one snapshot per day
+- ✅ **Current Accuracy**: Data reflects the actual end-of-day state
+- ✅ **Historical Preservation**: Previous days' data is never modified
+- ✅ **Clean Database**: No "ghost" devices from deleted systems
+- ✅ **Multiple Runs Safe**: Can run collectors as many times as needed per day
 
 ---
 

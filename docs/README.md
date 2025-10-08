@@ -111,7 +111,7 @@ ThreatLocker (02:31 AM) → Database → Cross-Vendor Analysis → Variance Repo
 - **MISSING_NINJA** - Devices in ThreatLocker but not in NinjaRMM
 - **DUPLICATE_TL** - Duplicate hostnames in ThreatLocker
 - **SITE_MISMATCH** - Same device assigned to different sites
-- **SPARE_MISMATCH** - Devices marked as spare in Ninja but still in ThreatLocker
+- **SPARE_MISMATCH** - DevicesThatShouldNotHaveThreatlocker - Devices marked as spare in Ninja but still in ThreatLocker
 
 ---
 

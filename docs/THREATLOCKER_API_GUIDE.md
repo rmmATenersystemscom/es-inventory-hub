@@ -7,8 +7,23 @@ This guide provides comprehensive documentation of all available fields from the
 > **📖 Comprehensive API Documentation**: For complete API integration patterns, authentication methods, error handling, and best practices for all integrations (ConnectWise, Veeam VSPC, Veeam VBR, NinjaRMM, ThreatLocker, Fortigate), see [API Documentation](./API_DOCUMENTATION.md).
 
 **Analysis Date**: September 6, 2025  
+**Last Updated**: October 8, 2025  
 **Total Unique Fields Discovered**: 78  
 **API Base URL**: `https://portalapi.g.threatlocker.com`
+
+## 🔑 **Device Identification (Updated)**
+
+**Important**: The ES Inventory Hub now uses `computerId` (UUID format) as the primary unique identifier for ThreatLocker devices instead of hostname. This change:
+
+- **Prevents Duplicate Entries**: Same physical device added multiple times gets same `computerId` = same device identity
+- **Enables Duplicate Detection**: DUPLICATE_TL variance detects same hostname with different `computerId` values  
+- **Maintains Data Integrity**: Each `computerId` gets its own device identity and history
+- **Handles Use Cases**: Supports scenarios like 3 devices → 2 devices → 4 devices with proper tracking
+
+**Key Fields for Device Identification**:
+- `computerId`: **Primary unique identifier** (UUID format, used as vendor_device_key)
+- `hostname`: **Required for device matching** (used for cross-vendor matching)
+- `computerName`: **Display name** (contains user-friendly names with pipe symbols)
 
 ## API Authentication
 

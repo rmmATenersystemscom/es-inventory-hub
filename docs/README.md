@@ -90,6 +90,11 @@ This directory contains comprehensive documentation for the ES Inventory Hub sys
 - **[PORT_CONFIGURATION.md](./PORT_CONFIGURATION.md)** - Network port allocation and management
 - **[ENVIRONMENT_CONFIGURATION.md](./ENVIRONMENT_CONFIGURATION.md)** - Environment variable management and troubleshooting
 
+### **Recovery & Troubleshooting**
+- **[REBOOT_RECOVERY_GUIDE.md](./REBOOT_RECOVERY_GUIDE.md)** - Complete recovery procedures after server reboots
+- **[QUICK_START_RECOVERY.md](./QUICK_START_RECOVERY.md)** - Fast recovery procedures for quick fixes
+- **[SETUP_AND_TROUBLESHOOTING_GUIDE.md](./SETUP_AND_TROUBLESHOOTING_GUIDE.md)** - General troubleshooting and setup guide
+
 ---
 
 ## 📊 **System Architecture**

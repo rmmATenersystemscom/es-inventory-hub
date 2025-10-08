@@ -3,7 +3,7 @@
 **Complete database reference for ES Inventory Hub schema, tables, and queries.**
 
 **Last Updated**: October 8, 2025  
-**ES Inventory Hub Version**: v1.19.2  
+**ES Inventory Hub Version**: v1.19.3  
 **Status**: ✅ **FULLY OPERATIONAL**
 
 ---
@@ -197,14 +197,31 @@ CREATE TABLE device_type (
 ```sql
 CREATE TABLE device_identity (
     id BIGSERIAL PRIMARY KEY,
-    canonical_key VARCHAR(255) NOT NULL UNIQUE,
-    hostname VARCHAR(255) NOT NULL,
+    vendor_id INTEGER NOT NULL REFERENCES vendor(id),
+    vendor_device_key VARCHAR(255) NOT NULL,
+    first_seen_date DATE NOT NULL,
+    last_seen_date DATE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(vendor_id, vendor_device_key)
 );
 ```
 
-**Purpose**: Links devices across vendors using canonical keys
+**Purpose**: Links devices across vendors using vendor-specific unique identifiers
+- **ThreatLocker**: Uses `computerId` (UUID) as `vendor_device_key`
+- **Ninja**: Uses `systemName` as `vendor_device_key`
+- **Key Fields**:
+  - `vendor_id`: Reference to vendor table
+  - `vendor_device_key`: Unique identifier within the vendor (computerId for ThreatLocker, systemName for Ninja)
+  - `first_seen_date`: When device was first discovered
+  - `last_seen_date`: When device was last seen
+
+#### **ThreatLocker Device Identification (Updated)**
+ThreatLocker devices now use `computerId` (UUID format) as the `vendor_device_key` instead of hostname. This approach:
+- **Prevents Duplicate Entries**: Same physical device added multiple times gets same `computerId` = same `device_identity_id`
+- **Enables Duplicate Detection**: DUPLICATE_TL variance detects same hostname with different `computerId` values
+- **Maintains Data Integrity**: Each `computerId` gets its own device identity and history
+- **Handles Use Cases**: Supports scenarios like 3 devices → 2 devices → 4 devices with proper tracking
 
 ---
 

@@ -17,9 +17,14 @@ def normalize_threatlocker_device(raw: Dict[str, Any]) -> Dict[str, Any]:
     # Note: computerName contains user-friendly names like "CHI-4YHKJL3 | Keith Oneil" and is used for display_name
     hostname = raw.get('hostname', '')
     
-    # Get vendor device key (use hostname as unique identifier)
+    # Get vendor device key (use computerId as unique identifier for ThreatLocker)
     # This ensures the same physical device always gets the same vendor_device_key
-    vendor_device_key = hostname
+    # computerId is ThreatLocker's internal unique identifier (UUID format)
+    vendor_device_key = raw.get('computerId', '')
+    
+    # Validate that computerId is present - this is critical for unique device identification
+    if not vendor_device_key or not vendor_device_key.strip():
+        raise ValueError(f"ThreatLocker device is missing computerId field - cannot continue without computerId for unique device identification")
     
     # Validate that hostname is present - this is critical for device matching
     if not hostname or not hostname.strip():

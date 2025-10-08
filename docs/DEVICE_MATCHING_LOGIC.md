@@ -2,9 +2,9 @@
 
 **Purpose**: This document explains how devices are matched between Ninja and ThreatLocker vendors in the ES Inventory Hub database for variance reporting and cross-vendor consistency checks.
 
-**Last Updated**: September 20, 2025  
+**Last Updated**: October 8, 2025  
 **Related Files**: `/opt/es-inventory-hub/collectors/checks/cross_vendor.py`  
-**Status**: ✅ **UPDATED** - Cross-vendor field mapping issues resolved
+**Status**: ✅ **UPDATED** - ThreatLocker now uses computerId for unique device identification
 
 ---
 
@@ -77,20 +77,23 @@ LOWER(LEFT(SPLIT_PART(SPLIT_PART(hostname,'|',1),'.',1),15))
 ```
 
 **Important**: ThreatLocker has multiple fields with specific usage:
+- **Required for unique device identification**: `computerId` field (UUID format, used as vendor_device_key)
 - **Required for device matching**: `hostname` field (no fallbacks)
 - **Used for display_name**: `computerName` field (contains user-friendly names like "CHI-4YHKJL3 | Keith Oneil")
 - **Do NOT use**: `name` field (no fallbacks allowed)
 
 **⚠️ Data Quality Handling**: The system uses different fields for different purposes:
-1. **Device Matching**: Uses `hostname` field (clean hostname without user info)
-2. **Display Names**: Uses `computerName` field (contains user-friendly names with pipe symbols)
-3. **Canonical Key Generation**: Extracts clean hostnames by taking the first part before the pipe symbol
+1. **Unique Device Identification**: Uses `computerId` field (UUID) as vendor_device_key to prevent duplicate device entries
+2. **Device Matching**: Uses `hostname` field (clean hostname without user info)
+3. **Display Names**: Uses `computerName` field (contains user-friendly names with pipe symbols)
+4. **Canonical Key Generation**: Extracts clean hostnames by taking the first part before the pipe symbol
 
-The system **requires** the `hostname` field for device matching and will throw an exception if it's missing, as this indicates a critical data quality issue that prevents device matching.
+The system **requires** both the `computerId` and `hostname` fields and will throw an exception if either is missing, as this indicates a critical data quality issue that prevents proper device identification and matching.
 
 **Examples**: 
-- `SERVER-01.domain.com` → `server-01`
-- `CHI-1P397H2 | SPARE - was Blake Thomas` → `chi-1p397h2`
+- `computerId: 7bfd601f-8863-49e2-b8a1-8d88edca0169` → Used as vendor_device_key
+- `hostname: SERVER-01.domain.com` → `server-01` (for canonical key)
+- `computerName: CHI-1P397H2 | SPARE - was Blake Thomas` → Used for display_name
 
 #### **Ninja Canonical Key**
 The system uses only the `systemName` field (analogous to ThreatLocker's `hostname`):
@@ -171,7 +174,7 @@ WHERE nc.canonical_key IS NULL
 - **Result**: MISSING_NINJA exception
 
 ### **2. DUPLICATE_TL**
-**Purpose**: Find duplicate ThreatLocker entries (same canonical key).
+**Purpose**: Find duplicate ThreatLocker entries (same hostname with different computerIds).
 
 **Logic**:
 ```sql
@@ -187,8 +190,11 @@ HAVING COUNT(*) > 1
 ```
 
 **Example**:
-- `SERVER-01.domain.com` and `SERVER-01.other.com` both normalize to `server-01`
-- **Result**: DUPLICATE_TL exception
+- ThreatLocker Device 1: `computerId: abc-123`, `hostname: SERVER-01.domain.com` → `server-01`
+- ThreatLocker Device 2: `computerId: def-456`, `hostname: SERVER-01.other.com` → `server-01`
+- **Result**: DUPLICATE_TL exception (same hostname, different computerIds)
+
+**Note**: This detects when the same physical device has been added multiple times to the ThreatLocker portal with the same hostname but different computerIds.
 
 ### **3. SITE_MISMATCH**
 **Purpose**: Find devices that exist in both vendors but have different site assignments.

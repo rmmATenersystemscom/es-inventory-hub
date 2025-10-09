@@ -204,6 +204,81 @@ data = {
 response = requests.post(url, headers=headers, json=data, timeout=30)
 ```
 
+### 4. Get Computer for Edit (Update Preparation)
+
+**Endpoint**: `GET /portalapi/Computer/ComputerGetForEditById`
+
+**Purpose**: Retrieve complete computer data structure required for updates.
+
+**Request**:
+```python
+url = f"{base_url}/portalapi/Computer/ComputerGetForEditById"
+
+# Headers with organization ID (CRITICAL for cross-org updates)
+headers_with_org = headers.copy()
+if organization_id:
+    headers_with_org["managedorganizationid"] = organization_id
+
+# Query parameters
+params = {
+    "computerId": computer_id  # CRITICAL: Use "computerId", not "id"
+}
+
+response = requests.get(url, headers=headers_with_org, params=params, timeout=30)
+```
+
+**Response**: Complete computer data structure with all fields required for updates.
+
+### 5. Update Computer Name
+
+**Endpoint**: `PATCH /portalapi/Computer/ComputerUpdateForEdit`
+
+**Purpose**: Update computer name and other computer properties.
+
+**CRITICAL REQUIREMENTS**:
+- Must first call `ComputerGetForEditById` to get complete data structure
+- Use "name" field (NOT "computerName") in update payload
+- Include ALL fields from the GET response in the PATCH payload
+- Set `managedorganizationid` header for organization context
+
+**Request**:
+```python
+# Step 1: Get current computer data (REQUIRED)
+get_url = f"{base_url}/portalapi/Computer/ComputerGetForEditById"
+get_headers = headers.copy()
+if organization_id:
+    get_headers["managedorganizationid"] = organization_id
+
+get_params = {"computerId": computer_id}
+get_response = requests.get(get_url, headers=get_headers, params=get_params, timeout=30)
+current_data = get_response.json()
+
+# Step 2: Create update payload with complete data structure
+update_data = current_data.copy()
+update_data["name"] = new_name  # CRITICAL: Use "name", not "computerName"
+
+# Step 3: Send update request
+update_url = f"{base_url}/portalapi/Computer/ComputerUpdateForEdit"
+update_headers = headers.copy()
+if organization_id:
+    update_headers["managedorganizationid"] = organization_id
+
+response = requests.patch(update_url, headers=update_headers, json=update_data, timeout=30)
+```
+
+**Response**: Success/error status with updated computer information.
+
+**Special Character Support**:
+- ✅ Double quotes: `"TK"` - Fully supported
+- ✅ Pipe symbols: `|` - Fully supported  
+- ✅ Long names: 200+ characters - Fully supported
+- ✅ Special characters: `-`, `'`, `"` - All supported
+
+**Error Handling**:
+- **417 Invalid Computer Name**: Name format validation failed
+- **404 Not Found**: Computer ID doesn't exist
+- **403 Forbidden**: Insufficient permissions or wrong organization
+
 <<<<<<< HEAD
 **Response Fields Available:**
 ```json
@@ -390,6 +465,232 @@ response = requests.post(url, headers=headers, json=data, timeout=30)
     }
   ]
 }
+```
+
+## Computer Name Update Implementation
+
+### Complete Working Example
+
+```python
+#!/usr/bin/env python3
+"""
+ThreatLocker Computer Name Update - Complete Working Implementation
+"""
+
+import requests
+import json
+from datetime import datetime
+from typing import Dict, Any, Optional
+import os
+
+class ThreatLockerUpdateClient:
+    """ThreatLocker API client for computer name updates"""
+    
+    def __init__(self):
+        # Load environment variables
+        from dotenv import load_dotenv
+        load_dotenv()
+        
+        self.base_url = "https://portalapi.g.threatlocker.com"
+        self.api_key = os.getenv("THREATLOCKER_API_KEY", "")
+        self.organization_id = os.getenv("THREATLOCKER_ORGANIZATION_ID", "")
+        
+        # Headers for API requests
+        self.headers = {
+            "authorization": self.api_key,
+            "content-type": "application/json"
+        }
+        
+        if self.organization_id:
+            self.headers["managedorganizationid"] = self.organization_id
+    
+    def get_computer_for_edit(self, computer_id: str, organization_id: Optional[str] = None) -> Dict[str, Any]:
+        """Get complete computer data structure for updates"""
+        try:
+            url = f"{self.base_url}/portalapi/Computer/ComputerGetForEditById"
+            
+            # Headers with organization ID
+            headers = self.headers.copy()
+            if organization_id:
+                headers["managedorganizationid"] = organization_id
+            
+            # Query parameters
+            params = {
+                "computerId": computer_id  # CRITICAL: Use "computerId", not "id"
+            }
+            
+            response = requests.get(url, headers=headers, params=params, timeout=30)
+            
+            if response.status_code == 200:
+                return {
+                    "status": "success",
+                    "data": response.json(),
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": f"Failed to get computer data: {response.status_code}",
+                    "status_code": response.status_code,
+                    "error": response.text,
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+                
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"Error getting computer data: {str(e)}",
+                "error": str(e),
+                "timestamp": datetime.utcnow().isoformat()
+            }
+    
+    def update_computer_name(self, computer_id: str, new_name: str, 
+                           organization_id: Optional[str] = None) -> Dict[str, Any]:
+        """Update computer name with complete data structure"""
+        try:
+            # Step 1: Get current computer data (REQUIRED)
+            get_result = self.get_computer_for_edit(computer_id, organization_id)
+            if get_result["status"] != "success":
+                return get_result
+            
+            current_data = get_result["data"]
+            
+            # Step 2: Create update payload with complete data structure
+            update_data = current_data.copy()
+            update_data["name"] = new_name  # CRITICAL: Use "name", not "computerName"
+            
+            # Step 3: Send update request
+            url = f"{self.base_url}/portalapi/Computer/ComputerUpdateForEdit"
+            headers = self.headers.copy()
+            if organization_id:
+                headers["managedorganizationid"] = organization_id
+            
+            response = requests.patch(url, headers=headers, json=update_data, timeout=30)
+            
+            if response.status_code == 200:
+                return {
+                    "status": "success",
+                    "message": f"Computer name updated successfully to: {new_name}",
+                    "computer_id": computer_id,
+                    "old_name": current_data.get("name", "Unknown"),
+                    "new_name": new_name,
+                    "response": response.json() if response.content else None,
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": f"Failed to update computer name: {response.status_code}",
+                    "computer_id": computer_id,
+                    "new_name": new_name,
+                    "status_code": response.status_code,
+                    "error": response.text,
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+                
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"Error updating computer name: {str(e)}",
+                "computer_id": computer_id,
+                "new_name": new_name,
+                "error": str(e),
+                "timestamp": datetime.utcnow().isoformat()
+            }
+    
+    def find_computer_by_hostname(self, hostname: str, organization_id: Optional[str] = None) -> Dict[str, Any]:
+        """Find computer by hostname to get computer_id"""
+        try:
+            url = f"{self.base_url}/portalApi/Computer/ComputerGetByAllParameters"
+            
+            headers = self.headers.copy()
+            if organization_id:
+                headers["managedorganizationid"] = organization_id
+            
+            data = {
+                "pageSize": 500,
+                "pageNumber": 1,
+                "searchText": hostname,  # Search by hostname
+                "orderBy": "lastcheckin",
+                "childOrganizations": True,
+                "showLastCheckIn": True
+            }
+            
+            response = requests.post(url, headers=headers, json=data, timeout=30)
+            
+            if response.status_code == 200:
+                computers = response.json()
+                
+                # Find exact hostname match
+                for computer in computers:
+                    if computer.get("hostname", "").lower() == hostname.lower():
+                        return {
+                            "status": "success",
+                            "computer_id": computer.get("computerId"),
+                            "computer_name": computer.get("computerName"),
+                            "hostname": computer.get("hostname"),
+                            "organization_id": computer.get("organizationId"),
+                            "timestamp": datetime.utcnow().isoformat()
+                        }
+                
+                return {
+                    "status": "error",
+                    "message": f"Computer with hostname '{hostname}' not found",
+                    "hostname": hostname,
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": f"Failed to search computers: {response.status_code}",
+                    "status_code": response.status_code,
+                    "error": response.text,
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+                
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"Error searching computers: {str(e)}",
+                "error": str(e),
+                "timestamp": datetime.utcnow().isoformat()
+            }
+
+# Example Usage
+def main():
+    """Example usage of the ThreatLocker update client"""
+    client = ThreatLockerUpdateClient()
+    
+    # Example: Update computer name with double quotes
+    hostname = "CHI-6RPN4C4"
+    new_name = 'CHI-6RPN4C4 | Truman "TK" Bates'
+    
+    print(f"Searching for computer: {hostname}")
+    search_result = client.find_computer_by_hostname(hostname)
+    
+    if search_result["status"] == "success":
+        computer_id = search_result["computer_id"]
+        organization_id = search_result["organization_id"]
+        
+        print(f"Found computer: {computer_id}")
+        print(f"Current name: {search_result['computer_name']}")
+        print(f"Updating to: {new_name}")
+        
+        update_result = client.update_computer_name(computer_id, new_name, organization_id)
+        
+        if update_result["status"] == "success":
+            print("✅ Update successful!")
+            print(f"Old name: {update_result['old_name']}")
+            print(f"New name: {update_result['new_name']}")
+        else:
+            print("❌ Update failed!")
+            print(f"Error: {update_result['message']}")
+    else:
+        print("❌ Computer not found!")
+        print(f"Error: {search_result['message']}")
+
+if __name__ == "__main__":
+    main()
 ```
 
 ## Complete Python Implementation
@@ -970,7 +1271,23 @@ csv_fields = [
 **Organization Fields**: 13 fields  
 **Computer Fields**: 65 fields  
 **Analysis Date**: September 6, 2025  
+**Last Updated**: October 8, 2025  
 **API Version**: ThreatLocker Portal API v1
 
-This comprehensive field reference provides all the information needed to work with ThreatLocker API data in dashboard applications and other integrations.
+## Update Functionality Summary
+
+**Computer Name Updates**: ✅ **FULLY SUPPORTED**
+- **Endpoints**: `GET /portalapi/Computer/ComputerGetForEditById`, `PATCH /portalapi/Computer/ComputerUpdateForEdit`
+- **Special Characters**: Double quotes, pipe symbols, long names (200+ chars) - All supported
+- **Cross-Organization**: Supported with proper `managedorganizationid` header
+- **Critical Requirements**: Must use complete data structure from GET response in PATCH payload
+- **Field Usage**: Use "name" field (NOT "computerName") in update payload
+
+**Key Implementation Notes**:
+1. **Two-Step Process**: Always GET current data first, then PATCH with complete structure
+2. **Organization Context**: Set `managedorganizationid` header for cross-org updates
+3. **Parameter Names**: Use "computerId" (not "id") in GET requests
+4. **Error Handling**: 417 = Invalid Computer Name, 404 = Not Found, 403 = Forbidden
+
+This comprehensive field reference provides all the information needed to work with ThreatLocker API data in dashboard applications and other integrations, including full computer name update functionality.
 >>>>>>> 7aa16e4 (Add comprehensive ThreatLocker API field documentation - Complete field reference with 78 unique fields from live API analysis, including organization and computer field details, usage examples, and best practices)

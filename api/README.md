@@ -72,6 +72,9 @@ python3 api/test_api.py
 - `POST /api/collectors/run` - Trigger collector runs
 - `POST /api/exceptions/{id}/resolve` - Mark exceptions as resolved
 
+### **ThreatLocker Device Sync**
+- `POST /api/threatlocker/sync-device` - Sync individual ThreatLocker device to database
+
 ---
 
 ## 🔌 **Port Configuration**

@@ -60,6 +60,7 @@ This directory contains comprehensive documentation for the ES Inventory Hub sys
 ### **For API Integration**
 - **[DASHBOARD_INTEGRATION_GUIDE.md](./DASHBOARD_INTEGRATION_GUIDE.md)** - Complete guide for dashboard integration with Variances Dashboard functionality
 - **[API_QUICK_REFERENCE.md](./API_QUICK_REFERENCE.md)** - Quick reference for API endpoints and usage including new export endpoints
+- **[THREATLOCKER_SYNC_API_GUIDE.md](./THREATLOCKER_SYNC_API_GUIDE.md)** - Real-time ThreatLocker device sync API for dashboard integration
 - **[../api/README.md](../api/README.md)** - API server and testing utilities
 - **[../api/api_server.py](../api/api_server.py)** - REST API server for variance data and collector management
 - **[../api/test_api.py](../api/test_api.py)** - API testing script
@@ -135,6 +136,9 @@ ThreatLocker (02:31 AM) → Database → Cross-Vendor Analysis → Variance Repo
 ### **Collector Management**
 - `POST /api/collectors/run` - Trigger collector runs
 - `POST /api/exceptions/{id}/resolve` - Mark exceptions as resolved
+
+### **ThreatLocker Device Sync**
+- `POST /api/threatlocker/sync-device` - Sync individual ThreatLocker device to database
 
 ---
 

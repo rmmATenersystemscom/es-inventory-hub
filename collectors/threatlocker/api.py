@@ -148,3 +148,75 @@ class ThreatLockerAPI:
         except Exception as e:
             self.logger.error(f"Error fetching devices from ThreatLocker API: {e}")
             raise
+    
+    def update_computer_name(self, computer_id: str, new_name: str) -> Dict[str, Any]:
+        """
+        Update a ThreatLocker computer name via API.
+        
+        Args:
+            computer_id: ThreatLocker computer ID (UUID)
+            new_name: New computer name to set
+            
+        Returns:
+            dict: API response with success status and details
+        """
+        try:
+            # Use the ComputerUpdateForEdit endpoint
+            url = f"{self.base_url}/portalApi/Computer/ComputerUpdateForEdit"
+            
+            # Prepare the update payload
+            data = {
+                "computerId": computer_id,
+                "computerName": new_name
+            }
+            
+            # Log request details (DEBUG level)
+            self.logger.debug(f"Update request URL: {url}")
+            self.logger.debug(f"Update request payload: {data}")
+            
+            # Make the update request
+            response = self.session.post(url, json=data, timeout=30)
+            
+            # Log response details
+            self.logger.debug(f"Update response status code: {response.status_code}")
+            self.logger.debug(f"Update response text: {response.text}")
+            
+            if response.status_code == 200:
+                try:
+                    result = response.json()
+                    self.logger.info(f"Successfully updated ThreatLocker computer {computer_id} name to: {new_name}")
+                    return {
+                        'success': True,
+                        'computer_id': computer_id,
+                        'new_name': new_name,
+                        'response': result
+                    }
+                except ValueError:
+                    # Response is not JSON, but status is 200
+                    self.logger.info(f"Successfully updated ThreatLocker computer {computer_id} name to: {new_name}")
+                    return {
+                        'success': True,
+                        'computer_id': computer_id,
+                        'new_name': new_name,
+                        'response': response.text
+                    }
+            else:
+                error_msg = f"Failed to update ThreatLocker computer name. Status: {response.status_code}, Response: {response.text}"
+                self.logger.error(error_msg)
+                return {
+                    'success': False,
+                    'computer_id': computer_id,
+                    'new_name': new_name,
+                    'error': error_msg,
+                    'status_code': response.status_code
+                }
+                
+        except Exception as e:
+            error_msg = f"Exception updating ThreatLocker computer name: {str(e)}"
+            self.logger.error(error_msg)
+            return {
+                'success': False,
+                'computer_id': computer_id,
+                'new_name': new_name,
+                'error': error_msg
+            }

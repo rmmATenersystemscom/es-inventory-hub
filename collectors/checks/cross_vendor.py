@@ -562,6 +562,16 @@ def check_display_name_mismatch(session: Session, vendor_ids: Dict[str, int], sn
     Check for devices that exist in both Ninja and ThreatLocker with the same hostname 
     but different display names.
     
+    SPECIAL CASE EXCLUSION: Devices where Ninja display_name is empty/blank AND 
+    ThreatLocker display_name matches the hostname are NOT flagged as mismatches.
+    This is because ThreatLocker's default behavior is to use hostname as display_name
+    when no custom display name is set.
+    
+    Example: chi-veeam01
+    - Ninja: display_name="", hostname="CHI-VEEAM01" 
+    - ThreatLocker: display_name="CHI-VEEAM01", hostname="CHI-VEEAM01"
+    - Result: NOT flagged as mismatch (special case)
+    
     Args:
         session: Database session
         vendor_ids: Mapping of vendor names to IDs
@@ -583,6 +593,8 @@ def check_display_name_mismatch(session: Session, vendor_ids: Dict[str, int], sn
         return 0
     
     # Query to find devices with matching hostnames but different display names
+    # SPECIAL CASE: Exclude cases where Ninja display_name is empty/blank AND 
+    # ThreatLocker display_name matches the hostname (default behavior)
     query = text("""
         WITH matched_devices AS (
             SELECT 
@@ -607,6 +619,12 @@ def check_display_name_mismatch(session: Session, vendor_ids: Dict[str, int], sn
             AND ninja.display_name IS NOT NULL
             AND tl.display_name != ninja.display_name
             AND LOWER(TRIM(tl.display_name)) != LOWER(TRIM(ninja.display_name))
+            -- SPECIAL CASE EXCLUSION: Don't flag when Ninja display_name is empty/blank 
+            -- AND ThreatLocker display_name matches hostname (default behavior)
+            AND NOT (
+                (TRIM(COALESCE(ninja.display_name, '')) = '' OR ninja.display_name IS NULL)
+                AND LOWER(TRIM(tl.display_name)) = LOWER(TRIM(tl.hostname))
+            )
         )
         SELECT 
             clean_tl_hostname,

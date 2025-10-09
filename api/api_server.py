@@ -1355,6 +1355,532 @@ def bulk_update_exceptions():
             'updated_by': updated_by
         })
 
+@app.route('/api/collectors/threatlocker/run', methods=['POST'])
+def run_threatlocker_collector():
+    """
+    Run the ThreatLocker collector script via API.
+    
+    This endpoint allows the dashboard to trigger the ThreatLocker collector
+    to refresh all device data from the ThreatLocker API.
+    """
+    data = request.get_json() or {}
+    force_refresh = data.get('force_refresh', False)
+    organization_id = data.get('organization_id', None)
+    
+    try:
+        import subprocess
+        import sys
+        import os
+        
+        # Change to the project directory
+        project_dir = '/opt/es-inventory-hub'
+        
+        # Build the command
+        cmd = [sys.executable, '-m', 'collectors.threatlocker.main']
+        
+        # Add any additional parameters if needed
+        if organization_id:
+            cmd.extend(['--organization', organization_id])
+        
+        # Run the collector
+        result = subprocess.run(
+            cmd,
+            cwd=project_dir,
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 minute timeout
+        )
+        
+        if result.returncode == 0:
+            return jsonify({
+                'success': True,
+                'message': 'ThreatLocker collector completed successfully',
+                'output': result.stdout,
+                'force_refresh': force_refresh,
+                'organization_id': organization_id
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'ThreatLocker collector failed',
+                'error': result.stderr,
+                'return_code': result.returncode
+            }), 500
+            
+    except subprocess.TimeoutExpired:
+        return jsonify({
+            'success': False,
+            'message': 'ThreatLocker collector timed out after 5 minutes'
+        }), 500
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Failed to run ThreatLocker collector: {str(e)}'
+        }), 500
+
+@app.route('/api/collectors/cross-vendor/run', methods=['POST'])
+def run_cross_vendor_checks():
+    """
+    Run the cross-vendor consistency checks via API.
+    
+    This endpoint allows the dashboard to trigger cross-vendor checks
+    to update variance data after collector runs.
+    """
+    data = request.get_json() or {}
+    force_refresh = data.get('force_refresh', False)
+    
+    try:
+        import sys
+        import os
+        
+        # Change to the project directory
+        project_dir = '/opt/es-inventory-hub'
+        
+        # Build the Python command to run cross-vendor checks
+        python_code = """
+import sys
+sys.path.append('/opt/es-inventory-hub')
+from collectors.checks.cross_vendor import run_cross_vendor_checks
+from common.db import session_scope
+from datetime import date
+
+try:
+    with session_scope() as session:
+        results = run_cross_vendor_checks(session, date.today())
+        print(f'SUCCESS: {results}')
+except Exception as e:
+    print(f'ERROR: {e}')
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
+"""
+        
+        # Run the cross-vendor checks
+        result = subprocess.run(
+            [sys.executable, '-c', python_code],
+            cwd=project_dir,
+            capture_output=True,
+            text=True,
+            timeout=120  # 2 minute timeout
+        )
+        
+        if result.returncode == 0:
+            return jsonify({
+                'success': True,
+                'message': 'Cross-vendor checks completed successfully',
+                'output': result.stdout,
+                'force_refresh': force_refresh
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Cross-vendor checks failed',
+                'error': result.stderr,
+                'return_code': result.returncode
+            }), 500
+            
+    except subprocess.TimeoutExpired:
+        return jsonify({
+            'success': False,
+            'message': 'Cross-vendor checks timed out after 2 minutes'
+        }), 500
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Failed to run cross-vendor checks: {str(e)}'
+        }), 500
+
+@app.route('/api/collectors/sequence/run', methods=['POST'])
+def run_collector_sequence():
+    """
+    Run the complete collector sequence in proper order via API.
+    
+    This endpoint runs: ThreatLocker collector → cross-vendor checks
+    to ensure complete data refresh and variance update.
+    """
+    data = request.get_json() or {}
+    force_refresh = data.get('force_refresh', False)
+    organization_id = data.get('organization_id', None)
+    
+    try:
+        import subprocess
+        import sys
+        import os
+        
+        # Change to the project directory
+        project_dir = '/opt/es-inventory-hub'
+        results = []
+        
+        # Step 1: Run ThreatLocker collector
+        cmd1 = [sys.executable, '-m', 'collectors.threatlocker.main']
+        if organization_id:
+            cmd1.extend(['--organization', organization_id])
+        
+        result1 = subprocess.run(
+            cmd1,
+            cwd=project_dir,
+            capture_output=True,
+            text=True,
+            timeout=300
+        )
+        
+        if result1.returncode != 0:
+            return jsonify({
+                'success': False,
+                'message': 'ThreatLocker collector failed in sequence',
+                'step': 'threatlocker_collector',
+                'error': result1.stderr,
+                'return_code': result1.returncode
+            }), 500
+        
+        results.append({
+            'step': 'threatlocker_collector',
+            'success': True,
+            'output': result1.stdout
+        })
+        
+        # Step 2: Run cross-vendor checks
+        python_code = """
+import sys
+sys.path.append('/opt/es-inventory-hub')
+from collectors.checks.cross_vendor import run_cross_vendor_checks
+from common.db import session_scope
+from datetime import date
+
+try:
+    with session_scope() as session:
+        results = run_cross_vendor_checks(session, date.today())
+        print(f'SUCCESS: {results}')
+except Exception as e:
+    print(f'ERROR: {e}')
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
+"""
+        
+        result2 = subprocess.run(
+            [sys.executable, '-c', python_code],
+            cwd=project_dir,
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+        
+        if result2.returncode != 0:
+            return jsonify({
+                'success': False,
+                'message': 'Cross-vendor checks failed in sequence',
+                'step': 'cross_vendor_checks',
+                'error': result2.stderr,
+                'return_code': result2.returncode,
+                'completed_steps': results
+            }), 500
+        
+        results.append({
+            'step': 'cross_vendor_checks',
+            'success': True,
+            'output': result2.stdout
+        })
+        
+        return jsonify({
+            'success': True,
+            'message': 'Complete collector sequence completed successfully',
+            'steps': results,
+            'force_refresh': force_refresh,
+            'organization_id': organization_id
+        })
+        
+    except subprocess.TimeoutExpired as e:
+        return jsonify({
+            'success': False,
+            'message': f'Collector sequence timed out: {str(e)}',
+            'completed_steps': results
+        }), 500
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Failed to run collector sequence: {str(e)}',
+            'completed_steps': results
+        }), 500
+
+@app.route('/api/threatlocker/update-name', methods=['POST'])
+def update_threatlocker_name():
+    """
+    Update a ThreatLocker computer name via API.
+    
+    This endpoint allows the dashboard to update ThreatLocker computer names
+    and then sync the changes to the ES Inventory Hub database.
+    """
+    data = request.get_json() or {}
+    computer_id = data.get('computer_id', '').strip()
+    hostname = data.get('hostname', '').strip()
+    new_name = data.get('new_name', '').strip()
+    updated_by = data.get('updated_by', 'dashboard_user')
+    
+    if not new_name:
+        return jsonify({'error': 'new_name is required'}), 400
+    
+    if not computer_id and not hostname:
+        return jsonify({'error': 'Either computer_id or hostname is required'}), 400
+    
+    try:
+        # Import ThreatLocker API
+        from collectors.threatlocker.api import ThreatLockerAPI
+        from common.db import session_scope
+        from datetime import date
+        
+        # Initialize ThreatLocker API
+        api = ThreatLockerAPI()
+        
+        # If only hostname provided, find the computer_id
+        if not computer_id and hostname:
+            devices = api.fetch_devices()
+            target_device = None
+            
+            for device in devices:
+                if device.get('hostname', '').lower() == hostname.lower():
+                    target_device = device
+                    break
+            
+            if not target_device:
+                return jsonify({
+                    'error': f'Device not found in ThreatLocker API',
+                    'hostname': hostname
+                }), 404
+            
+            computer_id = target_device.get('computerId')
+            if not computer_id:
+                return jsonify({
+                    'error': f'Device found but missing computerId',
+                    'hostname': hostname
+                }), 500
+        
+        # Update the computer name in ThreatLocker
+        update_result = api.update_computer_name(computer_id, new_name)
+        
+        if not update_result['success']:
+            return jsonify({
+                'error': f'Failed to update ThreatLocker computer name: {update_result.get("error", "Unknown error")}',
+                'computer_id': computer_id,
+                'new_name': new_name
+            }), 500
+        
+        # Now sync the updated device to the database
+        with session_scope() as session:
+            # Get vendor ID for ThreatLocker
+            vendor_query = text("SELECT id FROM vendor WHERE name = 'ThreatLocker'")
+            vendor_result = session.execute(vendor_query).fetchone()
+            if not vendor_result:
+                return jsonify({'error': 'ThreatLocker vendor not found in database'}), 500
+            vendor_id = vendor_result[0]
+            
+            # Fetch the updated device from ThreatLocker API
+            devices = api.fetch_devices()
+            updated_device = None
+            
+            for device in devices:
+                if device.get('computerId') == computer_id:
+                    updated_device = device
+                    break
+            
+            if not updated_device:
+                return jsonify({
+                    'error': f'Updated device not found in ThreatLocker API',
+                    'computer_id': computer_id
+                }), 500
+            
+            # Import mapping function
+            from collectors.threatlocker.mapping import normalize_threatlocker_device
+            from common.util import upsert_device_identity, insert_snapshot
+            
+            # Normalize the updated device data
+            normalized = normalize_threatlocker_device(updated_device)
+            
+            # Get today's date for snapshot
+            snapshot_date = date.today()
+            
+            # Delete existing snapshots for this device on today's date
+            delete_query = text("""
+                DELETE FROM device_snapshot 
+                WHERE snapshot_date = :snapshot_date 
+                AND vendor_id = :vendor_id 
+                AND device_identity_id IN (
+                    SELECT id FROM device_identity 
+                    WHERE vendor_id = :vendor_id 
+                    AND vendor_device_key = :vendor_device_key
+                )
+            """)
+            
+            session.execute(delete_query, {
+                'snapshot_date': snapshot_date,
+                'vendor_id': vendor_id,
+                'vendor_device_key': normalized['vendor_device_key']
+            })
+            
+            # Create or update device identity
+            device_identity_id = upsert_device_identity(
+                session=session,
+                vendor_id=vendor_id,
+                vendor_device_key=normalized['vendor_device_key'],
+                first_seen_date=snapshot_date
+            )
+            
+            # Insert the updated snapshot
+            insert_snapshot(
+                session=session,
+                snapshot_date=snapshot_date,
+                vendor_id=vendor_id,
+                device_identity_id=device_identity_id,
+                normalized=normalized
+            )
+            
+            session.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': 'ThreatLocker computer name updated and synced successfully',
+                'device': {
+                    'computer_id': computer_id,
+                    'hostname': normalized.get('hostname'),
+                    'old_name': data.get('old_name', 'Unknown'),
+                    'new_name': new_name,
+                    'display_name': normalized.get('display_name'),
+                    'organization_name': normalized.get('organization_name')
+                },
+                'threatlocker_update': update_result,
+                'updated_by': updated_by,
+                'updated_at': datetime.now().isoformat()
+            })
+            
+    except Exception as e:
+        return jsonify({
+            'error': f'Failed to update ThreatLocker computer name: {str(e)}'
+        }), 500
+
+@app.route('/api/threatlocker/sync-device', methods=['POST'])
+def sync_threatlocker_device():
+    """
+    Sync a specific ThreatLocker device to update the database with latest information.
+    
+    This endpoint allows the dashboard to trigger a database update for a specific
+    ThreatLocker device after making changes via the ThreatLocker API.
+    
+    This solves the critical issue where dashboard updates ThreatLocker names
+    but the ES Inventory Hub database doesn't reflect the changes until the next
+    scheduled collector run.
+    """
+    data = request.get_json() or {}
+    computer_id = data.get('computer_id', '').strip()
+    hostname = data.get('hostname', '').strip()
+    updated_by = data.get('updated_by', 'dashboard_user')
+    
+    if not computer_id and not hostname:
+        return jsonify({'error': 'Either computer_id or hostname is required'}), 400
+    
+    try:
+        # Import ThreatLocker API and mapping functions
+        from collectors.threatlocker.api import ThreatLockerAPI
+        from collectors.threatlocker.mapping import normalize_threatlocker_device
+        from common.util import upsert_device_identity, insert_snapshot
+        from common.db import session_scope
+        from datetime import date
+        
+        with session_scope() as session:
+            # Get vendor ID for ThreatLocker
+            vendor_query = text("SELECT id FROM vendor WHERE name = 'ThreatLocker'")
+            vendor_result = session.execute(vendor_query).fetchone()
+            if not vendor_result:
+                return jsonify({'error': 'ThreatLocker vendor not found in database'}), 500
+            vendor_id = vendor_result[0]
+            
+            # Initialize ThreatLocker API
+            api = ThreatLockerAPI()
+            
+            # Fetch the specific device from ThreatLocker API
+            devices = api.fetch_devices()
+            target_device = None
+            
+            if computer_id:
+                # Find by computerId (preferred method)
+                for device in devices:
+                    if device.get('computerId') == computer_id:
+                        target_device = device
+                        break
+            else:
+                # Find by hostname (fallback)
+                for device in devices:
+                    if device.get('hostname', '').lower() == hostname.lower():
+                        target_device = device
+                        break
+            
+            if not target_device:
+                return jsonify({
+                    'error': f'Device not found in ThreatLocker API',
+                    'computer_id': computer_id,
+                    'hostname': hostname
+                }), 404
+            
+            # Normalize the device data
+            normalized = normalize_threatlocker_device(target_device)
+            
+            # Get today's date for snapshot
+            snapshot_date = date.today()
+            
+            # Delete existing snapshots for this device on today's date
+            delete_query = text("""
+                DELETE FROM device_snapshot 
+                WHERE snapshot_date = :snapshot_date 
+                AND vendor_id = :vendor_id 
+                AND device_identity_id IN (
+                    SELECT id FROM device_identity 
+                    WHERE vendor_id = :vendor_id 
+                    AND vendor_device_key = :vendor_device_key
+                )
+            """)
+            
+            session.execute(delete_query, {
+                'snapshot_date': snapshot_date,
+                'vendor_id': vendor_id,
+                'vendor_device_key': normalized['vendor_device_key']
+            })
+            
+            # Create or update device identity
+            device_identity_id = upsert_device_identity(
+                session=session,
+                vendor_id=vendor_id,
+                vendor_device_key=normalized['vendor_device_key'],
+                first_seen_date=snapshot_date
+            )
+            
+            # Insert the updated snapshot
+            insert_snapshot(
+                session=session,
+                snapshot_date=snapshot_date,
+                vendor_id=vendor_id,
+                device_identity_id=device_identity_id,
+                normalized=normalized
+            )
+            
+            session.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': 'ThreatLocker device synced successfully',
+                'device': {
+                    'computer_id': target_device.get('computerId'),
+                    'hostname': normalized.get('hostname'),
+                    'display_name': normalized.get('display_name'),
+                    'organization_name': normalized.get('organization_name')
+                },
+                'updated_by': updated_by,
+                'updated_at': datetime.now().isoformat()
+            })
+            
+    except Exception as e:
+        return jsonify({
+            'error': f'Failed to sync ThreatLocker device: {str(e)}'
+        }), 500
+
 @app.route('/api/variance-report/filtered', methods=['GET'])
 def get_filtered_variance_report():
     """
@@ -2989,6 +3515,11 @@ if __name__ == '__main__':
     print("  POST /api/exceptions/mark-fixed-by-hostname - Mark exceptions fixed by hostname (NEW)")
     print("  POST /api/exceptions/bulk-update - Bulk exception operations (NEW)")
     print("  GET  /api/exceptions/status-summary - Exception status summary (NEW)")
+    print("  POST /api/collectors/threatlocker/run - Run ThreatLocker collector (NEW)")
+    print("  POST /api/collectors/cross-vendor/run - Run cross-vendor checks (NEW)")
+    print("  POST /api/collectors/sequence/run - Run complete collector sequence (NEW)")
+    print("  POST /api/threatlocker/update-name - Update ThreatLocker computer name (NEW)")
+    print("  POST /api/threatlocker/sync-device - Sync ThreatLocker device to database (NEW)")
     print("  GET  /api/devices/search?q={hostname} - Search devices (handles hostname truncation)")
     print()
     print("NEW EXPORT ENDPOINTS:")

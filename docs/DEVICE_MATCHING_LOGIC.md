@@ -222,6 +222,34 @@ HAVING COUNT(*) > 1
 - Ninja: `OLD-SERVER` marked as spare
 - **Result**: SPARE_MISMATCH exception (DevicesThatShouldNotHaveThreatlocker - cleanup opportunity)
 
+### **5. DISPLAY_NAME_MISMATCH**
+**Purpose**: Find devices that exist in both Ninja and ThreatLocker with the same hostname but different display names.
+
+**Logic**:
+1. Find devices that match between vendors (same canonical key)
+2. Compare their display names
+3. Flag mismatches for manual review
+
+**Special Case Exclusion**: Devices where Ninja display_name is empty/blank AND ThreatLocker display_name matches the hostname are NOT flagged as mismatches. This is because ThreatLocker's default behavior is to use hostname as display_name when no custom display name is set.
+
+**Examples**:
+- **Normal Mismatch**:
+  - Ninja: `display_name="CHI-SERVER01 | John Doe"`, `hostname="CHI-SERVER01"`
+  - ThreatLocker: `display_name="CHI-SERVER01"`, `hostname="CHI-SERVER01"`
+  - **Result**: DISPLAY_NAME_MISMATCH exception
+
+- **Special Case (NOT flagged)**:
+  - Ninja: `display_name=""`, `hostname="CHI-VEEAM01"`
+  - ThreatLocker: `display_name="CHI-VEEAM01"`, `hostname="CHI-VEEAM01"`
+  - **Result**: NOT flagged as mismatch (special case exclusion)
+
+- **Another Special Case (NOT flagged)**:
+  - Ninja: `display_name=""`, `hostname="DDB-ENVY"`
+  - ThreatLocker: `display_name="DDB-ENVY"`, `hostname="DDB-ENVY"`
+  - **Result**: NOT flagged as mismatch (special case exclusion)
+
+**Business Logic**: This exclusion prevents false positives for devices using ThreatLocker's default naming convention where the display name automatically matches the hostname when no custom display name is configured.
+
 ---
 
 ## 💻 Implementation Details

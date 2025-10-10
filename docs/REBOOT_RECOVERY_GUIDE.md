@@ -2,8 +2,8 @@
 
 **Complete recovery procedures for ES Inventory Hub after server reboots.**
 
-**Last Updated**: October 8, 2025  
-**ES Inventory Hub Version**: v1.19.3  
+**Last Updated**: October 9, 2025  
+**ES Inventory Hub Version**: v1.19.5  
 **Status**: ✅ **RECOVERY PROCEDURES DOCUMENTED**
 
 ---

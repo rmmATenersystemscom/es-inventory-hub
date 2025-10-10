@@ -316,6 +316,7 @@ def get_status():
             SELECT type, COUNT(*) as count
             FROM exceptions
             WHERE resolved = FALSE
+            AND date_found = CURRENT_DATE
             GROUP BY type
         """)
         
@@ -550,96 +551,306 @@ def run_collectors():
                 'message': f"Starting collectors: {', '.join(collectors)}"
             })
             
-            # Create job records
+            # Create job records - only for actual collectors (ninja, threatlocker)
             job_runs = []
             for collector in collectors:
-                job_id = f"{collector[:2]}_{uuid.uuid4().hex[:8]}"
-                job_name = f"{collector}-collector"
+                # Only create jobs for actual collectors, not analysis jobs
+                if collector in ['ninja', 'threatlocker']:
+                    job_id = f"{collector[:2]}_{uuid.uuid4().hex[:8]}"
+                    job_name = f"{collector}-collector"
+                    
+                    job_query = text("""
+                        INSERT INTO job_runs (job_id, batch_id, job_name, status, started_at, updated_at, message)
+                        VALUES (:job_id, :batch_id, :job_name, :status, :started_at, :updated_at, :message)
+                    """)
+                    session.execute(job_query, {
+                        'job_id': job_id,
+                        'batch_id': batch_id,
+                        'job_name': job_name,
+                        'status': 'queued',
+                        'started_at': now,
+                        'updated_at': now,
+                        'message': f"Queued {collector} collector"
+                    })
+                    
+                    job_runs.append({
+                        'job_name': job_name,
+                        'job_id': job_id,
+                        'status': 'queued',
+                        'started_at': now.isoformat() + 'Z'
+                    })
+            
+            # Add cross-vendor checks job if requested
+            if run_cross_vendor:
+                cross_vendor_job_id = f"cv_{uuid.uuid4().hex[:8]}"
+                cross_vendor_job_name = "cross-vendor-checks"
                 
                 job_query = text("""
                     INSERT INTO job_runs (job_id, batch_id, job_name, status, started_at, updated_at, message)
                     VALUES (:job_id, :batch_id, :job_name, :status, :started_at, :updated_at, :message)
                 """)
                 session.execute(job_query, {
-                    'job_id': job_id,
+                    'job_id': cross_vendor_job_id,
                     'batch_id': batch_id,
-                    'job_name': job_name,
+                    'job_name': cross_vendor_job_name,
                     'status': 'queued',
                     'started_at': now,
                     'updated_at': now,
-                    'message': f"Queued {collector} collector"
+                    'message': "Queued cross-vendor consistency checks"
                 })
                 
                 job_runs.append({
-                    'job_name': job_name,
-                    'job_id': job_id,
+                    'job_name': cross_vendor_job_name,
+                    'job_id': cross_vendor_job_id,
                     'status': 'queued',
                     'started_at': now.isoformat() + 'Z'
                 })
             
+            # Add Windows 11 24H2 assessment job
+            windows_24h2_job_id = f"w24_{uuid.uuid4().hex[:8]}"
+            windows_24h2_job_name = "windows-11-24h2-assessment"
+            
+            job_query = text("""
+                INSERT INTO job_runs (job_id, batch_id, job_name, status, started_at, updated_at, message)
+                VALUES (:job_id, :batch_id, :job_name, :status, :started_at, :updated_at, :message)
+            """)
+            session.execute(job_query, {
+                'job_id': windows_24h2_job_id,
+                'batch_id': batch_id,
+                'job_name': windows_24h2_job_name,
+                'status': 'queued',
+                'started_at': now,
+                'updated_at': now,
+                'message': "Queued Windows 11 24H2 assessment"
+            })
+            
+            job_runs.append({
+                'job_name': windows_24h2_job_name,
+                'job_id': windows_24h2_job_id,
+                'status': 'queued',
+                'started_at': now.isoformat() + 'Z'
+            })
+            
             session.commit()
             
-            # Start collectors asynchronously and update job status
-            for collector in collectors:
-                try:
-                    if collector == 'ninja':
-                        result = subprocess.run([
-                            'sudo', 'systemctl', 'start', 'ninja-collector.service'
-                        ], capture_output=True, text=True, timeout=30)
-                        
-                        # Update job status based on result
-                        if result.returncode == 0:
-                            # Find the job and update it to running
-                            for job in job_runs:
-                                if job['job_name'] == 'ninja-collector':
-                                    from api.progress_tracker import update_job_progress
-                                    update_job_progress(job['job_id'], 'running', 10, 'Ninja collector started')
-                                    break
-                        else:
-                            # Update job to failed
-                            for job in job_runs:
-                                if job['job_name'] == 'ninja-collector':
-                                    from api.progress_tracker import update_job_progress
-                                    update_job_progress(job['job_id'], 'failed', 0, f'Failed to start: {result.stderr}')
-                                    break
-                                    
-                    elif collector == 'threatlocker':
-                        result = subprocess.run([
-                            'sudo', 'systemctl', 'start', 'threatlocker-collector@rene.service'
-                        ], capture_output=True, text=True, timeout=30)
-                        
-                        # Update job status based on result
-                        if result.returncode == 0:
-                            # Find the job and update it to running
-                            for job in job_runs:
-                                if job['job_name'] == 'threatlocker-collector':
-                                    from api.progress_tracker import update_job_progress
-                                    update_job_progress(job['job_id'], 'running', 10, 'ThreatLocker collector started')
-                                    break
-                        else:
-                            # Update job to failed
-                            for job in job_runs:
-                                if job['job_name'] == 'threatlocker-collector':
-                                    from api.progress_tracker import update_job_progress
-                                    update_job_progress(job['job_id'], 'failed', 0, f'Failed to start: {result.stderr}')
-                                    break
-                except Exception as e:
-                    # Update job to failed
+            # Execute collectors SEQUENTIALLY with proper error handling
+            batch_failed = False
+            failed_jobs = []
+            
+            # Only execute actual collectors (ninja, threatlocker)
+            actual_collectors = [c for c in collectors if c in ['ninja', 'threatlocker']]
+            
+            for collector in actual_collectors:
+                if batch_failed:
+                    # Mark remaining jobs as cancelled
                     for job in job_runs:
                         if job['job_name'] == f'{collector}-collector':
                             from api.progress_tracker import update_job_progress
-                            update_job_progress(job['job_id'], 'failed', 0, f'Error starting collector: {str(e)}')
+                            update_job_progress(job['job_id'], 'cancelled', 0, 'Batch failed - previous job failed')
                             break
+                    continue
+                
+                try:
+                    # Find the job for this collector
+                    current_job = None
+                    for job in job_runs:
+                        if job['job_name'] == f'{collector}-collector':
+                            current_job = job
+                            break
+                    
+                    if not current_job:
+                        continue
+                    
+                    # Update job to running
+                    from api.progress_tracker import update_job_progress
+                    update_job_progress(current_job['job_id'], 'running', 10, f'{collector.title()} collector started')
+                    
+                    # Execute collector
+                    if collector == 'ninja':
+                        result = subprocess.run([
+                            '/opt/es-inventory-hub/.venv/bin/python', '-m', 'collectors.ninja.main'
+                        ], cwd='/opt/es-inventory-hub', capture_output=True, text=True, timeout=600)
+                    elif collector == 'threatlocker':
+                        result = subprocess.run([
+                            '/opt/es-inventory-hub/.venv/bin/python', '-m', 'collectors.threatlocker.main'
+                        ], cwd='/opt/es-inventory-hub', capture_output=True, text=True, timeout=600)
+                    else:
+                        raise ValueError(f"Unknown collector: {collector}")
+                    
+                    # Check result and update status
+                    if result.returncode == 0:
+                        update_job_progress(current_job['job_id'], 'completed', 100, f'{collector.title()} collector completed successfully')
+                    else:
+                        error_msg = f'{collector.title()} collector failed: {result.stderr}'
+                        update_job_progress(current_job['job_id'], 'failed', 0, error_msg)
+                        batch_failed = True
+                        failed_jobs.append(f'{collector}-collector')
+                        
+                except subprocess.TimeoutExpired:
+                    error_msg = f'{collector.title()} collector timed out after 10 minutes'
+                    update_job_progress(current_job['job_id'], 'failed', 0, error_msg)
+                    batch_failed = True
+                    failed_jobs.append(f'{collector}-collector')
+                    
+                except Exception as e:
+                    error_msg = f'Error running {collector} collector: {str(e)}'
+                    update_job_progress(current_job['job_id'], 'failed', 0, error_msg)
+                    batch_failed = True
+                    failed_jobs.append(f'{collector}-collector')
             
-            return jsonify({
+            # Execute cross-vendor checks ONLY if collectors succeeded
+            if run_cross_vendor and not batch_failed:
+                try:
+                    # Find the cross-vendor job
+                    cross_vendor_job = None
+                    for job in job_runs:
+                        if job['job_name'] == 'cross-vendor-checks':
+                            cross_vendor_job = job
+                            break
+                    
+                    if cross_vendor_job:
+                        # Update job to running
+                        from api.progress_tracker import update_job_progress
+                        update_job_progress(cross_vendor_job['job_id'], 'running', 10, 'Cross-vendor checks started')
+                        
+                        # Run cross-vendor checks
+                        python_code = """
+import sys
+sys.path.append('/opt/es-inventory-hub')
+from collectors.checks.cross_vendor import run_cross_vendor_checks
+from common.db import session_scope
+from datetime import date
+
+try:
+    with session_scope() as session:
+        results = run_cross_vendor_checks(session, date.today())
+        print(f'SUCCESS: {results}')
+except Exception as e:
+    print(f'ERROR: {e}')
+    sys.exit(1)
+"""
+                        
+                        result = subprocess.run([
+                            '/opt/es-inventory-hub/.venv/bin/python', '-c', python_code
+                        ], cwd='/opt/es-inventory-hub', capture_output=True, text=True, timeout=300)
+                        
+                        if result.returncode == 0:
+                            update_job_progress(cross_vendor_job['job_id'], 'completed', 100, 'Cross-vendor checks completed successfully')
+                        else:
+                            update_job_progress(cross_vendor_job['job_id'], 'failed', 0, f'Cross-vendor checks failed: {result.stderr}')
+                            batch_failed = True
+                            failed_jobs.append('cross-vendor-checks')
+                            
+                except Exception as e:
+                    # Update job to failed
+                    for job in job_runs:
+                        if job['job_name'] == 'cross-vendor-checks':
+                            from api.progress_tracker import update_job_progress
+                            update_job_progress(job['job_id'], 'failed', 0, f'Error starting cross-vendor checks: {str(e)}')
+                            batch_failed = True
+                            failed_jobs.append('cross-vendor-checks')
+                            break
+            elif run_cross_vendor and batch_failed:
+                # Mark cross-vendor as cancelled
+                for job in job_runs:
+                    if job['job_name'] == 'cross-vendor-checks':
+                        from api.progress_tracker import update_job_progress
+                        update_job_progress(job['job_id'], 'cancelled', 0, 'Cancelled - collectors failed')
+                        break
+            
+            # Execute Windows 11 24H2 assessment ONLY if previous jobs succeeded
+            if not batch_failed:
+                try:
+                    # Find the Windows 11 24H2 assessment job
+                    windows_24h2_job = None
+                    for job in job_runs:
+                        if job['job_name'] == 'windows-11-24h2-assessment':
+                            windows_24h2_job = job
+                            break
+                    
+                    if windows_24h2_job:
+                        # Update job to running
+                        from api.progress_tracker import update_job_progress
+                        update_job_progress(windows_24h2_job['job_id'], 'running', 10, 'Windows 11 24H2 assessment started')
+                        
+                        # Run Windows 11 24H2 assessment
+                        result = subprocess.run([
+                            '/opt/es-inventory-hub/.venv/bin/python', '/opt/es-inventory-hub/collectors/assessments/windows_11_24h2_assessment.py'
+                        ], cwd='/opt/es-inventory-hub', capture_output=True, text=True, timeout=300)
+                        
+                        if result.returncode == 0:
+                            update_job_progress(windows_24h2_job['job_id'], 'completed', 100, 'Windows 11 24H2 assessment completed successfully')
+                        else:
+                            update_job_progress(windows_24h2_job['job_id'], 'failed', 0, f'Windows 11 24H2 assessment failed: {result.stderr}')
+                            batch_failed = True
+                            failed_jobs.append('windows-11-24h2-assessment')
+                            
+                except Exception as e:
+                    # Update job to failed
+                    for job in job_runs:
+                        if job['job_name'] == 'windows-11-24h2-assessment':
+                            from api.progress_tracker import update_job_progress
+                            update_job_progress(job['job_id'], 'failed', 0, f'Error starting Windows 11 24H2 assessment: {str(e)}')
+                            batch_failed = True
+                            failed_jobs.append('windows-11-24h2-assessment')
+                            break
+            else:
+                # Mark Windows 11 24H2 assessment as cancelled
+                for job in job_runs:
+                    if job['job_name'] == 'windows-11-24h2-assessment':
+                        from api.progress_tracker import update_job_progress
+                        update_job_progress(job['job_id'], 'cancelled', 0, 'Cancelled - previous jobs failed')
+                        break
+            
+            # Update batch status based on results
+            batch_status = 'completed' if not batch_failed else 'failed'
+            batch_message = 'All jobs completed successfully' if not batch_failed else f'Batch failed - {len(failed_jobs)} job(s) failed: {", ".join(failed_jobs)}'
+            
+            # Update batch status in database
+            batch_update_query = text("""
+                UPDATE job_batches 
+                SET status = :status, message = :message, ended_at = :ended_at
+                WHERE batch_id = :batch_id
+            """)
+            session.execute(batch_update_query, {
+                'status': batch_status,
+                'message': batch_message,
+                'ended_at': datetime.utcnow(),
+                'batch_id': batch_id
+            })
+            session.commit()
+            
+        return jsonify({
                 'batch_id': batch_id,
+                'status': batch_status,
+                'message': batch_message,
+                'failed_jobs': failed_jobs,
                 'collectors': job_runs
             }), 201
             
     except Exception as e:
+        # If we have a batch_id, mark it as failed
+        if 'batch_id' in locals():
+            try:
+                with get_session() as session:
+                    batch_update_query = text("""
+                        UPDATE job_batches 
+                        SET status = 'failed', message = :message, ended_at = :ended_at
+                        WHERE batch_id = :batch_id
+                    """)
+                    session.execute(batch_update_query, {
+                        'message': f'Batch failed due to system error: {str(e)}',
+                        'ended_at': datetime.utcnow(),
+                        'batch_id': batch_id
+                    })
+                    session.commit()
+            except:
+                pass  # Don't fail on cleanup errors
+        
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': f'System error: {str(e)}',
+            'batch_id': batch_id if 'batch_id' in locals() else None
         }), 500
 
 @app.route('/api/collectors/status', methods=['GET'])
@@ -648,20 +859,20 @@ def get_collector_status():
     try:
         # Check systemd service status
         ninja_result = subprocess.run([
-            'systemctl', 'is-active', 'ninja-collector.service'
+            'systemctl', 'is-active', 'es-inventory-ninja.service'
         ], capture_output=True, text=True)
         
         threatlocker_result = subprocess.run([
-            'systemctl', 'is-active', 'threatlocker-collector@rene.service'
+            'systemctl', 'is-active', 'es-inventory-threatlocker.service'
         ], capture_output=True, text=True)
         
         # Get last run times
         ninja_status = subprocess.run([
-            'systemctl', 'show', 'ninja-collector.service', '--property=ActiveEnterTimestamp'
+            'systemctl', 'show', 'es-inventory-ninja.service', '--property=ActiveEnterTimestamp'
         ], capture_output=True, text=True)
         
         threatlocker_status = subprocess.run([
-            'systemctl', 'show', 'threatlocker-collector@rene.service', '--property=ActiveEnterTimestamp'
+            'systemctl', 'show', 'es-inventory-threatlocker.service', '--property=ActiveEnterTimestamp'
         ], capture_output=True, text=True)
         
         return jsonify({
@@ -1057,7 +1268,7 @@ def get_docs_index():
         "message": "ES Inventory Hub API Documentation",
         "available_docs": docs,
         "base_url": "https://db-api.enersystems.com:5400"
-    })
+        })
 
 @app.route('/api/exceptions', methods=['GET'])
 def get_exceptions():
@@ -2175,33 +2386,20 @@ def get_exceptions_status_summary():
         # Get status summary
         status_query = text("""
             SELECT 
-                COALESCE(variance_status, 'active') as status,
+                'active' as status,
                 type,
                 COUNT(*) as count,
                 COUNT(CASE WHEN resolved = true THEN 1 END) as resolved_count
             FROM exceptions
-            WHERE date_found >= CURRENT_DATE - INTERVAL '7 days'
-            GROUP BY variance_status, type
+            WHERE date_found = CURRENT_DATE
+            GROUP BY type
             ORDER BY status, type
         """)
         
         status_results = session.execute(status_query).fetchall()
         
-        # Get recent manual updates
-        recent_query = text("""
-            SELECT 
-                hostname,
-                type,
-                manually_updated_by,
-                manually_updated_at,
-                update_type
-            FROM exceptions
-            WHERE manually_updated_at >= CURRENT_DATE - INTERVAL '24 hours'
-            ORDER BY manually_updated_at DESC
-            LIMIT 20
-        """)
-        
-        recent_results = session.execute(recent_query).fetchall()
+        # Skip recent updates query for now - columns don't exist
+        recent_results = []
         
         # Format results
         status_summary = {}

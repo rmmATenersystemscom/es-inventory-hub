@@ -1,5 +1,11 @@
 # Dashboard AI: Collector Run Tracking Integration Guide
 
+**Last Updated**: October 9, 2025  
+**ES Inventory Hub Version**: v1.19.5  
+**Status**: ✅ **FULLY OPERATIONAL**
+
+> **🔧 API Fix (October 9, 2025)**: Fixed collector execution logic to properly handle only actual collectors (ninja, threatlocker) and prevent execution of non-existent collector types. The API now correctly filters collector execution and provides proper error handling.
+
 ## Overview
 
 The ES Inventory Hub now provides real-time collector run tracking with progress monitoring. This guide explains how Dashboard AI can integrate with the new tracking system to provide a responsive user experience.
@@ -17,7 +23,8 @@ const response = await fetch('https://db-api.enersystems.com:5400/api/collectors
   },
   body: JSON.stringify({
     collectors: ['ninja', 'threatlocker'],
-    priority: 'normal'
+    priority: 'normal',
+    run_cross_vendor: true
   })
 });
 
@@ -51,9 +58,17 @@ async function pollBatchStatus(batchId) {
 ```json
 {
   "collectors": ["ninja", "threatlocker"],
-  "priority": "normal"
+  "priority": "normal",
+  "run_cross_vendor": true
 }
 ```
+
+**Parameters**:
+- `collectors` (array): List of collectors to run
+- `priority` (string): Job priority - default: `normal`
+- `run_cross_vendor` (boolean): Include cross-vendor checks - default: `true`
+
+**Note**: The endpoint automatically includes Windows 11 24H2 assessment.
 
 **Response** (201):
 ```json
@@ -63,6 +78,24 @@ async function pollBatchStatus(batchId) {
     {
       "job_name": "ninja-collector",
       "job_id": "ni_87654321",
+      "status": "queued",
+      "started_at": "2025-10-06T15:16:10.552780Z"
+    },
+    {
+      "job_name": "threatlocker-collector",
+      "job_id": "th_11223344",
+      "status": "queued",
+      "started_at": "2025-10-06T15:16:10.552780Z"
+    },
+    {
+      "job_name": "cross-vendor-checks",
+      "job_id": "cv_99887766",
+      "status": "queued",
+      "started_at": "2025-10-06T15:16:10.552780Z"
+    },
+    {
+      "job_name": "windows-11-24h2-assessment",
+      "job_id": "w24_55443322",
       "status": "queued",
       "started_at": "2025-10-06T15:16:10.552780Z"
     }
@@ -380,10 +413,13 @@ fetch('/api/collectors/run', { method: 'POST' })
 
 ### After (New System)
 ```javascript
-// New way - full progress tracking
+// New way - full progress tracking with complete sequence
 const response = await fetch('/api/collectors/run', { 
   method: 'POST',
-  body: JSON.stringify({ collectors: ['ninja', 'threatlocker'] })
+  body: JSON.stringify({ 
+    collectors: ['ninja', 'threatlocker'],
+    run_cross_vendor: true  // Includes cross-vendor checks + Windows 11 24H2 assessment
+  })
 });
 const { batch_id } = await response.json();
 

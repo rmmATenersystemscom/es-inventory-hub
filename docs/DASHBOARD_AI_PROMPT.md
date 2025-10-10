@@ -76,6 +76,28 @@ function updateProgressUI(data) {
 }
 ```
 
+### 🔧 **Critical: Hostname Usage for Vendor API Calls**
+
+**⚠️ IMPORTANT**: When updating device information, use the correct hostname for each vendor system:
+
+- **ThreatLocker Portal API**: Use `threatlocker_hostname` field
+- **NinjaRMM API**: Use `ninja_hostname` field
+- **Never use** `ninja_hostname` for ThreatLocker Portal API calls
+- **Never use** `threatlocker_hostname` for NinjaRMM API calls
+
+**Example from Variance Report:**
+```json
+{
+  "hostname": "nochi-002062482",                    // Base identifier
+  "ninja_hostname": "NOCHI-002062482",             // Use for NinjaRMM API
+  "threatlocker_hostname": "NOCHI-002062482753",   // Use for ThreatLocker Portal API
+  "ninja_display_name": "NOCHI-002062482753 | SPARE - was Maintenance (at ES)",
+  "threatlocker_display_name": "NOCHI-002062482753 | Maintenance"
+}
+```
+
+**Common Issue**: Dashboard must use `threatlocker_hostname` when calling ThreatLocker Portal API for device updates.
+
 ### 📚 Full Documentation
 
 See `/docs/DASHBOARD_AI_COLLECTOR_TRACKING_GUIDE.md` for complete integration guide with React/Vue examples, error handling, and advanced patterns.

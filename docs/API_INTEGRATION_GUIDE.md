@@ -2,9 +2,42 @@
 
 **Complete API reference for Dashboard AI to integrate with the Database AI's ES Inventory Hub system.**
 
-**Last Updated**: October 2, 2025  
-**ES Inventory Hub Version**: v1.15.0  
+**Last Updated**: October 9, 2025  
+**ES Inventory Hub Version**: v1.19.5  
 **Status**: ✅ **FULLY OPERATIONAL**
+
+> **📅 API Behavior Update (October 9, 2025)**: All status and exception endpoints now return **latest data only** (current date) instead of historical ranges. This ensures consistent reporting and prevents data accumulation issues.
+
+---
+
+## 🔧 **Hostname Usage Guidelines**
+
+### **Critical: Use Correct Hostname for Each Vendor System**
+
+When working with device data, **each vendor system requires its own hostname format**. The API provides the correct hostname for each system.
+
+**✅ CORRECT Usage:**
+- **For ThreatLocker Portal API calls**: Use `threatlocker_hostname` field
+- **For NinjaRMM API calls**: Use `ninja_hostname` field
+- **For device identification**: Use the appropriate vendor hostname
+
+**❌ INCORRECT Usage:**
+- **Never use** `ninja_hostname` for ThreatLocker Portal API calls
+- **Never use** `threatlocker_hostname` for NinjaRMM API calls
+- **Never assume** hostnames are interchangeable between systems
+
+**Example from Variance Report:**
+```json
+{
+  "hostname": "nochi-002062482",                    // Base identifier
+  "ninja_hostname": "NOCHI-002062482",             // Use for NinjaRMM API
+  "threatlocker_hostname": "NOCHI-002062482753",   // Use for ThreatLocker Portal API
+  "ninja_display_name": "NOCHI-002062482753 | SPARE - was Maintenance (at ES)",
+  "threatlocker_display_name": "NOCHI-002062482753 | Maintenance"
+}
+```
+
+**⚠️ Common Issue**: Dashboard AI must use `threatlocker_hostname` when calling ThreatLocker Portal API, not `ninja_hostname`.
 
 ---
 

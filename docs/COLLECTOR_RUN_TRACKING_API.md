@@ -2,6 +2,12 @@
 
 This document describes the new collector run tracking API endpoints that provide real-time progress monitoring for collector runs.
 
+**Last Updated**: October 9, 2025  
+**ES Inventory Hub Version**: v1.19.5  
+**Status**: ✅ **FULLY OPERATIONAL**
+
+> **🔧 API Fix (October 9, 2025)**: Fixed collector execution logic to properly handle only actual collectors (ninja, threatlocker) and prevent execution of non-existent collector types. The API now correctly filters collector execution and provides proper error handling.
+
 ## Overview
 
 The collector run tracking system provides:
@@ -23,24 +29,64 @@ Triggers one or more collectors and returns batch and job IDs for tracking.
 ```json
 {
   "collectors": ["ninja", "threatlocker"],
-  "priority": "normal"
+  "priority": "normal",
+  "run_cross_vendor": true
 }
 ```
+
+**Parameters:**
+- `collectors` (array): List of collectors to run (`ninja`, `threatlocker`)
+- `priority` (string): Job priority (`normal`, `high`, `low`) - default: `normal`
+- `run_cross_vendor` (boolean): Whether to run cross-vendor consistency checks - default: `true`
+
+**Note:** The endpoint automatically includes:
+- Cross-vendor consistency checks (if `run_cross_vendor: true`)
+- Windows 11 24H2 assessment (always included)
+
+**⚠️ IMPORTANT - Sequential Execution**: Jobs run in strict sequence:
+1. **Ninja Collector** (must complete first)
+2. **ThreatLocker Collector** (runs after Ninja completes)
+3. **Cross-Vendor Checks** (runs after both collectors complete)
+4. **Windows 11 24H2 Assessment** (runs after cross-vendor checks complete)
+
+If any job fails, subsequent jobs are marked as "cancelled" and the batch status becomes "failed".
+
+**Error Handling:**
+- **Job Failures**: Individual jobs can fail with detailed error messages
+- **Batch Failures**: If any job fails, the entire batch is marked as failed
+- **Cancellation**: Remaining jobs are cancelled when a prerequisite job fails
+- **Timeout Handling**: Jobs timeout after 10 minutes (collectors) or 5 minutes (assessments)
+- **System Errors**: Database and system errors are properly reported to the caller
 
 **Response (201):**
 ```json
 {
   "batch_id": "bc_12345678",
+  "status": "completed",
+  "message": "All jobs completed successfully",
+  "failed_jobs": [],
   "collectors": [
     {
       "job_name": "ninja-collector",
       "job_id": "ni_87654321",
-      "status": "queued",
+      "status": "completed",
       "started_at": "2025-10-06T15:16:10.552780Z"
     },
     {
       "job_name": "threatlocker-collector", 
       "job_id": "th_11223344",
+      "status": "queued",
+      "started_at": "2025-10-06T15:16:10.552780Z"
+    },
+    {
+      "job_name": "cross-vendor-checks",
+      "job_id": "cv_99887766",
+      "status": "queued",
+      "started_at": "2025-10-06T15:16:10.552780Z"
+    },
+    {
+      "job_name": "windows-11-24h2-assessment",
+      "job_id": "w24_55443322",
       "status": "queued",
       "started_at": "2025-10-06T15:16:10.552780Z"
     }
@@ -171,6 +217,16 @@ Returns recent collector runs including running jobs.
   "generated_at": "2025-10-06T15:17:30.123456Z"
 }
 ```
+
+## Job Types
+
+### Collector Jobs
+- `ninja-collector`: NinjaRMM data collection
+- `threatlocker-collector`: ThreatLocker data collection
+
+### Analysis Jobs
+- `cross-vendor-checks`: Cross-vendor consistency analysis and variance detection
+- `windows-11-24h2-assessment`: Windows 11 24H2 compatibility assessment
 
 ## Status Values
 

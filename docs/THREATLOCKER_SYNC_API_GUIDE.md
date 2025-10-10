@@ -2,8 +2,8 @@
 
 **Purpose**: This document describes the new ThreatLocker device sync API endpoint that allows real-time database updates when ThreatLocker device information is modified via the dashboard.
 
-**Last Updated**: October 8, 2025  
-**ES Inventory Hub Version**: v1.19.4  
+**Last Updated**: October 9, 2025  
+**ES Inventory Hub Version**: v1.19.5  
 **Status**: ✅ **ACTIVE** - Real-time ThreatLocker device sync functionality
 
 ---

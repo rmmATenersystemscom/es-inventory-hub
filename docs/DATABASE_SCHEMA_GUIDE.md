@@ -2,9 +2,11 @@
 
 **Complete database reference for ES Inventory Hub schema, tables, and queries.**
 
-**Last Updated**: October 8, 2025  
-**ES Inventory Hub Version**: v1.19.3  
+**Last Updated**: October 9, 2025  
+**ES Inventory Hub Version**: v1.19.5  
 **Status**: ✅ **FULLY OPERATIONAL**
+
+> **📅 API Behavior Update (October 9, 2025)**: All API endpoints now return **latest data only** (current date) instead of historical ranges. This ensures consistent reporting across all endpoints and prevents data accumulation issues.
 
 ---
 
@@ -261,7 +263,7 @@ SELECT
     COUNT(*) as count,
     COUNT(CASE WHEN resolved = true THEN 1 END) as resolved_count
 FROM exceptions
-WHERE date_found >= CURRENT_DATE - INTERVAL '7 days'
+WHERE date_found = CURRENT_DATE
 GROUP BY variance_status, type
 ORDER BY status, type;
 ```
@@ -489,7 +491,7 @@ SELECT
     COUNT(*) as exception_count,
     COUNT(CASE WHEN resolved = true THEN 1 END) as resolved_count
 FROM exceptions
-WHERE date_found >= CURRENT_DATE - INTERVAL '30 days'
+WHERE date_found = CURRENT_DATE
 GROUP BY date_found, type
 ORDER BY date_found DESC, type;
 ```

@@ -236,9 +236,9 @@ FROM device_snapshot;
 
 ## 📚 **RELATED DOCUMENTATION**
 
-- [Reboot Recovery Guide](./REBOOT_RECOVERY_GUIDE.md) - Complete recovery procedures
-- [Quick Start Recovery](./QUICK_START_RECOVERY.md) - Fast recovery procedures
-- [Setup and Troubleshooting Guide](./SETUP_AND_TROUBLESHOOTING_GUIDE.md) - General troubleshooting
+- [Reboot Recovery Guide](./TROUBLESHOOT_REBOOT_RECOVERY.md) - Complete recovery procedures
+- [Quick Start Recovery](./TROUBLESHOOT_QUICK_START_RECOVERY.md) - Fast recovery procedures
+- [Setup and Troubleshooting Guide](./TROUBLESHOOT_SETUP.md) - General troubleshooting
 
 ---
 

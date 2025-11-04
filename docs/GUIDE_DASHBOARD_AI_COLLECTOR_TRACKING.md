@@ -444,6 +444,6 @@ tracker.startTracking(batch_id);
 ## Support
 
 For technical support or questions about the collector tracking system:
-- **Documentation**: `/docs/COLLECTOR_RUN_TRACKING_API.md`
+- **Documentation**: `/docs/API_COLLECTOR_RUN_TRACKING.md`
 - **API Reference**: Full endpoint documentation
 - **Examples**: Working code samples and patterns

@@ -373,7 +373,7 @@ The API server also provides documentation endpoints for easy access:
 - **GET** `/api/docs` - Documentation index
 - **GET** `/api/docs/DASHBOARD_AI_COLLECTOR_TRACKING_GUIDE.md` - Complete integration guide
 - **GET** `/api/docs/DASHBOARD_AI_PROMPT.md` - Quick start guide
-- **GET** `/api/docs/COLLECTOR_RUN_TRACKING_API.md` - Full API reference
+- **GET** `/api/docs/API_COLLECTOR_RUN_TRACKING.md` - Full API reference
 
 These endpoints serve the documentation files directly from the API server, making them accessible over the network for Dashboard AI and other integrations.
 

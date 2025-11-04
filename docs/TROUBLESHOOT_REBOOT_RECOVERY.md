@@ -350,10 +350,10 @@ chmod +x /opt/es-inventory-hub/scripts/reboot_recovery.sh
 
 ## 📚 **RELATED DOCUMENTATION**
 
-- [Setup and Troubleshooting Guide](./SETUP_AND_TROUBLESHOOTING_GUIDE.md) - General troubleshooting
-- [Database Schema Guide](./DATABASE_SCHEMA_GUIDE.md) - Database reference
-- [API Integration Guide](./API_INTEGRATION_GUIDE.md) - API endpoints
-- [Windows 11 24H2 Guide](./WINDOWS_11_24H2_GUIDE.md) - Assessment system
+- [Setup and Troubleshooting Guide](./TROUBLESHOOT_SETUP.md) - General troubleshooting
+- [Database Schema Guide](./GUIDE_DATABASE_SCHEMA.md) - Database reference
+- [API Integration Guide](./API_INTEGRATION.md) - API endpoints
+- [Windows 11 24H2 Guide](./GUIDE_WINDOWS_11_24H2.md) - Assessment system
 
 ---
 

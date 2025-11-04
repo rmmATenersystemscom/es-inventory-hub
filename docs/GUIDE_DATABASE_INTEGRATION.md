@@ -11,16 +11,16 @@
 ## 🚀 **QUICK START**
 
 ### **For Dashboard AI (Recommended)**
-Start with: **[API Integration Guide](./API_INTEGRATION_GUIDE.md)** - Complete API reference and usage examples
+Start with: **[API Integration Guide](./API_INTEGRATION.md)** - Complete API reference and usage examples
 
 ### **For Database AI**
-Start with: **[Database Schema Guide](./DATABASE_SCHEMA_GUIDE.md)** - Database reference and direct access
+Start with: **[Database Schema Guide](./GUIDE_DATABASE_SCHEMA.md)** - Database reference and direct access
 
 ---
 
 ## 📚 **FOCUSED DOCUMENTATION**
 
-### **🎯 [API Integration Guide](./API_INTEGRATION_GUIDE.md)**
+### **🎯 [API Integration Guide](./API_INTEGRATION.md)**
 **Complete API reference for Dashboard AI**
 - Quick Start & Connection Information
 - Complete API Endpoints Reference
@@ -29,7 +29,7 @@ Start with: **[Database Schema Guide](./DATABASE_SCHEMA_GUIDE.md)** - Database r
 - Testing Commands
 - Critical Notes for Dashboard AI
 
-### **📊 [Variances Dashboard Guide](./VARIANCES_DASHBOARD_GUIDE.md)**
+### **📊 [Variances Dashboard Guide](./GUIDE_VARIANCES_DASHBOARD.md)**
 **Dashboard-specific functionality and enhanced capabilities**
 - Enhanced API Capabilities (October 2025)
 - Variances Dashboard Functionality
@@ -38,7 +38,7 @@ Start with: **[Database Schema Guide](./DATABASE_SCHEMA_GUIDE.md)** - Database r
 - Export Functionality
 - Historical Analysis
 
-### **🪟 [Windows 11 24H2 Guide](./WINDOWS_11_24H2_GUIDE.md)**
+### **🪟 [Windows 11 24H2 Guide](./GUIDE_WINDOWS_11_24H2.md)**
 **Windows 11 compatibility assessment**
 - Assessment Requirements
 - API Endpoints
@@ -48,7 +48,7 @@ Start with: **[Database Schema Guide](./DATABASE_SCHEMA_GUIDE.md)** - Database r
 - Monitoring & Logging
 - **NEW**: Enhanced Field Mappings with NinjaRMM API Integration
 
-### **🔧 [Setup and Troubleshooting Guide](./SETUP_AND_TROUBLESHOOTING_GUIDE.md)**
+### **🔧 [Setup and Troubleshooting Guide](./TROUBLESHOOT_SETUP.md)**
 **Operational guide for system maintenance**
 - Setup Instructions
 - HTTPS Configuration
@@ -57,7 +57,7 @@ Start with: **[Database Schema Guide](./DATABASE_SCHEMA_GUIDE.md)** - Database r
 - Maintenance Tasks
 - Emergency Procedures
 
-### **🗄️ [Database Schema Guide](./DATABASE_SCHEMA_GUIDE.md)**
+### **🗄️ [Database Schema Guide](./GUIDE_DATABASE_SCHEMA.md)**
 **Database reference for direct access**
 - Database Overview
 - Primary Tables
@@ -82,7 +82,7 @@ Start with: **[Database Schema Guide](./DATABASE_SCHEMA_GUIDE.md)** - Database r
 - **Production HTTPS**: `https://db-api.enersystems.com:5400` (Let's Encrypt Certificate) ✅ **RECOMMENDED**
 - **IP Access**: `https://192.168.99.246:5400` (HTTPS - Use `-k` flag for testing) ✅ **ALTERNATIVE**
 
-**Documentation**: See [API Integration Guide](./API_INTEGRATION_GUIDE.md) for complete API reference
+**Documentation**: See [API Integration Guide](./API_INTEGRATION.md) for complete API reference
 
 ### **Option 2: Direct Database Access (Database AI Only)**
 
@@ -90,29 +90,29 @@ Start with: **[Database Schema Guide](./DATABASE_SCHEMA_GUIDE.md)** - Database r
 
 This is for Database AI internal operations only. You (Dashboard AI) must use the API server.
 
-**Documentation**: See [Database Schema Guide](./DATABASE_SCHEMA_GUIDE.md) for database reference
+**Documentation**: See [Database Schema Guide](./GUIDE_DATABASE_SCHEMA.md) for database reference
 
 ---
 
 ## 🎯 **DASHBOARD AI INTEGRATION PATH**
 
 ### **Step 1: API Integration**
-1. Read [API Integration Guide](./API_INTEGRATION_GUIDE.md)
+1. Read [API Integration Guide](./API_INTEGRATION.md)
 2. Test basic endpoints: `curl https://db-api.enersystems.com:5400/api/health`
 3. Implement API calls in your dashboard
 
 ### **Step 2: Dashboard Functionality**
-1. Read [Variances Dashboard Guide](./VARIANCES_DASHBOARD_GUIDE.md)
+1. Read [Variances Dashboard Guide](./GUIDE_VARIANCES_DASHBOARD.md)
 2. Implement Run Collectors, Historical View, Export Report functionality
 3. Test enhanced modal functionality
 
 ### **Step 3: Windows 11 24H2 Assessment**
-1. Read [Windows 11 24H2 Guide](./WINDOWS_11_24H2_GUIDE.md)
+1. Read [Windows 11 24H2 Guide](./GUIDE_WINDOWS_11_24H2.md)
 2. Implement compatibility assessment features
 3. Test manual trigger functionality
 
 ### **Step 4: Troubleshooting (if needed)**
-1. Read [Setup and Troubleshooting Guide](./SETUP_AND_TROUBLESHOOTING_GUIDE.md)
+1. Read [Setup and Troubleshooting Guide](./TROUBLESHOOT_SETUP.md)
 2. Use debugging commands and monitoring tools
 3. Contact support if issues persist
 
@@ -181,7 +181,7 @@ The Windows 11 24H2 API endpoints now provide enhanced field data through NinjaR
 - **Response includes**: `"data_source": "Database + NinjaRMM API"`
 - **Fallback handling**: If NinjaRMM API unavailable, falls back to database values
 
-**📚 For complete field mappings, examples, and detailed documentation, see [Windows 11 24H2 Guide](./WINDOWS_11_24H2_GUIDE.md)**
+**📚 For complete field mappings, examples, and detailed documentation, see [Windows 11 24H2 Guide](./GUIDE_WINDOWS_11_24H2.md)**
 
 ---
 
@@ -228,11 +228,11 @@ curl -k -X POST https://192.168.99.246:5400/api/collectors/run \
 ```
 
 ### **Documentation References**
-- **API Issues**: See [API Integration Guide](./API_INTEGRATION_GUIDE.md)
-- **Dashboard Issues**: See [Variances Dashboard Guide](./VARIANCES_DASHBOARD_GUIDE.md)
-- **Windows 11 Issues**: See [Windows 11 24H2 Guide](./WINDOWS_11_24H2_GUIDE.md)
-- **System Issues**: See [Setup and Troubleshooting Guide](./SETUP_AND_TROUBLESHOOTING_GUIDE.md)
-- **Database Issues**: See [Database Schema Guide](./DATABASE_SCHEMA_GUIDE.md)
+- **API Issues**: See [API Integration Guide](./API_INTEGRATION.md)
+- **Dashboard Issues**: See [Variances Dashboard Guide](./GUIDE_VARIANCES_DASHBOARD.md)
+- **Windows 11 Issues**: See [Windows 11 24H2 Guide](./GUIDE_WINDOWS_11_24H2.md)
+- **System Issues**: See [Setup and Troubleshooting Guide](./TROUBLESHOOT_SETUP.md)
+- **Database Issues**: See [Database Schema Guide](./GUIDE_DATABASE_SCHEMA.md)
 
 ---
 

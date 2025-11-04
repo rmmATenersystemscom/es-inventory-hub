@@ -426,10 +426,10 @@ curl https://db-api.enersystems.com:5400/api/collectors/status
 
 ## 📚 **RELATED DOCUMENTATION**
 
-- [Variances Dashboard Guide](./VARIANCES_DASHBOARD_GUIDE.md) - Detailed dashboard functionality
-- [Windows 11 24H2 Guide](./WINDOWS_11_24H2_GUIDE.md) - Windows 11 compatibility assessment
-- [Setup and Troubleshooting Guide](./SETUP_AND_TROUBLESHOOTING.md) - Operational guide
-- [Database Schema Guide](./DATABASE_SCHEMA_GUIDE.md) - Database reference
+- [Variances Dashboard Guide](./GUIDE_VARIANCES_DASHBOARD.md) - Detailed dashboard functionality
+- [Windows 11 24H2 Guide](./GUIDE_WINDOWS_11_24H2.md) - Windows 11 compatibility assessment
+- [Setup and Troubleshooting Guide](./TROUBLESHOOT_SETUP.md) - Operational guide
+- [Database Schema Guide](./GUIDE_DATABASE_SCHEMA.md) - Database reference
 
 ---
 

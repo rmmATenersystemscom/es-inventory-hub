@@ -550,11 +550,11 @@ curl "https://db-api.enersystems.com:5400/api/windows-11-24h2/status"
 
 ## 📚 **RELATED DOCUMENTATION**
 
-- [API Integration Guide](./API_INTEGRATION_GUIDE.md) - Core API endpoints and usage
-- [Variances Dashboard Guide](./VARIANCES_DASHBOARD_GUIDE.md) - Dashboard functionality
-- [Setup and Troubleshooting Guide](./SETUP_AND_TROUBLESHOOTING.md) - Operational guide
-- [Database Schema Guide](./DATABASE_SCHEMA_GUIDE.md) - Database reference
-- [Windows 11 24H2 Assessment Documentation](./WINDOWS_11_24H2_ASSESSMENT.md) - Detailed technical documentation
+- [API Integration Guide](./API_INTEGRATION.md) - Core API endpoints and usage
+- [Variances Dashboard Guide](./GUIDE_VARIANCES_DASHBOARD.md) - Dashboard functionality
+- [Setup and Troubleshooting Guide](./TROUBLESHOOT_SETUP.md) - Operational guide
+- [Database Schema Guide](./GUIDE_DATABASE_SCHEMA.md) - Database reference
+- [Windows 11 24H2 Assessment Documentation](./GUIDE_WINDOWS_11_24H2_ASSESSMENT.md) - Detailed technical documentation
 
 ---
 

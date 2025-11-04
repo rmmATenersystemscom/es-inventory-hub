@@ -3680,7 +3680,7 @@ def get_documentation():
     try:
         from flask import send_from_directory
         docs_dir = '/opt/es-inventory-hub/docs'
-        return send_from_directory(docs_dir, 'HOW_TO_INTEGRATE_TO_DATABASE_GUIDE.md')
+        return send_from_directory(docs_dir, 'GUIDE_DATABASE_INTEGRATION.md')
     except Exception as e:
         return jsonify({"error": f"Documentation not available: {str(e)}"}), 404
 

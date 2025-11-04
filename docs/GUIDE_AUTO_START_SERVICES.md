@@ -228,7 +228,7 @@ journalctl -u threatlocker-collector@rene.service -f
 - **ES Inventory Hub**: 5400-5499 ✅
 - **PostgreSQL**: 5432 ✅ (shared)
 
-**✅ All services comply with PORT_CONFIGURATION.md**
+**✅ All services comply with ARCH_PORT_CONFIGURATION.md**
 
 ---
 
@@ -262,8 +262,8 @@ ss -tlnp | grep -E ":(5400|5432)"
 
 ## 📚 **Related Documentation**
 
-- **[Port Configuration Guide](./PORT_CONFIGURATION.md)** - Complete port allocation and management
-- **[Systemd Services Guide](./SYSTEMD.md)** - Collector service configuration
+- **[Port Configuration Guide](./ARCH_PORT_CONFIGURATION.md)** - Complete port allocation and management
+- **[Systemd Services Guide](./ARCH_SYSTEMD.md)** - Collector service configuration
 - **[API Quick Reference](./API_QUICK_REFERENCE.md)** - API endpoint documentation
 - **[Dashboard Integration Guide](./DASHBOARD_INTEGRATION_GUIDE.md)** - Integration procedures
 

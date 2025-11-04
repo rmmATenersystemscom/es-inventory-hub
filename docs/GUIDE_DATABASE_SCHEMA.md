@@ -557,10 +557,10 @@ ORDER BY total_exceptions DESC;
 
 ## 📚 **RELATED DOCUMENTATION**
 
-- [API Integration Guide](./API_INTEGRATION_GUIDE.md) - Core API endpoints and usage
-- [Variances Dashboard Guide](./VARIANCES_DASHBOARD_GUIDE.md) - Dashboard functionality
-- [Windows 11 24H2 Guide](./WINDOWS_11_24H2_GUIDE.md) - Windows 11 compatibility assessment
-- [Setup and Troubleshooting Guide](./SETUP_AND_TROUBLESHOOTING_GUIDE.md) - Operational guide
+- [API Integration Guide](./API_INTEGRATION.md) - Core API endpoints and usage
+- [Variances Dashboard Guide](./GUIDE_VARIANCES_DASHBOARD.md) - Dashboard functionality
+- [Windows 11 24H2 Guide](./GUIDE_WINDOWS_11_24H2.md) - Windows 11 compatibility assessment
+- [Setup and Troubleshooting Guide](./TROUBLESHOOT_SETUP.md) - Operational guide
 
 ---
 

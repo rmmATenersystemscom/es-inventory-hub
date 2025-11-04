@@ -45,7 +45,7 @@ The assessment script retrieves the following fields from the `device_snapshot` 
 
 ### Ninja API Data Mapping
 
-The data is collected from the NinjaRMM API using the following mappings (as documented in `/opt/es-inventory-hub/docs/NINJA_API_DOCUMENTATION.md`):
+The data is collected from the NinjaRMM API using the following mappings (as documented in `/opt/es-inventory-hub/docs/API_NINJA.md`):
 
 #### CPU Information
 - **API Path**: `processors[].name`
@@ -403,5 +403,5 @@ AND windows_11_24h2_capable IS NOT NULL;
 ## References
 
 - [Microsoft Windows 11 System Requirements](https://www.microsoft.com/en-us/windows/windows-11-specifications)
-- [NinjaRMM API Documentation](./NINJA_API_DOCUMENTATION.md)
-- [Database Integration Guide](./HOW_TO_INTEGRATE_TO_DATABASE_GUIDE.md)
+- [NinjaRMM API Documentation](./API_NINJA.md)
+- [Database Integration Guide](./GUIDE_DATABASE_INTEGRATION.md)

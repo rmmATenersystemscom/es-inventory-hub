@@ -7,7 +7,7 @@
 ### **ES Inventory Hub AI (Database AI) Scope:**
 - ✅ **Data Collection**: NinjaRMM and ThreatLocker collectors
 - ✅ **Database Management**: PostgreSQL schema, migrations, queries
-- ✅ **API Server**: REST API for variance data (see [Port Configuration](PORT_CONFIGURATION.md))
+- ✅ **API Server**: REST API for variance data (see [Port Configuration](ARCH_PORT_CONFIGURATION.md))
 - ✅ **Systemd Services**: Automated collection scheduling
 - ✅ **Cross-Vendor Checks**: Variance detection and exception handling
 - ✅ **Documentation**: Project-specific documentation in `/docs/`
@@ -16,7 +16,7 @@
 - ✅ **Data Quality**: Ensuring accurate device inventory collection
 
 ### **Dashboard Project AI Scope:**
-- ✅ **Web Dashboards**: All dashboard containers (see [Port Configuration](PORT_CONFIGURATION.md))
+- ✅ **Web Dashboards**: All dashboard containers (see [Port Configuration](ARCH_PORT_CONFIGURATION.md))
 - ✅ **Nginx Configuration**: Reverse proxy and SSL termination
 - ✅ **Dashboard UI**: Frontend interfaces and user experience
 - ✅ **Dashboard Integration**: Connecting dashboards to ES Inventory Hub API
@@ -63,12 +63,12 @@ Put your request in a text box:
 
 ## 📋 **Port Allocation**
 
-**For complete port allocation details, see [Port Configuration](PORT_CONFIGURATION.md)**
+**For complete port allocation details, see [Port Configuration](ARCH_PORT_CONFIGURATION.md)**
 
 ### **Key Points:**
 - **ES Inventory Hub**: Database AI manages API and data collection services
 - **Dashboard Project**: Dashboard AI manages web interfaces and containers
-- **Single Source of Truth**: All port information is maintained in [Port Configuration](PORT_CONFIGURATION.md)
+- **Single Source of Truth**: All port information is maintained in [Port Configuration](ARCH_PORT_CONFIGURATION.md)
 
 ## 🎯 **Focus Areas**
 
@@ -112,4 +112,4 @@ If urgent cross-project changes are needed:
 **Last Updated**: October 1, 2025  
 **Status**: ✅ **ACTIVE** - Boundaries in effect  
 **Projects**: ES Inventory Hub (Database AI) + Dashboard Project (Dashboard AI)  
-**Port Information**: See [Port Configuration](PORT_CONFIGURATION.md) for authoritative port allocation details
+**Port Information**: See [Port Configuration](ARCH_PORT_CONFIGURATION.md) for authoritative port allocation details

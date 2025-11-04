@@ -449,10 +449,10 @@ The `/api/devices/search` endpoint handles this automatically:
 
 ## 📚 **RELATED DOCUMENTATION**
 
-- [API Integration Guide](./API_INTEGRATION_GUIDE.md) - Core API endpoints and usage
-- [Windows 11 24H2 Guide](./WINDOWS_11_24H2_GUIDE.md) - Windows 11 compatibility assessment
-- [Setup and Troubleshooting Guide](./SETUP_AND_TROUBLESHOOTING.md) - Operational guide
-- [Database Schema Guide](./DATABASE_SCHEMA_GUIDE.md) - Database reference
+- [API Integration Guide](./API_INTEGRATION.md) - Core API endpoints and usage
+- [Windows 11 24H2 Guide](./GUIDE_WINDOWS_11_24H2.md) - Windows 11 compatibility assessment
+- [Setup and Troubleshooting Guide](./TROUBLESHOOT_SETUP.md) - Operational guide
+- [Database Schema Guide](./GUIDE_DATABASE_SCHEMA.md) - Database reference
 
 ---
 

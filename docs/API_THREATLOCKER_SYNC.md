@@ -296,10 +296,10 @@ curl -k -X POST https://db-api.enersystems.com:5400/api/threatlocker/sync-device
 
 ## 📚 **Related Documentation**
 
-- [COLLECTOR_RUN_TRACKING_API.md](COLLECTOR_RUN_TRACKING_API.md) - Collector management API
-- [THREATLOCKER_API_GUIDE.md](THREATLOCKER_API_GUIDE.md) - ThreatLocker API field reference
-- [DEVICE_MATCHING_LOGIC.md](DEVICE_MATCHING_LOGIC.md) - Device matching and variance detection
-- [DATABASE_SCHEMA_GUIDE.md](DATABASE_SCHEMA_GUIDE.md) - Database schema reference
+- [API_COLLECTOR_RUN_TRACKING.md](API_COLLECTOR_RUN_TRACKING.md) - Collector management API
+- [API_THREATLOCKER.md](API_THREATLOCKER.md) - ThreatLocker API field reference
+- [ARCH_DEVICE_MATCHING.md](ARCH_DEVICE_MATCHING.md) - Device matching and variance detection
+- [GUIDE_DATABASE_SCHEMA.md](GUIDE_DATABASE_SCHEMA.md) - Database schema reference
 
 ---
 

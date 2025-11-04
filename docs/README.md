@@ -17,8 +17,8 @@ This directory contains comprehensive documentation for the ES Inventory Hub sys
 
 **Shared Files:**
 - **`CHECK_IN_PROCESS.md`** → `/opt/dashboard-project/docs/CHECK_IN_PROCESS.md`
-- **`NINJA_API_DOCUMENTATION.md`** → `/opt/dashboard-project/docs/NINJA_API_DOCUMENTATION.md`
-- **`THREATLOCKER_API_GUIDE.md`** → `/opt/dashboard-project/docs/THREATLOCKER_API_GUIDE.md`
+- **`API_NINJA.md`** → `/opt/dashboard-project/docs/API_NINJA.md`
+- **`API_THREATLOCKER.md`** → `/opt/dashboard-project/docs/API_THREATLOCKER.md`
 
 **⚠️ To modify shared documentation**: Edit the source files in `/opt/dashboard-project/docs/` - changes will automatically appear in all projects.
 
@@ -29,13 +29,13 @@ This directory contains comprehensive documentation for the ES Inventory Hub sys
 ### **ES Inventory Hub AI (Database AI) Scope:**
 - ✅ **Data Collection**: NinjaRMM and ThreatLocker collectors
 - ✅ **Database Management**: PostgreSQL schema, migrations, queries  
-- ✅ **API Server**: REST API for variance data (see [Port Configuration](PORT_CONFIGURATION.md))
+- ✅ **API Server**: REST API for variance data (see [Port Configuration](ARCH_PORT_CONFIGURATION.md))
 - ✅ **Systemd Services**: Automated collection scheduling
 - ✅ **Cross-Vendor Checks**: Variance detection and exception handling
 - ✅ **Documentation**: Project-specific documentation in `/docs/`
 
 ### **Dashboard Project AI Scope:**
-- ✅ **Web Dashboards**: All dashboard containers (see [Port Configuration](PORT_CONFIGURATION.md))
+- ✅ **Web Dashboards**: All dashboard containers (see [Port Configuration](ARCH_PORT_CONFIGURATION.md))
 - ✅ **Nginx Configuration**: Reverse proxy and SSL termination
 - ✅ **Dashboard UI**: Frontend interfaces and user experience
 - ✅ **Dashboard Integration**: Connecting dashboards to ES Inventory Hub API
@@ -55,12 +55,12 @@ This directory contains comprehensive documentation for the ES Inventory Hub sys
 
 ### **For Database Access**
 - **[DASHBOARD_INTEGRATION_GUIDE.md](./DASHBOARD_INTEGRATION_GUIDE.md)** - Complete database connection guide with schemas and queries
-- **[DEVICE_MATCHING_LOGIC.md](./DEVICE_MATCHING_LOGIC.md)** - How devices are matched between vendors
+- **[ARCH_DEVICE_MATCHING.md](./ARCH_DEVICE_MATCHING.md)** - How devices are matched between vendors
 
 ### **For API Integration**
 - **[DASHBOARD_INTEGRATION_GUIDE.md](./DASHBOARD_INTEGRATION_GUIDE.md)** - Complete guide for dashboard integration with Variances Dashboard functionality
 - **[API_QUICK_REFERENCE.md](./API_QUICK_REFERENCE.md)** - Quick reference for API endpoints and usage including new export endpoints
-- **[THREATLOCKER_SYNC_API_GUIDE.md](./THREATLOCKER_SYNC_API_GUIDE.md)** - Real-time ThreatLocker device sync API for dashboard integration
+- **[API_THREATLOCKER_SYNC.md](./API_THREATLOCKER_SYNC.md)** - Real-time ThreatLocker device sync API for dashboard integration
 - **[../api/README.md](../api/README.md)** - API server and testing utilities
 - **[../api/api_server.py](../api/api_server.py)** - REST API server for variance data and collector management
 - **[../api/test_api.py](../api/test_api.py)** - API testing script
@@ -70,31 +70,31 @@ This directory contains comprehensive documentation for the ES Inventory Hub sys
 ## 🔧 **System Administration**
 
 ### **Service Management**
-- **[SYSTEMD.md](./SYSTEMD.md)** - Systemd service setup and management
-- **[CRON.md](./CRON.md)** - Cron job configuration (alternative to systemd)
+- **[ARCH_SYSTEMD.md](./ARCH_SYSTEMD.md)** - Systemd service setup and management
+- **[GUIDE_CRON.md](./GUIDE_CRON.md)** - Cron job configuration (alternative to systemd)
 
 ### **Network Configuration**
-- **Port Allocation**: See [Port Configuration](PORT_CONFIGURATION.md) for complete port mapping
+- **Port Allocation**: See [Port Configuration](ARCH_PORT_CONFIGURATION.md) for complete port mapping
 - **API Server**: REST API for variance data and collector management
 
 ### **Data Collection**
-- **[NINJA_API_DOCUMENTATION.md](./NINJA_API_DOCUMENTATION.md)** - NinjaRMM API integration details
-- **[THREATLOCKER_API_GUIDE.md](./THREATLOCKER_API_GUIDE.md)** - ThreatLocker API integration details
+- **[API_NINJA.md](./API_NINJA.md)** - NinjaRMM API integration details
+- **[API_THREATLOCKER.md](./API_THREATLOCKER.md)** - ThreatLocker API integration details
 
 ### **Migration & Updates**
-- **[CHECK_IN_PROCESS.md](./CHECK_IN_PROCESS.md)** - Data collection process details
+- **[STD_AI_CHECK_IN_PROCESS.md](./STD_AI_CHECK_IN_PROCESS.md)** - CHECK-IN process and versioning workflow
 
 ### **System Configuration**
-- **[AI_BOUNDARIES.md](./AI_BOUNDARIES.md)** - AI assistant boundaries and scope definitions
-- **[SYSTEM_BACKUPS.md](./SYSTEM_BACKUPS.md)** - System backup files and configuration management
+- **[STD_AI_BOUNDARIES.md](./STD_AI_BOUNDARIES.md)** - AI assistant boundaries and scope definitions
+- **[GUIDE_SYSTEM_BACKUPS.md](./GUIDE_SYSTEM_BACKUPS.md)** - System backup files and configuration management
 - **[SHARED_DOCUMENTATION.md](./SHARED_DOCUMENTATION.md)** - Guide to symbolic links and shared documentation
-- **[PORT_CONFIGURATION.md](./PORT_CONFIGURATION.md)** - Network port allocation and management
-- **[ENVIRONMENT_CONFIGURATION.md](./ENVIRONMENT_CONFIGURATION.md)** - Environment variable management and troubleshooting
+- **[ARCH_PORT_CONFIGURATION.md](./ARCH_PORT_CONFIGURATION.md)** - Network port allocation and management
+- **[GUIDE_ENVIRONMENT_CONFIGURATION.md](./GUIDE_ENVIRONMENT_CONFIGURATION.md)** - Environment variable management and troubleshooting
 
 ### **Recovery & Troubleshooting**
-- **[REBOOT_RECOVERY_GUIDE.md](./REBOOT_RECOVERY_GUIDE.md)** - Complete recovery procedures after server reboots
-- **[QUICK_START_RECOVERY.md](./QUICK_START_RECOVERY.md)** - Fast recovery procedures for quick fixes
-- **[SETUP_AND_TROUBLESHOOTING_GUIDE.md](./SETUP_AND_TROUBLESHOOTING_GUIDE.md)** - General troubleshooting and setup guide
+- **[TROUBLESHOOT_REBOOT_RECOVERY.md](./TROUBLESHOOT_REBOOT_RECOVERY.md)** - Complete recovery procedures after server reboots
+- **[TROUBLESHOOT_QUICK_START_RECOVERY.md](./TROUBLESHOOT_QUICK_START_RECOVERY.md)** - Fast recovery procedures for quick fixes
+- **[TROUBLESHOOT_SETUP.md](./TROUBLESHOOT_SETUP.md)** - General troubleshooting and setup guide
 
 ---
 
@@ -213,7 +213,7 @@ psql postgresql://username:password@hostname:port/database_name
 ### **Common Issues**
 1. **Collectors not running** - Check systemd service status
 2. **No variance data** - Verify both vendors have data for the same date
-3. **API connection issues** - Ensure API server is running (see [Port Configuration](PORT_CONFIGURATION.md))
+3. **API connection issues** - Ensure API server is running (see [Port Configuration](ARCH_PORT_CONFIGURATION.md))
 4. **Database connection** - Verify PostgreSQL is running and accessible
 
 ### **Log Locations**

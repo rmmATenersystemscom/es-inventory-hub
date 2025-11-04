@@ -459,10 +459,10 @@ sudo journalctl -u threatlocker-collector.service -f
 
 ## 📚 **RELATED DOCUMENTATION**
 
-- [API Integration Guide](./API_INTEGRATION_GUIDE.md) - Core API endpoints and usage
-- [Variances Dashboard Guide](./VARIANCES_DASHBOARD_GUIDE.md) - Dashboard functionality
-- [Windows 11 24H2 Guide](./WINDOWS_11_24H2_GUIDE.md) - Windows 11 compatibility assessment
-- [Database Schema Guide](./DATABASE_SCHEMA_GUIDE.md) - Database reference
+- [API Integration Guide](./API_INTEGRATION.md) - Core API endpoints and usage
+- [Variances Dashboard Guide](./GUIDE_VARIANCES_DASHBOARD.md) - Dashboard functionality
+- [Windows 11 24H2 Guide](./GUIDE_WINDOWS_11_24H2.md) - Windows 11 compatibility assessment
+- [Database Schema Guide](./GUIDE_DATABASE_SCHEMA.md) - Database reference
 
 ---
 

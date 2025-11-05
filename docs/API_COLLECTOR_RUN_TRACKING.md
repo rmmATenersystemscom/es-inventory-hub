@@ -372,7 +372,7 @@ The API server also provides documentation endpoints for easy access:
 
 - **GET** `/api/docs` - Documentation index
 - **GET** `/api/docs/DASHBOARD_AI_COLLECTOR_TRACKING_GUIDE.md` - Complete integration guide
-- **GET** `/api/docs/DASHBOARD_AI_PROMPT.md` - Quick start guide
+- **GET** `/api/docs/api-integration` - Complete API integration guide (API_INTEGRATION.md)
 - **GET** `/api/docs/API_COLLECTOR_RUN_TRACKING.md` - Full API reference
 
 These endpoints serve the documentation files directly from the API server, making them accessible over the network for Dashboard AI and other integrations.
@@ -384,3 +384,9 @@ This API extends the existing collector system:
 - **Enhanced History**: `/api/collectors/history` now includes job IDs and progress
 - **New Tracking**: Batch and job-level progress monitoring
 - **Real-time Updates**: Live progress reporting during collection
+
+---
+
+**Version**: v1.19.9  
+**Last Updated**: November 4, 2025 21:50 UTC  
+**Maintainer**: ES Inventory Hub Team

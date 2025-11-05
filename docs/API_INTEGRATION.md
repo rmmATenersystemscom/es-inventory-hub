@@ -2,8 +2,8 @@
 
 **Complete API reference for Dashboard AI to integrate with the Database AI's ES Inventory Hub system.**
 
-**Last Updated**: October 9, 2025  
-**ES Inventory Hub Version**: v1.19.5  
+**Last Updated**: November 4, 2025  
+**ES Inventory Hub Version**: v1.19.8  
 **Status**: ✅ **FULLY OPERATIONAL**
 
 > **📅 API Behavior Update (October 9, 2025)**: All status and exception endpoints now return **latest data only** (current date) instead of historical ranges. This ensures consistent reporting and prevents data accumulation issues.
@@ -65,10 +65,11 @@ When working with device data, **each vendor system requires its own hostname fo
 ### **System Status & Health**
 ```bash
 GET /api/health                    # Health check
-GET /api/status                    # Overall system status with device counts
+GET /api/status                    # Overall system status with device counts, vendor freshness, and collector health (ENHANCED - auto-cleans stale jobs)
 GET /api/collectors/status         # Collector service status
 GET /api/collectors/history        # Collection history (last 10 runs)
-GET /api/collectors/progress       # Real-time collection progress
+GET /api/collectors/progress       # Real-time collection progress (ENHANCED - auto-cleans stale jobs, includes process_running status)
+POST /api/collectors/cleanup-stale # Manually trigger cleanup of stale running jobs
 ```
 
 ### **Variance Reports & Analysis**
@@ -90,10 +91,12 @@ GET /api/variances/export/pdf      # Export variance data to PDF (ENHANCED with 
 GET /api/variances/export/excel    # Export variance data to Excel (ENHANCED with variance_type parameter)
 ```
 
-### **Collector Management**
+### **Collector Management (ENHANCED)**
 ```bash
-POST /api/collectors/run           # Trigger collector runs
-# Body: {"collector": "both|ninja|threatlocker", "run_cross_vendor": true}
+POST /api/collectors/run           # Trigger collector runs (ENHANCED: Runs collectors independently, continues even if one fails)
+# Body: {"collectors": ["ninja", "threatlocker"], "run_cross_vendor": true}
+# Note: Collectors now run independently - if one fails, others continue
+# Response includes detailed status for each collector
 ```
 
 ### **Exception Management**
@@ -139,24 +142,56 @@ POST /api/windows-11-24h2/run          # Manually trigger Windows 11 24H2 assess
 
 **Usage Example:**
 ```javascript
-// Trigger collectors
-async function runCollectors() {
-    const response = await fetch('https://db-api.enersystems.com:5400/api/collectors/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            collector: 'both',
-            run_cross_vendor: true
-        })
-    });
-    return await response.json();
+// 1. Trigger collectors
+const response = await fetch('https://db-api.enersystems.com:5400/api/collectors/run', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ 
+    collectors: ['ninja', 'threatlocker'],
+    run_cross_vendor: true 
+  })
+});
+const { batch_id } = await response.json();
+
+// 2. Poll for progress
+const pollStatus = async (batchId) => {
+  const response = await fetch(`https://db-api.enersystems.com:5400/api/collectors/runs/batch/${batchId}`);
+  const data = await response.json();
+  
+  // Update UI with real-time progress
+  updateProgressUI(data);
+  
+  // Stop polling when complete
+  if (['completed', 'failed', 'cancelled'].includes(data.status)) {
+    return;
+  }
+  
+  // Continue polling every 5-10 seconds
+  setTimeout(() => pollStatus(batchId), 5000);
+};
+
+// 3. Update UI with progress
+function updateProgressUI(data) {
+  // Update batch status
+  document.getElementById('batch-status').textContent = 
+    `${data.status} (${data.progress_percent}%)`;
+  
+  // Update individual jobs
+  data.collectors.forEach(job => {
+    const jobElement = document.getElementById(`job-${job.job_id}`);
+    if (jobElement) {
+      jobElement.querySelector('.progress').style.width = `${job.progress_percent}%`;
+      jobElement.querySelector('.message').textContent = job.message;
+    }
+  });
 }
 
-// Check status
-async function getCollectorStatus() {
-    const response = await fetch('https://db-api.enersystems.com:5400/api/collectors/status');
-    return await response.json();
-}
+// Implementation Tips:
+// - Poll every 5-10 seconds (not more frequent)
+// - Stop polling when status is 'completed', 'failed', or 'cancelled'
+// - Show progress bars using progress_percent field
+// - Display messages using message field for user feedback
+// - Handle errors gracefully - check for error field
 ```
 
 ### **✅ 2. HISTORICAL VIEW BUTTON (📅 Historical View)**
@@ -243,6 +278,13 @@ const VARIANCE_TYPES = {
 - ✅ **Real-time Status**: Current compatibility rates and assessment status
 - ✅ **Hardware Information**: Includes `cpu_model`, `last_contact`, `system_manufacturer`, and `system_model` fields for detailed device information
 
+**⚠️ CRITICAL: Manual Trigger Behavior**
+- The `POST /api/windows-11-24h2/run` endpoint runs **SYNCHRONOUSLY** and blocks until completion
+- Assessment typically takes **2-5 minutes** to process all Windows devices (600+ devices)
+- **You MUST set a long timeout** (minimum 300 seconds / 5 minutes) when calling this endpoint
+- The endpoint will return a JSON response with `status`, `message`, `output`, and `timestamp` fields
+- If the request times out, the assessment may still be running on the server - check status endpoint to verify
+
 ### **Date Field Distinctions:**
 - **`last_contact`**: When the device was last online/active (from Ninja RMM)
 - **`last_update`**: When we last updated this device record in our database  
@@ -263,12 +305,34 @@ async function getIncompatibleDevices() {
 }
 
 // Manually trigger Windows 11 24H2 assessment
+// ⚠️ IMPORTANT: This endpoint runs SYNCHRONOUSLY and can take 2-5 minutes to complete
+// The assessment processes all Windows devices (typically 600+ devices)
+// You MUST set a long timeout (at least 300 seconds / 5 minutes)
 async function runWindows11Assessment() {
-    const response = await fetch('https://db-api.enersystems.com:5400/api/windows-11-24h2/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-    });
-    return await response.json();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minute timeout
+    
+    try {
+        const response = await fetch('https://db-api.enersystems.com:5400/api/windows-11-24h2/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || `Assessment failed: ${response.status}`);
+        }
+        
+        return await response.json();
+    } catch (error) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+            throw new Error('Assessment request timed out after 5 minutes. The assessment may still be running on the server.');
+        }
+        throw error;
+    }
 }
 ```
 
@@ -276,7 +340,7 @@ async function runWindows11Assessment() {
 
 ## 📋 **RESPONSE EXAMPLES**
 
-### **System Status Response**
+### **System Status Response (ENHANCED)**
 ```json
 {
   "data_status": {
@@ -288,6 +352,39 @@ async function runWindows11Assessment() {
     "Ninja": 750,
     "ThreatLocker": 400
   },
+  "vendor_status": {
+    "Ninja": {
+      "latest_date": "2025-11-04",
+      "freshness_status": "current",
+      "freshness_message": "Data is current",
+      "days_old": 0
+    },
+    "ThreatLocker": {
+      "latest_date": "2025-11-04",
+      "freshness_status": "current",
+      "freshness_message": "Data is current",
+      "days_old": 0
+    }
+  },
+  "collector_health": {
+    "has_recent_failures": true,
+    "recent_failures": [
+      {
+        "collector": "Ninja",
+        "job_name": "ninja-collector",
+        "status": "failed",
+        "message": "400 Client Error: Bad Request for url: https://app.ninjarmm.com/oauth/token",
+        "error": null,
+        "started_at": "2025-11-05T02:09:03.781381+00:00Z",
+        "ended_at": "2025-11-05T02:09:04.681104+00:00Z"
+      }
+    ],
+    "total_failures_last_24h": 4
+  },
+  "warnings": [
+    "Recent collector failures: Ninja"
+  ],
+  "has_warnings": true,
   "exception_counts": {
     "SPARE_MISMATCH": 73,
     "MISSING_NINJA": 26,
@@ -296,6 +393,25 @@ async function runWindows11Assessment() {
   "total_exceptions": 100
 }
 ```
+
+**New Fields in `/api/status` Response:**
+- **`vendor_status`**: Per-vendor data freshness information
+  - `latest_date`: Most recent snapshot date for this vendor
+  - `freshness_status`: `current`, `yesterday`, `stale`, `very_stale`, or `no_data`
+  - `freshness_message`: Human-readable status message
+  - `days_old`: Number of days since last collection
+- **`collector_health`**: Collector failure tracking
+  - `has_recent_failures`: Boolean flag for easy checking
+  - `recent_failures`: Array of failed collector runs in last 24 hours
+  - `total_failures_last_24h`: Count of failures
+- **`warnings`**: Array of warning messages when data is stale or collectors failed
+- **`has_warnings`**: Boolean flag indicating if any warnings exist
+
+**Use Cases:**
+- Display warning badges when `has_warnings: true`
+- Show per-vendor freshness indicators using `vendor_status`
+- Alert users when collectors have failed using `collector_health.has_recent_failures`
+- Display specific error messages from `collector_health.recent_failures`
 
 ### **Variance Report Response**
 ```json
@@ -387,8 +503,8 @@ curl https://db-api.enersystems.com:5400/api/windows-11-24h2/status
 # Incompatible devices
 curl https://db-api.enersystems.com:5400/api/windows-11-24h2/incompatible
 
-# Manual trigger
-curl -X POST https://db-api.enersystems.com:5400/api/windows-11-24h2/run
+# Manual trigger (⚠️ WARNING: This can take 2-5 minutes - use --max-time flag)
+curl --max-time 300 -X POST https://db-api.enersystems.com:5400/api/windows-11-24h2/run
 ```
 
 ### **Collector Management**
@@ -417,6 +533,22 @@ curl https://db-api.enersystems.com:5400/api/collectors/status
 - **Stale Data** (`status: "stale_data"`) - Data is >1 day old, show warning
 - **Out of Sync** (`status: "out_of_sync"`) - No matching data between vendors
 
+### **Enhanced Status Endpoint Features (v1.19.8)**
+The `/api/status` endpoint now provides comprehensive collector health and data freshness information:
+- **Per-vendor freshness tracking**: Know exactly which vendor's data is stale
+- **Collector failure notification**: Automatic alerts when collectors fail in last 24 hours
+- **Warning system**: Consolidated warnings array for easy UI integration
+- **Proactive sync status**: Dashboard can check `has_warnings` to display alerts without polling multiple endpoints
+- **Automatic stale job cleanup**: Automatically detects and cleans up jobs that appear "running" but have no active process
+
+### **Stale Job Detection and Cleanup (v1.19.8)**
+The API now automatically detects and cleans up stale running jobs:
+- **Automatic cleanup**: `/api/status` and `/api/collectors/progress` automatically clean stale jobs
+- **Manual cleanup**: `POST /api/collectors/cleanup-stale` endpoint for on-demand cleanup
+- **Detection logic**: Jobs marked "running" for >10 minutes with no active process are marked as "failed"
+- **Process verification**: Uses `pgrep` to verify Python collector processes are actually running
+- **No action required**: Dashboard continues using existing endpoints - cleanup happens automatically
+
 ### **Error Handling**
 - All endpoints return JSON responses
 - Check HTTP status codes (200 = success, 4xx = client error, 5xx = server error)
@@ -434,3 +566,9 @@ curl https://db-api.enersystems.com:5400/api/collectors/status
 ---
 
 **🎉 The ES Inventory Hub API is fully operational and ready for Dashboard AI integration!**
+
+---
+
+**Version**: v1.19.9  
+**Last Updated**: November 4, 2025 21:50 UTC  
+**Maintainer**: ES Inventory Hub Team

@@ -294,22 +294,132 @@ def health_check():
 
 @app.route('/api/status', methods=['GET'])
 def get_status():
-    """Get overall system status."""
+    """Get overall system status with collector health and data freshness information."""
     data_status = get_data_status()
     
     with get_session() as session:
-        # Get device counts
+        # Auto-cleanup stale jobs when status is checked
+        cleanup_stale_jobs(session)
+        
+        # Get device counts and latest snapshot dates per vendor
+        # Only count devices from each vendor's latest snapshot date
         device_query = text("""
-            SELECT v.name as vendor, COUNT(*) as count
-            FROM device_snapshot ds
-            JOIN vendor v ON ds.vendor_id = v.id
-            WHERE ds.snapshot_date = (
-                SELECT MAX(snapshot_date) FROM device_snapshot
-            )
+            SELECT 
+                v.name as vendor,
+                COUNT(ds.id) as count,
+                MAX(ds.snapshot_date) as latest_date
+            FROM vendor v
+            LEFT JOIN device_snapshot ds ON v.id = ds.vendor_id
+                AND ds.snapshot_date = (
+                    SELECT MAX(snapshot_date)
+                    FROM device_snapshot ds2
+                    WHERE ds2.vendor_id = v.id
+                )
+            WHERE v.name IN ('Ninja', 'ThreatLocker')
             GROUP BY v.name
+            ORDER BY v.name
         """)
         
-        device_counts = {row[0]: row[1] for row in session.execute(device_query).fetchall()}
+        device_results = session.execute(device_query).fetchall()
+        device_counts = {}
+        vendor_status = {}
+        
+        for row in device_results:
+            vendor_name = row[0]
+            count = int(row[1]) if row[1] else 0
+            latest_date = row[2]
+            
+            device_counts[vendor_name] = count
+            
+            # Determine vendor data freshness
+            if latest_date:
+                days_old = (date.today() - latest_date).days
+                if days_old == 0:
+                    freshness_status = "current"
+                    freshness_message = "Data is current"
+                elif days_old == 1:
+                    freshness_status = "yesterday"
+                    freshness_message = "Data is from yesterday"
+                elif days_old <= 3:
+                    freshness_status = "stale"
+                    freshness_message = f"Data is {days_old} days old"
+                else:
+                    freshness_status = "very_stale"
+                    freshness_message = f"Data is {days_old} days old"
+            else:
+                latest_date = None
+                freshness_status = "no_data"
+                freshness_message = "No data available"
+            
+            vendor_status[vendor_name] = {
+                "latest_date": latest_date.isoformat() if latest_date else None,
+                "freshness_status": freshness_status,
+                "freshness_message": freshness_message,
+                "days_old": days_old if latest_date else None
+            }
+        
+        # Ensure both vendors are always present (default to 0 if missing)
+        if 'Ninja' not in device_counts:
+            device_counts['Ninja'] = 0
+            vendor_status['Ninja'] = {
+                "latest_date": None,
+                "freshness_status": "no_data",
+                "freshness_message": "No data available",
+                "days_old": None
+            }
+        if 'ThreatLocker' not in device_counts:
+            device_counts['ThreatLocker'] = 0
+            vendor_status['ThreatLocker'] = {
+                "latest_date": None,
+                "freshness_status": "no_data",
+                "freshness_message": "No data available",
+                "days_old": None
+            }
+        
+        # Get recent collector failures (last 24 hours)
+        collector_health_query = text("""
+            SELECT 
+                job_name,
+                status,
+                message,
+                error,
+                started_at,
+                ended_at
+            FROM job_runs
+            WHERE job_name IN ('ninja-collector', 'threatlocker-collector')
+            AND started_at >= NOW() - INTERVAL '24 hours'
+            AND status = 'failed'
+            ORDER BY started_at DESC
+            LIMIT 5
+        """)
+        
+        recent_failures = []
+        for row in session.execute(collector_health_query).fetchall():
+            job_name, status, message, error, started_at, ended_at = row
+            collector_name = job_name.replace('-collector', '').title()
+            recent_failures.append({
+                "collector": collector_name,
+                "job_name": job_name,
+                "status": status,
+                "message": message,
+                "error": error,
+                "started_at": started_at.isoformat() + 'Z' if started_at else None,
+                "ended_at": ended_at.isoformat() + 'Z' if ended_at else None
+            })
+        
+        # Check if any vendor has stale data or failed collectors
+        has_warnings = False
+        warnings = []
+        
+        for vendor_name, status_info in vendor_status.items():
+            if status_info['freshness_status'] in ['stale', 'very_stale', 'no_data']:
+                has_warnings = True
+                warnings.append(f"{vendor_name} data is {status_info['freshness_message'].lower()}")
+        
+        if recent_failures:
+            has_warnings = True
+            failed_collectors = [f['collector'] for f in recent_failures]
+            warnings.append(f"Recent collector failures: {', '.join(set(failed_collectors))}")
         
         # Get exception counts
         exception_query = text("""
@@ -325,6 +435,14 @@ def get_status():
     return jsonify({
         "data_status": data_status,
         "device_counts": device_counts,
+        "vendor_status": vendor_status,
+        "collector_health": {
+            "recent_failures": recent_failures,
+            "has_recent_failures": len(recent_failures) > 0,
+            "total_failures_last_24h": len(recent_failures)
+        },
+        "warnings": warnings if has_warnings else [],
+        "has_warnings": has_warnings,
         "exception_counts": exception_counts,
         "total_exceptions": sum(exception_counts.values())
     })
@@ -633,23 +751,39 @@ def run_collectors():
             
             session.commit()
             
-            # Execute collectors SEQUENTIALLY with proper error handling
-            batch_failed = False
+            # Execute collectors INDEPENDENTLY - don't cancel one if another fails
+            # Load environment variables from primary source for subprocess
+            import subprocess as sp_module
+            env = os.environ.copy()
+            
+            # Try to load from primary dashboard .env file (preferred)
+            primary_env_file = '/opt/dashboard-project/es-dashboards/.env'
+            local_env_file = '/opt/es-inventory-hub/.env'
+            
+            # Load environment variables into dict
+            env_vars = {}
+            for env_file in [primary_env_file, local_env_file]:
+                if os.path.exists(env_file):
+                    try:
+                        with open(env_file, 'r') as f:
+                            for line in f:
+                                line = line.strip()
+                                if line and not line.startswith('#') and '=' in line:
+                                    key, value = line.split('=', 1)
+                                    env_vars[key.strip()] = value.strip()
+                    except Exception as e:
+                        pass  # Continue if file can't be read
+            
+            # Merge loaded env vars into subprocess environment
+            env.update(env_vars)
+            
             failed_jobs = []
+            successful_jobs = []
             
             # Only execute actual collectors (ninja, threatlocker)
             actual_collectors = [c for c in collectors if c in ['ninja', 'threatlocker']]
             
             for collector in actual_collectors:
-                if batch_failed:
-                    # Mark remaining jobs as cancelled
-                    for job in job_runs:
-                        if job['job_name'] == f'{collector}-collector':
-                            from api.progress_tracker import update_job_progress
-                            update_job_progress(job['job_id'], 'cancelled', 0, 'Batch failed - previous job failed')
-                            break
-                    continue
-                
                 try:
                     # Find the job for this collector
                     current_job = None
@@ -665,41 +799,42 @@ def run_collectors():
                     from api.progress_tracker import update_job_progress
                     update_job_progress(current_job['job_id'], 'running', 10, f'{collector.title()} collector started')
                     
-                    # Execute collector
+                    # Execute collector with environment variables
                     if collector == 'ninja':
                         result = subprocess.run([
                             '/opt/es-inventory-hub/.venv/bin/python', '-m', 'collectors.ninja.main'
-                        ], cwd='/opt/es-inventory-hub', capture_output=True, text=True, timeout=600)
+                        ], cwd='/opt/es-inventory-hub', capture_output=True, text=True, timeout=600, env=env)
                     elif collector == 'threatlocker':
                         result = subprocess.run([
                             '/opt/es-inventory-hub/.venv/bin/python', '-m', 'collectors.threatlocker.main'
-                        ], cwd='/opt/es-inventory-hub', capture_output=True, text=True, timeout=600)
+                        ], cwd='/opt/es-inventory-hub', capture_output=True, text=True, timeout=600, env=env)
                     else:
                         raise ValueError(f"Unknown collector: {collector}")
                     
                     # Check result and update status
                     if result.returncode == 0:
                         update_job_progress(current_job['job_id'], 'completed', 100, f'{collector.title()} collector completed successfully')
+                        successful_jobs.append(f'{collector}-collector')
                     else:
                         error_msg = f'{collector.title()} collector failed: {result.stderr}'
                         update_job_progress(current_job['job_id'], 'failed', 0, error_msg)
-                        batch_failed = True
                         failed_jobs.append(f'{collector}-collector')
                         
                 except subprocess.TimeoutExpired:
                     error_msg = f'{collector.title()} collector timed out after 10 minutes'
                     update_job_progress(current_job['job_id'], 'failed', 0, error_msg)
-                    batch_failed = True
                     failed_jobs.append(f'{collector}-collector')
                     
                 except Exception as e:
                     error_msg = f'Error running {collector} collector: {str(e)}'
                     update_job_progress(current_job['job_id'], 'failed', 0, error_msg)
-                    batch_failed = True
                     failed_jobs.append(f'{collector}-collector')
             
-            # Execute cross-vendor checks ONLY if collectors succeeded
-            if run_cross_vendor and not batch_failed:
+            # Determine if batch failed (all collectors failed)
+            batch_failed = len(successful_jobs) == 0 and len(failed_jobs) > 0
+            
+            # Execute cross-vendor checks if at least one collector succeeded
+            if run_cross_vendor and len(successful_jobs) > 0:
                 try:
                     # Find the cross-vendor job
                     cross_vendor_job = None
@@ -750,16 +885,16 @@ except Exception as e:
                             batch_failed = True
                             failed_jobs.append('cross-vendor-checks')
                             break
-            elif run_cross_vendor and batch_failed:
-                # Mark cross-vendor as cancelled
+            elif run_cross_vendor and len(successful_jobs) == 0:
+                # Mark cross-vendor as cancelled (no collectors succeeded)
                 for job in job_runs:
                     if job['job_name'] == 'cross-vendor-checks':
                         from api.progress_tracker import update_job_progress
-                        update_job_progress(job['job_id'], 'cancelled', 0, 'Cancelled - collectors failed')
+                        update_job_progress(job['job_id'], 'cancelled', 0, 'Cancelled - no collectors succeeded')
                         break
             
-            # Execute Windows 11 24H2 assessment ONLY if previous jobs succeeded
-            if not batch_failed:
+            # Execute Windows 11 24H2 assessment if at least one collector succeeded
+            if len(successful_jobs) > 0:
                 try:
                     # Find the Windows 11 24H2 assessment job
                     windows_24h2_job = None
@@ -795,16 +930,22 @@ except Exception as e:
                             failed_jobs.append('windows-11-24h2-assessment')
                             break
             else:
-                # Mark Windows 11 24H2 assessment as cancelled
+                # Mark Windows 11 24H2 assessment as cancelled (no collectors succeeded)
                 for job in job_runs:
                     if job['job_name'] == 'windows-11-24h2-assessment':
                         from api.progress_tracker import update_job_progress
-                        update_job_progress(job['job_id'], 'cancelled', 0, 'Cancelled - previous jobs failed')
+                        update_job_progress(job['job_id'], 'cancelled', 0, 'Cancelled - no collectors succeeded')
                         break
             
             # Update batch status based on results
-            batch_status = 'completed' if not batch_failed else 'failed'
-            batch_message = 'All jobs completed successfully' if not batch_failed else f'Batch failed - {len(failed_jobs)} job(s) failed: {", ".join(failed_jobs)}'
+            # Batch is successful if at least one collector succeeded
+            batch_status = 'completed' if len(successful_jobs) > 0 else 'failed'
+            if len(successful_jobs) > 0 and len(failed_jobs) > 0:
+                batch_message = f'Partial success: {len(successful_jobs)} collector(s) succeeded, {len(failed_jobs)} failed: {", ".join(failed_jobs)}'
+            elif len(successful_jobs) > 0:
+                batch_message = 'All collectors completed successfully'
+            else:
+                batch_message = f'All collectors failed: {", ".join(failed_jobs)}'
             
             # Update batch status in database
             batch_update_query = text("""
@@ -963,24 +1104,97 @@ def get_collection_history():
             'generated_at': datetime.now().isoformat()
         })
 
+def cleanup_stale_jobs(session):
+    """
+    Detect and clean up stale running jobs that have no active process.
+    Returns list of cleaned up job IDs.
+    """
+    cleaned_jobs = []
+    
+    # Find jobs that have been "running" for more than 10 minutes
+    stale_query = text("""
+        SELECT 
+            job_id,
+            job_name,
+            started_at,
+            EXTRACT(EPOCH FROM (NOW() - started_at))::int as seconds_running
+        FROM job_runs
+        WHERE status IN ('running', 'queued')
+        AND started_at < NOW() - INTERVAL '10 minutes'
+        AND job_name IN ('ninja-collector', 'threatlocker-collector')
+    """)
+    
+    stale_jobs = session.execute(stale_query).fetchall()
+    
+    for job_id, job_name, started_at, seconds_running in stale_jobs:
+        # Check if process is actually running
+        process_running = False
+        
+        # Check for Python collector process
+        try:
+            if job_name == 'ninja-collector':
+                proc_check = subprocess.run([
+                    'pgrep', '-f', 'collectors.ninja.main'
+                ], capture_output=True, text=True)
+            elif job_name == 'threatlocker-collector':
+                proc_check = subprocess.run([
+                    'pgrep', '-f', 'collectors.threatlocker.main'
+                ], capture_output=True, text=True)
+            else:
+                proc_check = None
+            
+            if proc_check and proc_check.returncode == 0:
+                process_running = True
+        except:
+            pass
+        
+        # If no process is running, mark job as failed
+        if not process_running:
+            update_query = text("""
+                UPDATE job_runs
+                SET status = 'failed',
+                    message = 'Job appears to have failed or was interrupted - no process found running',
+                    ended_at = NOW(),
+                    updated_at = NOW()
+                WHERE job_id = :job_id
+            """)
+            session.execute(update_query, {'job_id': job_id})
+            cleaned_jobs.append({
+                'job_id': job_id,
+                'job_name': job_name,
+                'started_at': started_at.isoformat() if started_at else None,
+                'seconds_running': seconds_running,
+                'reason': 'No active process found'
+            })
+    
+    if cleaned_jobs:
+        session.commit()
+    
+    return cleaned_jobs
+
 @app.route('/api/collectors/progress', methods=['GET'])
 def get_collection_progress():
     """
     Get real-time collection progress if collectors are currently running.
+    Automatically cleans up stale running jobs.
     
     Returns progress information for active collection jobs.
     """
     with get_session() as session:
+        # Clean up stale jobs first
+        cleaned_jobs = cleanup_stale_jobs(session)
+        
         # Check for active collections
         query = text("""
             SELECT 
+                job_id,
                 job_name,
                 started_at,
                 status,
                 message
             FROM job_runs
             WHERE job_name IN ('ninja-collector', 'threatlocker-collector')
-            AND status IN ('running', 'started')
+            AND status IN ('running', 'queued')
             AND started_at >= CURRENT_DATE
             ORDER BY started_at DESC
         """)
@@ -990,7 +1204,26 @@ def get_collection_progress():
         # Check systemd service status for additional info
         active_collections = []
         for row in results:
-            job_name, started_at, status, message = row
+            job_id, job_name, started_at, status, message = row
+            
+            # Check if process is actually running
+            process_running = False
+            try:
+                if job_name == 'ninja-collector':
+                    proc_check = subprocess.run([
+                        'pgrep', '-f', 'collectors.ninja.main'
+                    ], capture_output=True, text=True)
+                elif job_name == 'threatlocker-collector':
+                    proc_check = subprocess.run([
+                        'pgrep', '-f', 'collectors.threatlocker.main'
+                    ], capture_output=True, text=True)
+                else:
+                    proc_check = None
+                
+                if proc_check and proc_check.returncode == 0:
+                    process_running = True
+            except:
+                pass
             
             # Get systemd status
             service_name = f"{job_name}.service"
@@ -1013,11 +1246,13 @@ def get_collection_progress():
                 elapsed_seconds = int(elapsed.total_seconds())
             
             active_collections.append({
+                'job_id': job_id,
                 'job_name': job_name,
                 'started_at': started_at.isoformat() if started_at else None,
                 'status': status,
                 'message': message,
                 'is_active': is_active,
+                'process_running': process_running,
                 'elapsed_seconds': elapsed_seconds,
                 'elapsed_time': f"{elapsed_seconds // 60}m {elapsed_seconds % 60}s" if elapsed_seconds else None
             })
@@ -1025,8 +1260,36 @@ def get_collection_progress():
         return jsonify({
             'active_collections': active_collections,
             'total_active': len(active_collections),
+            'cleaned_stale_jobs': cleaned_jobs,
             'generated_at': datetime.now().isoformat()
         })
+
+@app.route('/api/collectors/cleanup-stale', methods=['POST'])
+def cleanup_stale_jobs_endpoint():
+    """
+    Manually trigger cleanup of stale running jobs.
+    
+    This endpoint allows the dashboard to proactively clean up jobs that appear
+    to be running but have no active process. Useful when dashboard detects
+    jobs that have been "running" for an unusually long time.
+    
+    Returns list of cleaned up jobs.
+    """
+    try:
+        with get_session() as session:
+            cleaned_jobs = cleanup_stale_jobs(session)
+            
+            return jsonify({
+                'success': True,
+                'cleaned_jobs': cleaned_jobs,
+                'total_cleaned': len(cleaned_jobs),
+                'message': f'Cleaned up {len(cleaned_jobs)} stale job(s)' if cleaned_jobs else 'No stale jobs found'
+            })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 @app.route('/api/collectors/runs/batch/<batch_id>', methods=['GET', 'OPTIONS'])
 def get_batch_status(batch_id):
@@ -1232,11 +1495,11 @@ def get_dashboard_ai_guide():
     except Exception as e:
         return f"Error reading documentation: {str(e)}", 500
 
-@app.route('/api/docs/dashboard-ai-prompt', methods=['GET'])
-def get_dashboard_ai_prompt():
-    """Serve Dashboard AI quick prompt."""
+@app.route('/api/docs/api-integration', methods=['GET'])
+def get_api_integration():
+    """Serve Dashboard AI integration documentation (API_INTEGRATION.md)."""
     try:
-        with open('/opt/es-inventory-hub/docs/DASHBOARD_AI_PROMPT.md', 'r') as f:
+        with open('/opt/es-inventory-hub/docs/API_INTEGRATION.md', 'r') as f:
             content = f.read()
         return content, 200, {'Content-Type': 'text/markdown; charset=utf-8'}
     except FileNotFoundError:
@@ -1261,7 +1524,7 @@ def get_docs_index():
     """Serve documentation index."""
     docs = {
         "dashboard_ai_guide": "/api/docs/dashboard-ai-guide",
-        "dashboard_ai_prompt": "/api/docs/dashboard-ai-prompt", 
+        "api_integration": "/api/docs/api-integration",
         "collector_tracking_api": "/api/docs/collector-tracking-api"
     }
     return jsonify({
@@ -3392,6 +3655,8 @@ def get_windows_11_24h2_status():
     try:
         with get_session() as session:
             # Query database for Windows 11 24H2 assessment results with enhanced status breakdown
+            # CRITICAL: Do NOT filter by windows_11_24h2_capable IS NOT NULL - we need to count ALL Windows devices
+            # including those not yet assessed (which will have NULL values)
             query = text("""
             SELECT 
                 COUNT(*) as total_windows_devices,
@@ -3407,6 +3672,7 @@ def get_windows_11_24h2_status():
                           THEN 1 END) as compatible_for_upgrade_devices
             FROM device_snapshot ds
             JOIN vendor v ON ds.vendor_id = v.id
+            JOIN device_type dt ON ds.device_type_id = dt.id
             WHERE v.name = 'Ninja' 
             AND ds.snapshot_date = (
                 SELECT MAX(snapshot_date)
@@ -3416,8 +3682,7 @@ def get_windows_11_24h2_status():
             )
             AND ds.os_name ILIKE '%windows%'
             AND ds.os_name NOT ILIKE '%server%'
-            AND (ds.device_type_id IN (SELECT id FROM device_type WHERE code IN ('workstation')))
-            AND ds.windows_11_24h2_capable IS NOT NULL
+            AND dt.code IN ('Desktop', 'Laptop', 'workstation')
             """)
             
             result = session.execute(query).fetchone()
@@ -3487,7 +3752,7 @@ def get_incompatible_devices():
             AND ds.os_name NOT ILIKE '%server%'
             AND ds.windows_11_24h2_capable IS NOT NULL
             AND ds.windows_11_24h2_capable = false
-            AND (ds.device_type_id IN (SELECT id FROM device_type WHERE code IN ('workstation')))
+            AND ds.device_type_id IN (SELECT id FROM device_type WHERE code IN ('Desktop', 'Laptop', 'workstation'))
             ORDER BY ds.organization_name, ds.hostname
             """)
             
@@ -3581,7 +3846,7 @@ def get_compatible_devices():
             AND ds.windows_11_24h2_capable = true
             AND (ds.windows_11_24h2_deficiencies::jsonb->>'passed_requirements' NOT LIKE '%Windows 11 24H2 Already Installed%' 
                  OR ds.windows_11_24h2_deficiencies::jsonb->>'passed_requirements' IS NULL)
-            AND (ds.device_type_id IN (SELECT id FROM device_type WHERE code IN ('workstation')))
+            AND ds.device_type_id IN (SELECT id FROM device_type WHERE code IN ('Desktop', 'Laptop', 'workstation'))
             ORDER BY ds.organization_name, ds.hostname
             """)
             

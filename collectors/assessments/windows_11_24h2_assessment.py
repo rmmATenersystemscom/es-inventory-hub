@@ -631,18 +631,23 @@ def get_windows_devices(session) -> List[Dict[str, Any]]:
             }
             devices.append(device_data)
         
-        # Log which snapshot date we're using
-        if devices:
-            # Get the snapshot date from the first device (they're all from the same date)
-            snapshot_query = text("""
-            SELECT MAX(snapshot_date) as latest_snapshot
-            FROM device_snapshot ds
-            JOIN vendor v ON ds.vendor_id = v.id
-            WHERE v.name IN ('Ninja', 'ThreatLocker')
-            """)
-            snapshot_result = session.execute(snapshot_query).fetchone()
-            latest_snapshot = snapshot_result.latest_snapshot if snapshot_result else 'Unknown'
+        # Get the snapshot date we're using (all devices are from the same date)
+        snapshot_query = text("""
+        SELECT MAX(snapshot_date) as latest_snapshot
+        FROM device_snapshot ds
+        JOIN vendor v ON ds.vendor_id = v.id
+        WHERE v.name = 'Ninja'
+        """)
+        snapshot_result = session.execute(snapshot_query).fetchone()
+        latest_snapshot = snapshot_result.latest_snapshot if snapshot_result else None
+        
+        if latest_snapshot:
             logger.info(f"Using snapshot data from: {latest_snapshot}")
+            # Add snapshot_date to each device for updating
+            for device in devices:
+                device['snapshot_date'] = latest_snapshot
+        else:
+            logger.warning("Could not determine snapshot date")
         
         return devices
         
@@ -651,8 +656,8 @@ def get_windows_devices(session) -> List[Dict[str, Any]]:
         return []
 
 
-def update_device_assessment(session, device_id: int, assessment_result: Dict[str, Any]) -> bool:
-    """Update device with assessment result"""
+def update_device_assessment(session, device_id: int, assessment_result: Dict[str, Any], snapshot_date) -> bool:
+    """Update device with assessment result - updates the specific snapshot record"""
     try:
         # Convert verdict to boolean - Updated logic for "Already Compatible" devices
         capable = None
@@ -666,18 +671,26 @@ def update_device_assessment(session, device_id: int, assessment_result: Dict[st
             capable = False
         # None for N/A (Windows Server), insufficient data, or errors
         
+        # CRITICAL: Update the specific snapshot record by both id AND snapshot_date
+        # This ensures we update the correct snapshot even if new collector data arrives
         update_query = text("""
         UPDATE device_snapshot 
         SET windows_11_24h2_capable = :capable,
             windows_11_24h2_deficiencies = :deficiencies
         WHERE id = :device_id
+        AND snapshot_date = :snapshot_date
         """)
         
-        session.execute(update_query, {
+        result = session.execute(update_query, {
             'capable': capable,
             'deficiencies': json.dumps(assessment_result),
-            'device_id': device_id
+            'device_id': device_id,
+            'snapshot_date': snapshot_date
         })
+        
+        if result.rowcount == 0:
+            logger.warning(f"No rows updated for device {device_id} on snapshot_date {snapshot_date}")
+            return False
         
         session.commit()
         return True
@@ -719,8 +732,9 @@ def main():
                     # Perform assessment
                     assessment_result = assess_windows_11_24h2_capability(device)
                     
-                    # Update database
-                    if update_device_assessment(session, device['id'], assessment_result):
+                    # Update database - pass snapshot_date to ensure we update the correct snapshot
+                    snapshot_date = device.get('snapshot_date')
+                    if snapshot_date and update_device_assessment(session, device['id'], assessment_result, snapshot_date):
                         assessed_count += 1
                         
                         if assessment_result['verdict'] == 'Yes':

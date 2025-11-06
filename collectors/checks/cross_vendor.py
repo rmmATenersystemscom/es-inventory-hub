@@ -104,10 +104,22 @@ def extract_clean_hostname(stored_hostname: str, canonical_key: str) -> str:
         canonical_key: Clean canonical key from SQL normalization (already cleaned)
         
     Returns:
-        str: Clean hostname for display
+        str: Clean hostname preserving original case (for API compatibility)
     """
-    # The canonical_key is already clean (extracted from SQL with pipe symbol handling)
-    # Use it as the clean hostname for display
+    if not stored_hostname:
+        return canonical_key
+    
+    # Extract clean hostname from stored value, preserving case
+    # Handle pipe symbols (data quality issue where computerName was stored instead of hostname)
+    clean_hostname = stored_hostname.split('|')[0].strip()
+    # Remove domain suffix if present
+    clean_hostname = clean_hostname.split('.')[0].strip()
+    
+    # If we got a valid hostname, return it (preserving case for API compatibility)
+    # Otherwise fall back to canonical_key
+    if clean_hostname and len(clean_hostname) > 0:
+        return clean_hostname
+    
     return canonical_key
 
 
@@ -647,9 +659,13 @@ def check_display_name_mismatch(session: Session, vendor_ids: Dict[str, int], sn
     for row in results:
         clean_hostname, tl_hostname, ninja_hostname, tl_display_name, ninja_display_name, tl_org_name, ninja_org_name = row
         
+        # Extract clean hostname for ThreatLocker (handles data quality issues like pipe symbols)
+        # Use extract_clean_hostname to ensure we get the format that ThreatLocker API expects
+        tl_clean_hostname = extract_clean_hostname(tl_hostname, clean_hostname)
+        
         # Create exception details
         details = {
-            'tl_hostname': tl_hostname,
+            'tl_hostname': tl_clean_hostname,  # Use clean hostname for ThreatLocker API compatibility
             'ninja_hostname': ninja_hostname,
             'tl_display_name': tl_display_name,
             'ninja_display_name': ninja_display_name,

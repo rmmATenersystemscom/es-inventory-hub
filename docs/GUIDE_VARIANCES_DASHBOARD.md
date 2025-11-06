@@ -2,8 +2,8 @@
 
 **Complete guide for Variances Dashboard functionality, enhanced API capabilities, and modal functionality.**
 
-**Last Updated**: October 9, 2025  
-**ES Inventory Hub Version**: v1.19.5  
+**Last Updated**: November 5, 2025  
+**ES Inventory Hub Version**: v1.19.10  
 **Status**: ✅ **FULLY OPERATIONAL**
 
 ---
@@ -29,13 +29,20 @@ When updating device information, **each vendor system requires its own hostname
 {
   "hostname": "nochi-002062482",                    // Base identifier
   "ninja_hostname": "NOCHI-002062482",             // Use for NinjaRMM API
-  "threatlocker_hostname": "NOCHI-002062482753",   // Use for ThreatLocker Portal API
+  "threatlocker_hostname": "NOCHI-002062482753",   // Use for ThreatLocker Portal API (automatically cleaned, ready for API calls)
   "ninja_display_name": "NOCHI-002062482753 | SPARE - was Maintenance (at ES)",
   "threatlocker_display_name": "NOCHI-002062482753 | Maintenance"
 }
 ```
 
 **⚠️ Common Issue**: Dashboard must use `threatlocker_hostname` when calling ThreatLocker Portal API for device updates.
+
+**📋 Hostname Format Guarantee (v1.19.9+):**
+- The `threatlocker_hostname` field is **automatically cleaned** before being returned in API responses
+- Clean hostnames are guaranteed to work with ThreatLocker API's `find_computer_by_hostname()` function
+- Cleaning removes pipe symbols (`|`) and domain suffixes (`.local`, `.domain`, etc.) that may be present in stored data
+- Original case is preserved (ThreatLocker API does case-insensitive search)
+- **No manual cleaning required** - use the hostname directly from the API response
 
 ---
 
@@ -457,3 +464,9 @@ The `/api/devices/search` endpoint handles this automatically:
 ---
 
 **🎉 The Variances Dashboard functionality is fully operational and ready for Dashboard AI integration!**
+
+---
+
+**Version**: v1.19.10  
+**Last Updated**: November 5, 2025 02:00 UTC  
+**Maintainer**: ES Inventory Hub Team

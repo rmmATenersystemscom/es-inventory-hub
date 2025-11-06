@@ -31,13 +31,20 @@ When working with device data, **each vendor system requires its own hostname fo
 {
   "hostname": "nochi-002062482",                    // Base identifier
   "ninja_hostname": "NOCHI-002062482",             // Use for NinjaRMM API
-  "threatlocker_hostname": "NOCHI-002062482753",   // Use for ThreatLocker Portal API
+  "threatlocker_hostname": "NOCHI-002062482753",   // Use for ThreatLocker Portal API (cleaned, ready for API calls)
   "ninja_display_name": "NOCHI-002062482753 | SPARE - was Maintenance (at ES)",
   "threatlocker_display_name": "NOCHI-002062482753 | Maintenance"
 }
 ```
 
 **⚠️ Common Issue**: Dashboard AI must use `threatlocker_hostname` when calling ThreatLocker Portal API, not `ninja_hostname`.
+
+**📋 Hostname Format Guarantee:**
+- The `threatlocker_hostname` field is **automatically cleaned** before being returned in API responses
+- Clean hostnames are guaranteed to work with ThreatLocker API's `find_computer_by_hostname()` function
+- Cleaning removes pipe symbols (`|`) and domain suffixes (`.local`, `.domain`, etc.) that may be present in stored data
+- Original case is preserved (ThreatLocker API does case-insensitive search, but case is maintained for consistency)
+- **No manual cleaning required** - the API returns hostnames in the exact format ThreatLocker API expects
 
 ---
 
@@ -569,6 +576,6 @@ The API now automatically detects and cleans up stale running jobs:
 
 ---
 
-**Version**: v1.19.9  
-**Last Updated**: November 4, 2025 21:50 UTC  
+**Version**: v1.19.10  
+**Last Updated**: November 5, 2025 02:00 UTC  
 **Maintainer**: ES Inventory Hub Team

@@ -91,3 +91,4 @@ temp_*.service
 temp_*.timer
 variances-*.service
 .env
+reports/

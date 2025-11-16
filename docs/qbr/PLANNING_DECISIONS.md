@@ -144,6 +144,28 @@ This document answers "what did we decide?" for all major architectural and impl
 
 ---
 
+## 8b. Sales Activity Metrics
+
+**Decision**: Tabled for later implementation
+
+**Details**:
+- ⏸️ Sales activities (meetings, phone calls, emails) not available in ConnectWise
+- ⏸️ These metrics require manual entry or CRM integration
+- ⏸️ Sales metrics will be implemented in future phase via manual data entry
+- ✅ Data model accommodates sales metrics (manual entry support in `qbr_metrics_monthly`)
+
+**Sales Metrics Tabled**:
+- # of Telemarketing Dials
+- # of First Time Appointments (FTA)
+- # of Prospects to Hit PBR
+- # of New Agreements
+- New MRR
+- Lost MRR
+
+**Rationale**: Data source not available in ConnectWise API, focus on automated collection first
+
+---
+
 ## 9. Data Model
 
 **Decision**: Add indexes, constraints, timestamps, vendor tracking
@@ -361,8 +383,8 @@ All major planning decisions have been documented. See `IMPLEMENTATION_GUIDE.md`
 
 ---
 
-**Version**: v1.21.0
-**Last Updated**: November 13, 2025 03:24 UTC
+**Version**: v1.22.0
+**Last Updated**: November 16, 2025 02:32 UTC
 **Maintainer**: ES Inventory Hub Team
 **Status**: Complete
 **Next Step**: Implementation (see IMPLEMENTATION_GUIDE.md)

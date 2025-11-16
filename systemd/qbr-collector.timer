@@ -1,0 +1,19 @@
+[Unit]
+Description=QBR Metrics Collection Timer (Daily at 10:30pm Central)
+Documentation=file:///opt/es-inventory-hub/docs/qbr/README.md
+Requires=qbr-collector.service
+
+[Timer]
+# Run daily at 10:30pm America/Chicago
+# OnCalendar format: DayOfWeek Year-Month-Day Hour:Minute:Second Timezone
+OnCalendar=*-*-* 22:30:00 America/Chicago
+
+# If system was down when timer should have triggered, run on next boot
+Persistent=true
+
+# Run service immediately if it missed a scheduled run
+# (but only if missed by less than 12 hours to avoid duplicate runs)
+AccuracySec=1h
+
+[Install]
+WantedBy=timers.target

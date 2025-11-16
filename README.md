@@ -1,6 +1,6 @@
 # ES Inventory Hub
 
-**Current Version**: v1.21.0 (stable)
+**Current Version**: v1.22.0 (stable)
 
 A centralized inventory management system for collecting and storing data from various sources including Ninja and ThreatLocker.
 
@@ -44,9 +44,9 @@ If ES Inventory Hub needs dashboard-related changes, put your request in a text 
 - Provide dashboards for analysis (seat counts, spares, billing vs non-billing, etc.).
 - Highlight mismatches and exceptions (e.g., ThreatLocker device missing in Ninja).
 
-## Current Version (v1.21.0)
+## Current Version (v1.22.0)
 
-This release adds comprehensive QBR (Quarterly Business Review) system planning documentation, including complete implementation guide, calculation reference for all metrics and SmartNumbers, and planning decisions documentation. The QBR system will integrate ConnectWise Manage and NinjaOne data to automate business performance reporting.
+This release adds QBR (Quarterly Business Review) API endpoints, secrets synchronization system, and QBR collector implementation. New features include automated API secrets sync from shared secrets file, QBR metrics collection endpoints, database schema updates for QBR tables, and comprehensive documentation for secrets management.
 
 ## Current State
 

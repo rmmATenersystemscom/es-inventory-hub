@@ -1,0 +1,31 @@
+[Unit]
+Description=QBR Metrics Collector
+Documentation=file:///opt/es-inventory-hub/docs/qbr/README.md
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/es-inventory-hub
+
+# Environment variables
+EnvironmentFile=/opt/es-inventory-hub/.env
+
+# Activate venv and run collector
+ExecStart=/opt/es-inventory-hub/.venv/bin/python3 -m collectors.qbr.collect_all
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=qbr-collector
+
+# Resource limits
+CPUQuota=50%
+MemoryLimit=512M
+
+# Restart policy (don't restart - it's a scheduled job)
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

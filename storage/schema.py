@@ -371,3 +371,156 @@ class Exceptions(Base):
         Index('ix_exceptions_hostname', 'hostname'),
         Index('ix_exceptions_resolved', 'resolved'),
     )
+
+
+# QBR (Quarterly Business Review) Tables
+
+class Organization(Base):
+    """Organization table - represents organizations for QBR tracking"""
+    __tablename__ = 'organization'
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100), nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default='CURRENT_TIMESTAMP')
+
+    # Relationships
+    qbr_metrics_monthly = relationship("QBRMetricsMonthly", back_populates="organization")
+    qbr_metrics_quarterly = relationship("QBRMetricsQuarterly", back_populates="organization")
+    qbr_smartnumbers = relationship("QBRSmartNumbers", back_populates="organization")
+    qbr_thresholds = relationship("QBRThresholds", back_populates="organization")
+
+
+class QBRMetricsMonthly(Base):
+    """QBR Monthly Metrics table - stores monthly business metrics"""
+    __tablename__ = 'qbr_metrics_monthly'
+
+    id = Column(Integer, primary_key=True)
+    period = Column(String(7), nullable=False)  # YYYY-MM format
+    organization_id = Column(Integer, ForeignKey('organization.id'), nullable=False)
+    vendor_id = Column(Integer, ForeignKey('vendor.id'), nullable=False)
+    metric_name = Column(String(100), nullable=False)
+    metric_value = Column(Numeric(12, 2), nullable=True)
+    data_source = Column(String(20), nullable=False, server_default='collected')  # 'collected' or 'manual'
+    collected_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    manually_entered_by = Column(String(100), nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default='CURRENT_TIMESTAMP')
+    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default='CURRENT_TIMESTAMP')
+
+    # Relationships
+    organization = relationship("Organization", back_populates="qbr_metrics_monthly")
+    vendor = relationship("Vendor")
+
+    __table_args__ = (
+        UniqueConstraint('period', 'metric_name', 'organization_id', 'vendor_id',
+                        name='uq_metrics_monthly_period_metric_org_vendor'),
+        Index('idx_qbr_metrics_monthly_period', 'period'),
+        Index('idx_qbr_metrics_monthly_metric_name', 'metric_name'),
+        Index('idx_qbr_metrics_monthly_org_id', 'organization_id'),
+        Index('idx_qbr_metrics_monthly_vendor_id', 'vendor_id'),
+        Index('idx_qbr_metrics_monthly_period_metric', 'period', 'metric_name'),
+        Index('idx_qbr_metrics_monthly_data_source', 'data_source'),
+    )
+
+
+class QBRMetricsQuarterly(Base):
+    """QBR Quarterly Metrics table - stores quarterly aggregated metrics"""
+    __tablename__ = 'qbr_metrics_quarterly'
+
+    id = Column(Integer, primary_key=True)
+    period = Column(String(7), nullable=False)  # YYYY-QN format (e.g., "2025-Q1")
+    organization_id = Column(Integer, ForeignKey('organization.id'), nullable=False)
+    metric_name = Column(String(100), nullable=False)
+    metric_value = Column(Numeric(12, 2), nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default='CURRENT_TIMESTAMP')
+    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default='CURRENT_TIMESTAMP')
+
+    # Relationships
+    organization = relationship("Organization", back_populates="qbr_metrics_quarterly")
+
+    __table_args__ = (
+        UniqueConstraint('period', 'metric_name', 'organization_id',
+                        name='uq_metrics_quarterly_period_metric_org'),
+        Index('idx_qbr_metrics_quarterly_period', 'period'),
+        Index('idx_qbr_metrics_quarterly_metric_name', 'metric_name'),
+        Index('idx_qbr_metrics_quarterly_org_id', 'organization_id'),
+    )
+
+
+class QBRSmartNumbers(Base):
+    """QBR SmartNumbers table - stores calculated KPIs"""
+    __tablename__ = 'qbr_smartnumbers'
+
+    id = Column(Integer, primary_key=True)
+    period = Column(String(7), nullable=False)  # YYYY-MM or YYYY-QN format
+    period_type = Column(String(20), nullable=False)  # 'monthly' or 'quarterly'
+    organization_id = Column(Integer, ForeignKey('organization.id'), nullable=False)
+    kpi_name = Column(String(100), nullable=False)
+    kpi_value = Column(Numeric(12, 4), nullable=True)  # Higher precision for ratios
+    calculation_method = Column(String(200), nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default='CURRENT_TIMESTAMP')
+    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default='CURRENT_TIMESTAMP')
+
+    # Relationships
+    organization = relationship("Organization", back_populates="qbr_smartnumbers")
+
+    __table_args__ = (
+        UniqueConstraint('period', 'kpi_name', 'organization_id',
+                        name='uq_smartnumbers_period_kpi_org'),
+        Index('idx_qbr_smartnumbers_period', 'period'),
+        Index('idx_qbr_smartnumbers_kpi_name', 'kpi_name'),
+        Index('idx_qbr_smartnumbers_org_id', 'organization_id'),
+    )
+
+
+class QBRThresholds(Base):
+    """QBR Thresholds table - stores alert thresholds for metrics"""
+    __tablename__ = 'qbr_thresholds'
+
+    id = Column(Integer, primary_key=True)
+    organization_id = Column(Integer, ForeignKey('organization.id'), nullable=False)
+    metric_name = Column(String(100), nullable=False)
+    green_min = Column(Numeric(12, 4), nullable=True)  # Green zone minimum
+    green_max = Column(Numeric(12, 4), nullable=True)  # Green zone maximum
+    yellow_min = Column(Numeric(12, 4), nullable=True)  # Yellow zone minimum
+    yellow_max = Column(Numeric(12, 4), nullable=True)  # Yellow zone maximum
+    red_threshold = Column(Numeric(12, 4), nullable=True)  # Red zone threshold
+    notes = Column(String(500), nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default='CURRENT_TIMESTAMP')
+    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default='CURRENT_TIMESTAMP')
+
+    # Relationships
+    organization = relationship("Organization", back_populates="qbr_thresholds")
+
+    __table_args__ = (
+        UniqueConstraint('metric_name', 'organization_id',
+                        name='uq_thresholds_metric_org'),
+        Index('idx_qbr_thresholds_metric_name', 'metric_name'),
+        Index('idx_qbr_thresholds_org_id', 'organization_id'),
+    )
+
+
+class QBRCollectionLog(Base):
+    """QBR Collection Log table - tracks collection execution history"""
+    __tablename__ = 'qbr_collection_log'
+
+    id = Column(Integer, primary_key=True)
+    collection_started_at = Column(TIMESTAMP(timezone=True), nullable=False)
+    collection_ended_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    period = Column(String(7), nullable=False)  # YYYY-MM format
+    vendor_id = Column(Integer, ForeignKey('vendor.id'), nullable=True)
+    status = Column(String(20), nullable=False)  # 'running', 'completed', 'failed'
+    error_message = Column(Text, nullable=True)
+    metrics_collected = Column(Integer, nullable=True)
+    duration_seconds = Column(Integer, nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default='CURRENT_TIMESTAMP')
+
+    # Relationships
+    vendor = relationship("Vendor")
+
+    __table_args__ = (
+        Index('idx_qbr_collection_log_started_at', 'collection_started_at'),
+        Index('idx_qbr_collection_log_period', 'period'),
+        Index('idx_qbr_collection_log_vendor_id', 'vendor_id'),
+        Index('idx_qbr_collection_log_status', 'status'),
+    )

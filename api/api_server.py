@@ -52,6 +52,10 @@ from collectors.checks.cross_vendor import run_cross_vendor_checks
 
 app = Flask(__name__)
 
+# Import and register QBR API blueprint
+from api.qbr_api import qbr_api
+app.register_blueprint(qbr_api)
+
 def _format_date_string(date_str):
     """Format date string to consistent ISO 8601 format without microseconds"""
     if not date_str or date_str == 'Unknown':

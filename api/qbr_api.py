@@ -21,6 +21,9 @@ from sqlalchemy import text, and_
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# Import authentication decorator
+from api.auth_microsoft import require_auth
+
 from storage.schema import (
     QBRMetricsMonthly,
     QBRMetricsQuarterly,
@@ -112,6 +115,7 @@ def decimal_to_float(obj):
 # ============================================================================
 
 @qbr_api.route('/api/qbr/metrics/monthly', methods=['GET'])
+@require_auth
 def get_monthly_metrics():
     """
     Get monthly QBR metrics.
@@ -210,6 +214,7 @@ def get_monthly_metrics():
 # ============================================================================
 
 @qbr_api.route('/api/qbr/metrics/quarterly', methods=['GET'])
+@require_auth
 def get_quarterly_metrics():
     """
     Get quarterly QBR metrics with aggregation from monthly data.
@@ -351,6 +356,7 @@ def get_quarterly_metrics():
 # ============================================================================
 
 @qbr_api.route('/api/qbr/smartnumbers', methods=['GET'])
+@require_auth
 def get_smartnumbers():
     """
     Calculate and return SmartNumbers/KPIs for a quarterly period.
@@ -496,6 +502,7 @@ def get_smartnumbers():
 # ============================================================================
 
 @qbr_api.route('/api/qbr/thresholds', methods=['GET'])
+@require_auth
 def get_thresholds():
     """
     Get performance thresholds for SmartNumbers.
@@ -553,6 +560,7 @@ def get_thresholds():
 # ============================================================================
 
 @qbr_api.route('/api/qbr/thresholds', methods=['POST'])
+@require_auth
 def update_thresholds():
     """
     Update performance thresholds for SmartNumbers.
@@ -660,6 +668,7 @@ def update_thresholds():
 # ============================================================================
 
 @qbr_api.route('/api/qbr/metrics/manual', methods=['POST'])
+@require_auth
 def manual_metrics_entry():
     """
     Manually enter or update metrics for a period.
@@ -762,6 +771,129 @@ def manual_metrics_entry():
             }
 
             return jsonify(result), 200
+
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": {
+                "code": "SERVER_ERROR",
+                "message": str(e),
+                "status": 500
+            }
+        }), 500
+
+
+# ============================================================================
+# TEMPORARY TEST ENDPOINT - NO AUTH (for testing backfilled data)
+# ============================================================================
+
+@qbr_api.route('/api/qbr/test/smartnumbers', methods=['GET'])
+def test_smartnumbers_noauth():
+    """
+    TEMPORARY: Test endpoint to verify Smart Numbers without authentication.
+    Returns SmartNumbers for specified quarter.
+
+    Query Parameters:
+        period: Quarter (e.g., '2024-Q1', '2025-Q4')
+    """
+    from api.api_server import get_session
+    from sqlalchemy import text
+
+    period = request.args.get('period', '2024-Q1')
+    organization_id = int(request.args.get('organization_id', 1))
+
+    try:
+        # Verify period format
+        if not validate_period(period, 'quarterly'):
+            return jsonify({
+                "success": False,
+                "error": {
+                    "code": "INVALID_PERIOD",
+                    "message": f"Invalid period format: {period}. Use YYYY-Q1/Q2/Q3/Q4",
+                    "status": 400
+                }
+            }), 400
+
+        # Get monthly periods for this quarter
+        monthly_periods = period_to_months(period)
+
+        # Fetch and aggregate metrics
+        with get_session() as session:
+            # Fetch all monthly metrics for this quarter
+            from decimal import Decimal
+            monthly_metrics = []
+            for monthly_period in monthly_periods:
+                metrics_dict = {}
+                query = text("""
+                    SELECT metric_name, metric_value
+                    FROM qbr_metrics_monthly
+                    WHERE period = :period AND organization_id = :org_id
+                """)
+                results = session.execute(query, {'period': monthly_period, 'org_id': organization_id}).fetchall()
+                for row in results:
+                    # Keep as Decimal - SmartNumbers calculator expects Decimal type
+                    metrics_dict[row[0]] = row[1]
+                if metrics_dict:
+                    monthly_metrics.append(metrics_dict)
+
+            # Helper functions for aggregation - return Decimal type
+            def sum_metric(name):
+                values = [m.get(name) for m in monthly_metrics if m.get(name) is not None]
+                return sum(values, Decimal('0')) if values else None
+
+            def avg_metric(name):
+                values = [m.get(name) for m in monthly_metrics if m.get(name) is not None]
+                if not values:
+                    return None
+                return sum(values, Decimal('0')) / Decimal(str(len(values)))
+
+            # Build QuarterlyMetrics object
+            quarterly = QuarterlyMetrics(
+                # Summed metrics
+                reactive_tickets_created=sum_metric('reactive_tickets_created'),
+                reactive_tickets_closed=sum_metric('reactive_tickets_closed'),
+                total_time_reactive=sum_metric('reactive_time_spent'),
+                nrr=sum_metric('nrr'),
+                mrr=sum_metric('mrr'),
+                orr=sum_metric('orr'),
+                product_sales=sum_metric('product_sales'),
+                misc_revenue=sum_metric('misc_revenue'),
+                total_revenue=sum_metric('total_revenue'),
+                employee_expense=sum_metric('employee_expense'),
+                owner_comp_taxes=sum_metric('owner_comp_taxes'),
+                owner_comp=sum_metric('owner_comp'),
+                product_cogs=sum_metric('product_cogs'),
+                other_expenses=sum_metric('other_expenses'),
+                total_expenses=sum_metric('total_expenses'),
+                net_profit=sum_metric('net_profit'),
+                telemarketing_dials=sum_metric('telemarketing_dials'),
+                first_time_appointments=sum_metric('first_time_appointments'),
+                prospects_to_pbr=sum_metric('prospects_to_pbr'),
+                new_agreements=sum_metric('new_agreements'),
+                new_mrr=sum_metric('new_mrr'),
+                lost_mrr=sum_metric('lost_mrr'),
+                # Averaged metrics
+                endpoints_managed=avg_metric('endpoints_managed'),
+                employees=avg_metric('employees'),
+                technical_employees=avg_metric('technical_employees'),
+                seats_managed=avg_metric('seats_managed'),
+                agreements=avg_metric('agreements'),
+            )
+
+            # Calculate SmartNumbers
+            calculator = SmartNumbersCalculator()
+            smartnumbers = calculator.calculate_quarterly(quarterly)
+
+            return jsonify({
+                "success": True,
+                "note": "TEMPORARY TEST ENDPOINT - NO AUTHENTICATION REQUIRED",
+                "data": {
+                    "period": period,
+                    "organization_id": organization_id,
+                    "monthly_periods": monthly_periods,
+                    "smartnumbers": {k: float(v) if v is not None else None for k, v in smartnumbers.items()}
+                }
+            })
 
     except Exception as e:
         return jsonify({

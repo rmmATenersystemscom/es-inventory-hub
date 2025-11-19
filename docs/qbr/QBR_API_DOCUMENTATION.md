@@ -12,7 +12,189 @@ The QBR (Quarterly Business Review) API provides endpoints for retrieving metric
 
 ## Authentication
 
-*(Currently inherits from main API server authentication)*
+**Method**: Microsoft 365 OAuth Single Sign-On (SSO)
+**Session**: HTTP-only cookie (automatic inclusion by browser)
+**Expiration**: 8 hours
+**Authorized Users**: rmmiller@enersystems.com, jmmiller@enersystems.com
+
+### For Frontend Developers
+
+The backend handles all OAuth complexity. Your responsibilities:
+
+1. **Login**: Redirect user to `https://db-api.enersystems.com:5400/api/auth/microsoft/login`
+2. **Session Check**: `GET /api/auth/status` (returns user info if authenticated)
+3. **Logout**: Redirect to `https://db-api.enersystems.com:5400/api/auth/logout`
+4. **API Requests**: Include `credentials: 'include'` in all fetch/axios calls
+5. **401 Errors**: Redirect to login page when session expires
+
+### Authentication Endpoints
+
+These endpoints handle the OAuth flow:
+
+#### `GET /api/auth/microsoft/login`
+Initiate Microsoft OAuth login flow.
+
+**Authentication Required**: No
+**Use Case**: Entry point for user login
+
+**Response**: HTTP 302 redirect to Microsoft login page
+
+**Example**:
+```javascript
+// Redirect user to login
+window.location.href = 'https://db-api.enersystems.com:5400/api/auth/microsoft/login';
+```
+
+---
+
+#### `GET /api/auth/microsoft/callback`
+OAuth callback endpoint (internal use only).
+
+**Authentication Required**: No
+**Use Case**: Microsoft redirects here after user authenticates
+**Do NOT call this endpoint directly from frontend**
+
+---
+
+#### `GET /api/auth/status`
+Check current authentication status.
+
+**Authentication Required**: No (returns status)
+
+**Response** (authenticated):
+```json
+{
+  "authenticated": true,
+  "user_email": "rmmiller@enersystems.com",
+  "user_name": "Ryan Miller",
+  "login_time": "2025-11-17T20:05:18"
+}
+```
+
+**Response** (not authenticated):
+```json
+{
+  "authenticated": false
+}
+```
+
+**HTTP Status**:
+- `200 OK` - Authenticated
+- `401 Unauthorized` - Not authenticated
+
+**Example**:
+```javascript
+// Check auth on app load
+fetch('https://db-api.enersystems.com:5400/api/auth/status', {
+  credentials: 'include'  // Required for session cookies
+})
+  .then(res => res.json())
+  .then(data => {
+    if (data.authenticated) {
+      console.log('Logged in as:', data.user_name);
+    } else {
+      // Redirect to login
+      window.location.href = '/login';
+    }
+  });
+```
+
+---
+
+#### `POST /api/auth/logout` or `GET /api/auth/logout`
+End current session and log out.
+
+**Authentication Required**: No
+**Response**: HTTP 302 redirect to Microsoft logout, then to frontend
+
+**Example**:
+```javascript
+// Logout button
+const handleLogout = () => {
+  window.location.href = 'https://db-api.enersystems.com:5400/api/auth/logout';
+};
+```
+
+---
+
+### Protected Endpoints
+
+All QBR data endpoints require authentication. If not authenticated, they return:
+
+```json
+{
+  "error": "Authentication required",
+  "message": "Please log in to access this resource"
+}
+```
+
+**HTTP Status**: `401 Unauthorized`
+
+**Protected Endpoints**:
+- `GET /api/qbr/metrics/monthly`
+- `GET /api/qbr/metrics/quarterly`
+- `GET /api/qbr/smartnumbers` ⭐ (Primary endpoint)
+- `GET /api/qbr/thresholds`
+- `POST /api/qbr/thresholds`
+- `POST /api/qbr/metrics/manual`
+
+### Including Credentials in API Calls
+
+**IMPORTANT**: All API requests must include credentials to send the session cookie.
+
+**Using fetch**:
+```javascript
+fetch('https://db-api.enersystems.com:5400/api/qbr/smartnumbers?period=2025-Q4', {
+  credentials: 'include'  // Required!
+})
+  .then(res => {
+    if (res.status === 401) {
+      // Session expired - redirect to login
+      window.location.href = '/login';
+      return;
+    }
+    return res.json();
+  })
+  .then(data => console.log(data));
+```
+
+**Using axios** (configure once globally):
+```javascript
+import axios from 'axios';
+
+const api = axios.create({
+  baseURL: 'https://db-api.enersystems.com:5400',
+  withCredentials: true  // Required!
+});
+
+// Add interceptor to handle auth errors
+api.interceptors.response.use(
+  response => response,
+  error => {
+    if (error.response?.status === 401) {
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
+
+// Use the api client for all requests
+api.get('/api/qbr/smartnumbers?period=2025-Q4')
+  .then(res => console.log(res.data));
+```
+
+### Session Management
+
+- **Duration**: 8 hours from login
+- **Storage**: HTTP-only cookie (JavaScript cannot access)
+- **Security**: HTTPS only, SameSite=Lax
+- **Expiration Handling**: API returns 401, frontend should redirect to login
+
+### Additional Resources
+
+- Complete frontend integration guide: `/opt/es-inventory-hub/docs/qbr/FRONTEND_DEVELOPMENT_BRIEF.md`
+- Backend implementation details: `/opt/es-inventory-hub/docs/qbr/AUTHENTICATION_IMPLEMENTATION.md`
+- Architecture decisions: `/opt/es-inventory-hub/docs/qbr/PLANNING_DECISIONS.md` (Section 16)
 
 ---
 
@@ -525,6 +707,6 @@ For API issues or questions, contact the ES Inventory Hub development team.
 
 ---
 
-**Version**: v1.22.0  
-**Last Updated**: November 16, 2025 02:32 UTC  
+**Version**: v1.23.0
+**Last Updated**: November 19, 2025 13:36 UTC
 **Maintainer**: ES Inventory Hub Team

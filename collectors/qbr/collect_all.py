@@ -1,127 +1,110 @@
 #!/usr/bin/env python3
 """
-Master QBR collector script - runs all collectors for the current month.
+QBR Master Collector - Runs all QBR collectors
 
-This script is designed to be run by systemd timer daily at 10:30pm Central Time.
-It collects metrics from all sources for the current month.
+This script orchestrates the collection of all QBR metrics from all sources:
+- NinjaOne (endpoints, seats)
+- ConnectWise (tickets, time entries)
+
+Designed to be run via systemd timer daily at 10:30 PM Central Time.
 """
 
 import sys
-import argparse
+import logging
 from datetime import datetime
 from pathlib import Path
-from dotenv import load_dotenv
-
-# Load environment variables from .env file
-env_path = Path(__file__).parent.parent.parent / '.env'
-load_dotenv(dotenv_path=env_path)
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from common.logging import get_logger
-from collectors.qbr.ninja_collector import NinjaQBRCollector
-from collectors.qbr.connectwise_collector import ConnectWiseQBRCollector
+from collectors.qbr.ninja_main import main as ninja_main
+from collectors.qbr.connectwise_main import main as connectwise_main
 from collectors.qbr.utils import get_current_period
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+
+logger = logging.getLogger(__name__)
 
 
 def main():
-    """Main entry point for QBR collection."""
-    parser = argparse.ArgumentParser(
-        description='Collect QBR metrics from all sources for current month'
-    )
-    parser.add_argument(
-        '--period',
-        type=str,
-        help='Period to collect (YYYY-MM). Defaults to current month.'
-    )
-    parser.add_argument(
-        '--organization-id',
-        type=int,
-        default=1,
-        help='Organization ID (default: 1 for Enersystems, LLC)'
-    )
-    parser.add_argument(
-        '--skip-ninja',
-        action='store_true',
-        help='Skip NinjaOne collection'
-    )
-    parser.add_argument(
-        '--skip-connectwise',
-        action='store_true',
-        help='Skip ConnectWise collection'
-    )
+    """
+    Run all QBR collectors for the current period.
 
-    args = parser.parse_args()
+    Returns:
+        int: Exit code (0 = success, 1 = partial failure, 2 = total failure)
+    """
+    start_time = datetime.now()
+    period = get_current_period()
 
-    logger = get_logger(__name__)
+    logger.info("="*80)
+    logger.info("QBR Master Collector - Starting Collection")
+    logger.info("="*80)
+    logger.info(f"Period: {period}")
+    logger.info(f"Start Time: {start_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+    logger.info("="*80)
 
-    # Determine period
-    period = args.period or get_current_period()
+    results = {
+        'ninjaone': {'success': False, 'error': None},
+        'connectwise': {'success': False, 'error': None}
+    }
 
-    logger.info("=" * 80)
-    logger.info(f"QBR Collection Run - Period: {period}")
-    logger.info(f"Started: {datetime.now().isoformat()}")
-    logger.info("=" * 80)
+    # Run NinjaOne collector
+    logger.info("\n" + "-"*80)
+    logger.info("Running NinjaOne Collector")
+    logger.info("-"*80)
+    try:
+        ninja_main()
+        results['ninjaone']['success'] = True
+        logger.info("✓ NinjaOne collection completed successfully")
+    except Exception as e:
+        results['ninjaone']['error'] = str(e)
+        logger.error(f"✗ NinjaOne collection failed: {e}", exc_info=True)
 
-    collectors = []
-    results = {}
-
-    # Initialize collectors
-    if not args.skip_ninja:
-        collectors.append(('NinjaOne', NinjaQBRCollector(organization_id=args.organization_id)))
-
-    if not args.skip_connectwise:
-        collectors.append(('ConnectWise', ConnectWiseQBRCollector(organization_id=args.organization_id)))
-
-    if not collectors:
-        logger.error("No collectors enabled. Use --skip-ninja or --skip-connectwise to control.")
-        return 1
-
-    # Run collectors
-    for name, collector in collectors:
-        logger.info(f"\n{'=' * 80}")
-        logger.info(f"Running {name} collector...")
-        logger.info(f"{'=' * 80}")
-
-        try:
-            success = collector.collect_period(period)
-            results[name] = success
-
-            if success:
-                logger.info(f"✓ {name} collection completed successfully")
-            else:
-                logger.error(f"✗ {name} collection failed")
-
-        except Exception as e:
-            logger.error(f"✗ {name} collector raised exception: {e}", exc_info=True)
-            results[name] = False
+    # Run ConnectWise collector
+    logger.info("\n" + "-"*80)
+    logger.info("Running ConnectWise Collector")
+    logger.info("-"*80)
+    try:
+        connectwise_main()
+        results['connectwise']['success'] = True
+        logger.info("✓ ConnectWise collection completed successfully")
+    except Exception as e:
+        results['connectwise']['error'] = str(e)
+        logger.error(f"✗ ConnectWise collection failed: {e}", exc_info=True)
 
     # Summary
-    logger.info(f"\n{'=' * 80}")
-    logger.info("Collection Summary")
-    logger.info(f"{'=' * 80}")
+    end_time = datetime.now()
+    duration = (end_time - start_time).total_seconds()
 
-    success_count = sum(1 for success in results.values() if success)
-    failure_count = len(results) - success_count
+    logger.info("\n" + "="*80)
+    logger.info("QBR Master Collector - Collection Complete")
+    logger.info("="*80)
+    logger.info(f"Duration: {duration:.1f} seconds")
+    logger.info(f"NinjaOne: {'✓ SUCCESS' if results['ninjaone']['success'] else '✗ FAILED'}")
+    logger.info(f"ConnectWise: {'✓ SUCCESS' if results['connectwise']['success'] else '✗ FAILED'}")
 
-    for name, success in results.items():
-        status = "✓ SUCCESS" if success else "✗ FAILED"
-        logger.info(f"{name}: {status}")
+    # Determine exit code
+    successes = sum(1 for r in results.values() if r['success'])
 
-    logger.info(f"\nTotal: {len(results)} collectors")
-    logger.info(f"Successful: {success_count}")
-    logger.info(f"Failed: {failure_count}")
-    logger.info(f"Completed: {datetime.now().isoformat()}")
-    logger.info("=" * 80)
-
-    # Exit code
-    if failure_count > 0:
-        logger.error("Collection run completed with failures")
+    if successes == 2:
+        logger.info("Status: ✓ ALL COLLECTORS SUCCESSFUL")
+        logger.info("="*80)
+        return 0
+    elif successes == 1:
+        logger.warning("Status: ⚠ PARTIAL SUCCESS (1/2 collectors failed)")
+        logger.info("="*80)
         return 1
     else:
-        logger.info("Collection run completed successfully")
-        return 0
+        logger.error("Status: ✗ TOTAL FAILURE (all collectors failed)")
+        logger.info("="*80)
+        return 2
 
 
 if __name__ == '__main__':

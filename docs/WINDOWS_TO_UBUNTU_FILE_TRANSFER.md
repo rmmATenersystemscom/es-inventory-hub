@@ -278,8 +278,10 @@ rsync -avz --progress /mnt/c/path/to/docs/ rene@goldberry:/opt/es-inventory-hub/
 
 ---
 
-**Version**: v1.20.1  
-**Last Updated**: November 11, 2025 00:33 UTC  
+**Version**: v1.23.0
+**Last Updated**: November 19, 2025 13:36 UTC
 **Maintainer**: ES Inventory Hub Team
+
+
 
 

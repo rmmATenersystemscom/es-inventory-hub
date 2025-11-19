@@ -1,6 +1,6 @@
 # ES Inventory Hub
 
-**Current Version**: v1.22.0 (stable)
+**Current Version**: v1.23.0 (stable)
 
 A centralized inventory management system for collecting and storing data from various sources including Ninja and ThreatLocker.
 
@@ -44,9 +44,9 @@ If ES Inventory Hub needs dashboard-related changes, put your request in a text 
 - Provide dashboards for analysis (seat counts, spares, billing vs non-billing, etc.).
 - Highlight mismatches and exceptions (e.g., ThreatLocker device missing in Ninja).
 
-## Current Version (v1.22.0)
+## Current Version (v1.23.0)
 
-This release adds QBR (Quarterly Business Review) API endpoints, secrets synchronization system, and QBR collector implementation. New features include automated API secrets sync from shared secrets file, QBR metrics collection endpoints, database schema updates for QBR tables, and comprehensive documentation for secrets management.
+This release adds the StoryBrand domain analysis system, QBR authentication implementation with Microsoft/Azure AD, QBR data backfill utilities, and comprehensive QBR documentation suite. New features include complete StoryBrand compliance and AI optimization analysis framework with 11 domain analyses, Azure AD authentication setup guides, cross-domain authentication documentation, QBR data backfill scripts for 2024 complete dataset, frontend development briefs, handoff readiness assessments, and production deployment guides.
 
 ## Current State
 

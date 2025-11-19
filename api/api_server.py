@@ -23,6 +23,7 @@ from typing import Dict, List, Any, Optional
 
 from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
+from flask_session import Session
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
@@ -51,6 +52,21 @@ sys.path.insert(0, '/opt/es-inventory-hub')
 from collectors.checks.cross_vendor import run_cross_vendor_checks
 
 app = Flask(__name__)
+
+# Configure Flask session for authentication
+app.config['SECRET_KEY'] = os.getenv('SESSION_SECRET_KEY')
+app.config['SESSION_TYPE'] = 'filesystem'
+app.config['SESSION_FILE_DIR'] = '/tmp/flask_sessions'
+app.config['SESSION_PERMANENT'] = True
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=int(os.getenv('SESSION_LIFETIME_HOURS', '8')))
+app.config['SESSION_COOKIE_SECURE'] = True  # HTTPS only
+app.config['SESSION_COOKIE_HTTPONLY'] = True  # JavaScript can't access
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # CSRF protection
+Session(app)
+
+# Import and register authentication blueprint
+from api.auth_microsoft import auth_bp
+app.register_blueprint(auth_bp)
 
 # Import and register QBR API blueprint
 from api.qbr_api import qbr_api
@@ -3963,6 +3979,98 @@ def get_doc_file(filename):
     except Exception as e:
         return jsonify({"error": f"Documentation file '{filename}' not available: {str(e)}"}), 404
 
+@app.route('/api/docs/qbr/', methods=['GET'])
+@app.route('/api/docs/qbr', methods=['GET'])
+def get_qbr_docs_index():
+    """List available QBR documentation files"""
+    try:
+        import os
+        qbr_dir = '/opt/es-inventory-hub/docs/qbr'
+        if not os.path.exists(qbr_dir):
+            return jsonify({"error": "QBR documentation directory not found"}), 404
+        
+        files = []
+        for item in os.listdir(qbr_dir):
+            item_path = os.path.join(qbr_dir, item)
+            if os.path.isfile(item_path) and (item.endswith('.md') or item.endswith('.xlsx')):
+                files.append({
+                    "name": item,
+                    "url": f"/api/docs/qbr/{item}",
+                    "size": os.path.getsize(item_path)
+                })
+        
+        # Sort files by name
+        files.sort(key=lambda x: x['name'])
+        
+        return jsonify({
+            "message": "QBR Documentation Files",
+            "directory": "qbr",
+            "files": files,
+            "count": len(files)
+        })
+    except Exception as e:
+        return jsonify({"error": f"Error listing QBR documentation: {str(e)}"}), 500
+
+@app.route('/api/docs/qbr/<filename>', methods=['GET'])
+def get_qbr_doc_file(filename):
+    """Serve specific QBR documentation files from qbr subdirectory"""
+    try:
+        from flask import send_from_directory, send_file
+        import os
+        
+        qbr_dir = '/opt/es-inventory-hub/docs/qbr'
+        file_path = os.path.join(qbr_dir, filename)
+        
+        # Security check: prevent directory traversal
+        if not os.path.abspath(file_path).startswith(os.path.abspath(qbr_dir)):
+            return jsonify({"error": "Invalid file path"}), 400
+        
+        if not os.path.exists(file_path):
+            return jsonify({"error": f"File '{filename}' not found in QBR documentation"}), 404
+        
+        # For markdown files, return as text/plain or text/markdown
+        if filename.endswith('.md'):
+            return send_from_directory(qbr_dir, filename, mimetype='text/markdown')
+        # For Excel files, return as application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+        elif filename.endswith('.xlsx'):
+            return send_file(file_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 
+                           as_attachment=False, download_name=filename)
+        else:
+            return send_from_directory(qbr_dir, filename)
+            
+    except Exception as e:
+        return jsonify({"error": f"Error serving QBR documentation file '{filename}': {str(e)}"}), 500
+
+@app.route('/api/docs/qbr/<subdir>/<filename>', methods=['GET'])
+def get_qbr_subdir_file(subdir, filename):
+    """Serve files from QBR subdirectories (e.g., qbr/shared/, qbr/frontend/, qbr/backend/)"""
+    try:
+        from flask import send_from_directory, send_file
+        import os
+        
+        qbr_dir = '/opt/es-inventory-hub/docs/qbr'
+        subdir_path = os.path.join(qbr_dir, subdir)
+        file_path = os.path.join(subdir_path, filename)
+        
+        # Security check: prevent directory traversal
+        if not os.path.abspath(file_path).startswith(os.path.abspath(qbr_dir)):
+            return jsonify({"error": "Invalid file path"}), 400
+        
+        if not os.path.exists(file_path):
+            return jsonify({"error": f"File '{filename}' not found in QBR/{subdir}/"}), 404
+        
+        if not os.path.isdir(subdir_path):
+            return jsonify({"error": f"Subdirectory '{subdir}' not found"}), 404
+        
+        # For markdown files, return as text/markdown
+        if filename.endswith('.md'):
+            return send_from_directory(subdir_path, filename, mimetype='text/markdown')
+        else:
+            return send_from_directory(subdir_path, filename)
+            
+    except Exception as e:
+        return jsonify({"error": f"Error serving QBR documentation file '{subdir}/{filename}': {str(e)}"}), 500
+
 
 if __name__ == '__main__':
     print("Starting ES Inventory Hub API Server...")
@@ -4006,6 +4114,9 @@ if __name__ == '__main__':
     print("DOCUMENTATION ENDPOINTS:")
     print("  GET  /api/docs - Main integration documentation")
     print("  GET  /api/docs/<filename> - Specific documentation files")
+    print("  GET  /api/docs/qbr - List QBR documentation files")
+    print("  GET  /api/docs/qbr/<filename> - QBR documentation files")
+    print("  GET  /api/docs/qbr/<subdir>/<filename> - QBR subdirectory files (shared/, frontend/, backend/)")
     print()
     print("Server will run on:")
     print("  HTTP:  http://localhost:5400 (development only)")

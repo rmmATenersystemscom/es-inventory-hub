@@ -189,17 +189,18 @@ def insert_exception(
 def check_missing_ninja(session: Session, vendor_ids: Dict[str, int], snapshot_date: date) -> int:
     """
     Check for ThreatLocker hosts that have no matching Ninja host using robust anchors.
-    
-    Uses canonical TL key: LOWER(LEFT(SPLIT_PART(hostname,'.',1),15))
-    Uses canonical Ninja keys (ANY match true):
-    1) LOWER(LEFT(SPLIT_PART(ds.hostname,'.',1),15))
-    2) LOWER(LEFT(SPLIT_PART(COALESCE(ds.display_name,''),'.',1),15))
-    
+
+    Uses canonical TL key: LOWER(SPLIT_PART(hostname,'.',1)) - full hostname before dot
+    Uses canonical Ninja key: LOWER(SPLIT_PART(ds.hostname,'.',1)) - full hostname before dot
+
+    Note: Previously truncated to 15 chars for systemName compatibility. Now uses full
+    dnsName hostnames for accurate matching.
+
     Args:
         session: Database session
         vendor_ids: Mapping of vendor names to IDs
         snapshot_date: Date to check
-        
+
     Returns:
         int: Number of exceptions inserted
     """
@@ -217,8 +218,8 @@ def check_missing_ninja(session: Session, vendor_ids: Dict[str, int], snapshot_d
     ).delete()
     
     # Use SQL to find ThreatLocker hosts with no matching Ninja host using robust anchors
-    # Canonical TL key: LOWER(LEFT(SPLIT_PART(hostname,'.',1),15))
-    # Canonical Ninja key: LOWER(LEFT(SPLIT_PART(ds.hostname,'.',1),15))
+    # Canonical TL key: LOWER(SPLIT_PART(hostname,'.',1)) - full hostname before dot
+    # Canonical Ninja key: LOWER(SPLIT_PART(ds.hostname,'.',1)) - full hostname before dot
     # Note: display_name is never used as anchor for device matching
     
     # Add safeguard log line to confirm correct table name
@@ -226,11 +227,11 @@ def check_missing_ninja(session: Session, vendor_ids: Dict[str, int], snapshot_d
     
     query = text("""
         WITH tl_canonical AS (
-            SELECT 
+            SELECT
                 ds.id,
                 ds.hostname,
-                -- Extract clean hostname: take first part before pipe symbol, then first part before dot, then first 15 chars
-                LOWER(LEFT(SPLIT_PART(SPLIT_PART(ds.hostname,'|',1),'.',1),15)) as canonical_key
+                -- Extract clean hostname: take first part before pipe symbol, then first part before dot (full hostname, no truncation)
+                LOWER(SPLIT_PART(SPLIT_PART(ds.hostname,'|',1),'.',1)) as canonical_key
             FROM device_snapshot ds
             WHERE ds.snapshot_date = :snapshot_date
               AND ds.vendor_id = :tl_vendor_id
@@ -238,13 +239,13 @@ def check_missing_ninja(session: Session, vendor_ids: Dict[str, int], snapshot_d
         ),
         ninja_canonical AS (
             SELECT DISTINCT
-                LOWER(LEFT(SPLIT_PART(ds.hostname,'.',1),15)) as canonical_key
+                LOWER(SPLIT_PART(ds.hostname,'.',1)) as canonical_key
             FROM device_snapshot ds
             WHERE ds.snapshot_date = :snapshot_date
               AND ds.vendor_id = :ninja_vendor_id
               AND ds.hostname IS NOT NULL
         )
-        SELECT 
+        SELECT
             tl.id,
             tl.hostname,
             tl.canonical_key
@@ -307,24 +308,25 @@ def check_missing_ninja(session: Session, vendor_ids: Dict[str, int], snapshot_d
 def check_duplicate_tl(session: Session, vendor_ids: Dict[str, int], snapshot_date: date) -> int:
     """
     Check for duplicate ThreatLocker hosts (same hostname_base count > 1).
-    
+
+    Uses full hostname before dot for duplicate detection (no truncation).
+    Previously used 15-char truncation for systemName compatibility.
+
     Args:
         session: Database session
         vendor_ids: Mapping of vendor names to IDs
         snapshot_date: Date to check
-        
+
     Returns:
         int: Number of exceptions inserted
     """
     if 'ThreatLocker' not in vendor_ids:
         return 0
-    
+
     # Query for duplicate hostname_base values in ThreatLocker data
-    # Use LEFT(LOWER(SPLIT_PART(hostname, '.', 1)), 15) normalization
+    # Use full hostname before dot (no truncation)
     duplicates = session.query(
-        func.left(
-            func.lower(func.split_part(DeviceSnapshot.hostname, '.', 1)), 15
-        ).label('hostname_base'),
+        func.lower(func.split_part(DeviceSnapshot.hostname, '.', 1)).label('hostname_base'),
         func.count().label('count')
     ).filter(
         and_(
@@ -333,26 +335,22 @@ def check_duplicate_tl(session: Session, vendor_ids: Dict[str, int], snapshot_da
             DeviceSnapshot.hostname.isnot(None)
         )
     ).group_by(
-        func.left(
-            func.lower(func.split_part(DeviceSnapshot.hostname, '.', 1)), 15
-        )
+        func.lower(func.split_part(DeviceSnapshot.hostname, '.', 1))
     ).having(
         func.count() > 1
     ).all()
-    
+
     exceptions_inserted = 0
-    
+
     for duplicate in duplicates:
         hostname_base = duplicate.hostname_base
-        
+
         # Get all ThreatLocker hosts with this hostname_base
         tl_hosts = session.query(DeviceSnapshot).filter(
             and_(
                 DeviceSnapshot.snapshot_date == snapshot_date,
                 DeviceSnapshot.vendor_id == vendor_ids['ThreatLocker'],
-                func.left(
-                    func.lower(func.split_part(DeviceSnapshot.hostname, '.', 1)), 15
-                ) == hostname_base
+                func.lower(func.split_part(DeviceSnapshot.hostname, '.', 1)) == hostname_base
             )
         ).all()
         
@@ -613,9 +611,9 @@ def check_display_name_mismatch(session: Session, vendor_ids: Dict[str, int], sn
     # ThreatLocker display_name matches the hostname (default behavior)
     query = text("""
         WITH matched_devices AS (
-            SELECT 
-                LOWER(LEFT(SPLIT_PART(SPLIT_PART(tl.hostname,'|',1),'.',1),15)) as clean_tl_hostname,
-                LOWER(LEFT(SPLIT_PART(ninja.hostname,'.',1),15)) as clean_ninja_hostname,
+            SELECT
+                LOWER(SPLIT_PART(SPLIT_PART(tl.hostname,'|',1),'.',1)) as clean_tl_hostname,
+                LOWER(SPLIT_PART(ninja.hostname,'.',1)) as clean_ninja_hostname,
                 tl.hostname as tl_hostname,
                 ninja.hostname as ninja_hostname,
                 tl.display_name as tl_display_name,
@@ -624,8 +622,8 @@ def check_display_name_mismatch(session: Session, vendor_ids: Dict[str, int], sn
                 ninja.organization_name as ninja_org_name
             FROM device_snapshot tl
             JOIN device_snapshot ninja ON (
-                LOWER(LEFT(SPLIT_PART(SPLIT_PART(tl.hostname,'|',1),'.',1),15)) = 
-                LOWER(LEFT(SPLIT_PART(ninja.hostname,'.',1),15))
+                LOWER(SPLIT_PART(SPLIT_PART(tl.hostname,'|',1),'.',1)) =
+                LOWER(SPLIT_PART(ninja.hostname,'.',1))
                 AND ninja.vendor_id = :ninja_id
                 AND ninja.snapshot_date = :snapshot_date
             )
@@ -635,14 +633,14 @@ def check_display_name_mismatch(session: Session, vendor_ids: Dict[str, int], sn
             AND ninja.display_name IS NOT NULL
             AND tl.display_name != ninja.display_name
             AND LOWER(TRIM(tl.display_name)) != LOWER(TRIM(ninja.display_name))
-            -- SPECIAL CASE EXCLUSION: Don't flag when Ninja display_name is empty/blank 
+            -- SPECIAL CASE EXCLUSION: Don't flag when Ninja display_name is empty/blank
             -- AND ThreatLocker display_name matches hostname (default behavior)
             AND NOT (
                 (TRIM(COALESCE(ninja.display_name, '')) = '' OR ninja.display_name IS NULL)
                 AND LOWER(TRIM(tl.display_name)) = LOWER(TRIM(tl.hostname))
             )
         )
-        SELECT 
+        SELECT
             clean_tl_hostname,
             tl_hostname,
             ninja_hostname,

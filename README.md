@@ -1,6 +1,6 @@
 # ES Inventory Hub
 
-**Current Version**: v1.23.2 (stable)
+**Current Version**: v1.23.3 (stable)
 
 A centralized inventory management system for collecting and storing data from various sources including Ninja and ThreatLocker.
 
@@ -44,9 +44,9 @@ If ES Inventory Hub needs dashboard-related changes, put your request in a text 
 - Provide dashboards for analysis (seat counts, spares, billing vs non-billing, etc.).
 - Highlight mismatches and exceptions (e.g., ThreatLocker device missing in Ninja).
 
-## Current Version (v1.23.2)
+## Current Version (v1.23.3)
 
-This patch release fixes a critical hostname truncation issue in the Ninja collector. The collector now uses `dnsName` instead of `systemName` to avoid the 15-character NetBIOS name limit that was causing hostname collisions. Previously, devices like "QP-NUC150BX25100031" and "QP-NUC150BX25100035" were both truncated to "QP-NUC150BX2510", creating duplicate entries. The fix ensures unique device identification by using the full DNS hostname, resolving cross-vendor matching issues and improving data integrity.
+This patch release completes the hostname truncation fix by updating the cross-vendor matching algorithms. Following v1.23.2's fix to use full DNS hostnames in the Ninja collector, this release removes the 15-character truncation from all cross-vendor comparison logic (MISSING_NINJA, DISPLAY_NAME_MISMATCH, and DUPLICATE_TL checks). This eliminates false positives where devices like "QP-NUC150BX25100031" and "QP-NUC150BX25100035" were incorrectly flagged as duplicates or cross-matched due to truncation to the same 15-character key. The variance detection system now uses full hostnames for accurate device matching across Ninja and ThreatLocker.
 
 ## Current State
 

@@ -1,6 +1,6 @@
 # ES Inventory Hub
 
-**Current Version**: v1.23.1 (stable)
+**Current Version**: v1.23.2 (stable)
 
 A centralized inventory management system for collecting and storing data from various sources including Ninja and ThreatLocker.
 
@@ -44,9 +44,9 @@ If ES Inventory Hub needs dashboard-related changes, put your request in a text 
 - Provide dashboards for analysis (seat counts, spares, billing vs non-billing, etc.).
 - Highlight mismatches and exceptions (e.g., ThreatLocker device missing in Ninja).
 
-## Current Version (v1.23.1)
+## Current Version (v1.23.2)
 
-This patch release refines the variance report filtering logic for "DevicesThatShouldNotHaveThreatlocker". The spare device filter now excludes devices with location 'ES Spare' from being flagged, as these legitimately require ThreatLocker for remote access purposes. This targeted change reduces false positives in the variance report while maintaining accurate identification of spare devices at client locations that may need ThreatLocker cleanup.
+This patch release fixes a critical hostname truncation issue in the Ninja collector. The collector now uses `dnsName` instead of `systemName` to avoid the 15-character NetBIOS name limit that was causing hostname collisions. Previously, devices like "QP-NUC150BX25100031" and "QP-NUC150BX25100035" were both truncated to "QP-NUC150BX2510", creating duplicate entries. The fix ensures unique device identification by using the full DNS hostname, resolving cross-vendor matching issues and improving data integrity.
 
 ## Current State
 

@@ -541,11 +541,15 @@ def check_spare_mismatch(session: Session, vendor_ids: Dict[str, int], snapshot_
             ninja_host = ninja_by_base[tl_normalized]
             
             # Check if Ninja marks this as spare
+            # EXCLUSION: Devices with location 'ES Spare' should legitimately have ThreatLocker
+            # and should NOT be flagged as needing cleanup
             is_ninja_spare = False
             if ninja_host.billing_status and ninja_host.billing_status.code == 'spare':
-                is_ninja_spare = True
-            
-            # If Ninja marks as spare, this may indicate a cleanup opportunity
+                # Only flag as spare mismatch if location is NOT 'ES Spare'
+                if ninja_host.location_name != 'ES Spare':
+                    is_ninja_spare = True
+
+            # If Ninja marks as spare (and not at ES Spare location), this may indicate a cleanup opportunity
             if is_ninja_spare:
                 # Extract clean hostnames for display
                 tl_clean_hostname = extract_clean_hostname(tl_host.hostname, tl_normalized)

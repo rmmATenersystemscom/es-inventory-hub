@@ -3,7 +3,7 @@
 **Complete API reference for Dashboard AI to integrate with the Database AI's ES Inventory Hub system.**
 
 **Last Updated**: November 25, 2025
-**ES Inventory Hub Version**: v1.24.0
+**ES Inventory Hub Version**: v1.25.0
 **Status**: ✅ **FULLY OPERATIONAL**
 
 > **📅 API Behavior Update (October 9, 2025)**: All status and exception endpoints now return **latest data only** (current date) instead of historical ranges. This ensures consistent reporting and prevents data accumulation issues.
@@ -643,18 +643,24 @@ async function initQBRDashboard() {
 ```
 
 ### **QBR Devices by Client Response**
+
+**Data Sources:**
+- **Oct 2025 onwards**: Live data from `device_snapshot` (Ninja collector)
+- **Before Oct 2025**: Historical data from `qbr_client_metrics` (imported from EnerCare)
+
+**Live Data Response (2025-10 onwards):**
 ```json
 {
   "success": true,
   "data": {
     "period": "2025-11",
     "organization_id": 1,
+    "data_source": "live",
     "snapshot_date": "2025-11-30",
     "clients": [
       {"client_name": "ChillCo Inc.", "seats": 104, "endpoints": 111},
       {"client_name": "New Orleans Culinary & Hospitality Instit", "seats": 51, "endpoints": 51},
-      {"client_name": "NNW Oil", "seats": 44, "endpoints": 44},
-      {"client_name": "Southern Retinal Institute, LLC", "seats": 28, "endpoints": 30}
+      {"client_name": "NNW Oil", "seats": 44, "endpoints": 44}
     ],
     "total_seats": 530,
     "total_endpoints": 579
@@ -662,10 +668,34 @@ async function initQBRDashboard() {
 }
 ```
 
+**Historical Data Response (before 2025-10):**
+```json
+{
+  "success": true,
+  "data": {
+    "period": "2024-10",
+    "organization_id": 1,
+    "data_source": "historical",
+    "clients": [
+      {"client_name": "ChillCo Inc.", "seats": 92, "endpoints": 101},
+      {"client_name": "New Orleans Culinary & Hospitality Instit", "seats": 54, "endpoints": 54},
+      {"client_name": "NNW Oil", "seats": 45, "endpoints": 45}
+    ],
+    "total_seats": 479,
+    "total_endpoints": 521
+  }
+}
+```
+
 **Field Definitions:**
+- **`data_source`**: `"live"` (from Ninja collector) or `"historical"` (imported from EnerCare Excel)
 - **`seats`**: Billable workstations only (excludes servers, VMware hosts, spares, internal orgs)
 - **`endpoints`**: All billable devices including servers (excludes spares, internal orgs)
-- **`snapshot_date`**: The actual date of the device snapshot used (last day of requested month)
+- **`snapshot_date`**: Only present for live data - the actual date of the device snapshot used
+
+**Data Availability:**
+- Historical: Oct 2024 - Sep 2025 (42 clients, imported from EnerCare_Export.xlsx)
+- Live: Oct 2025 onwards (from daily Ninja collector snapshots)
 
 ### **QBR Monthly Metrics Response**
 ```json

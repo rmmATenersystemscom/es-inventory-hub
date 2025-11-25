@@ -221,7 +221,9 @@ def get_devices_by_client():
     """
     Get seat and endpoint counts by client for a given month.
 
-    Uses device_snapshot data from the Ninja collector.
+    Data Sources:
+    - Oct 2025 onwards: Live device_snapshot data from Ninja collector
+    - Before Oct 2025: Historical data from qbr_client_metrics table (imported from EnerCare)
 
     Definitions (per STD_SEAT_ENDPOINT_DEFINITIONS.md):
     - Endpoint: All billable devices (workstations + servers), excludes internal orgs
@@ -258,90 +260,141 @@ def get_devices_by_client():
         else:
             last_day = date(year, month + 1, 1) - timedelta(days=1)
 
-        # Excluded organizations (per STD_SEAT_ENDPOINT_DEFINITIONS.md)
-        excluded_orgs = ['Ener Systems, LLC', 'Internal Infrastructure', 'z_Terese Ashley']
+        # Determine data source based on period
+        # Live Ninja data available from 2025-10-08 onwards
+        use_historical = period < '2025-10'
 
         with get_session() as session:
-            # Get Ninja vendor
-            ninja_vendor = session.query(Vendor).filter_by(name='Ninja').first()
-            if not ninja_vendor:
-                return jsonify({
-                    "success": False,
-                    "error": {
-                        "code": "VENDOR_NOT_FOUND",
-                        "message": "Ninja vendor not found in database",
-                        "status": 500
+            if use_historical:
+                # Query historical data from qbr_client_metrics table
+                historical_query = text("""
+                    SELECT client_name, seats, endpoints
+                    FROM qbr_client_metrics
+                    WHERE period = :period
+                    ORDER BY endpoints DESC
+                """)
+                results = session.execute(historical_query, {'period': period}).fetchall()
+
+                if not results:
+                    return jsonify({
+                        "success": False,
+                        "error": {
+                            "code": "NO_DATA",
+                            "message": f"No historical data available for {period}. Data available from 2024-10 onwards.",
+                            "status": 404
+                        }
+                    }), 404
+
+                clients = [
+                    {
+                        'client_name': row[0],
+                        'seats': row[1] or 0,
+                        'endpoints': row[2] or 0
                     }
-                }), 500
+                    for row in results
+                ]
 
-            # Check if we have data for this date
-            data_exists = session.query(DeviceSnapshot).filter(
-                DeviceSnapshot.snapshot_date == last_day,
-                DeviceSnapshot.vendor_id == ninja_vendor.id
-            ).first()
+                total_seats = sum(c['seats'] for c in clients)
+                total_endpoints = sum(c['endpoints'] for c in clients)
 
-            if not data_exists:
                 return jsonify({
-                    "success": False,
-                    "error": {
-                        "code": "NO_DATA",
-                        "message": f"No device snapshot data available for {last_day.isoformat()}. Data available from 2025-10-08 onwards.",
-                        "status": 404
+                    "success": True,
+                    "data": {
+                        "period": period,
+                        "organization_id": organization_id,
+                        "data_source": "historical",
+                        "clients": clients,
+                        "total_seats": total_seats,
+                        "total_endpoints": total_endpoints
                     }
-                }), 404
+                })
 
-            # Query ENDPOINTS (all billable devices, exclude internal orgs)
-            endpoint_results = session.query(
-                DeviceSnapshot.organization_name,
-                func.count().label('endpoints')
-            ).filter(
-                DeviceSnapshot.snapshot_date == last_day,
-                DeviceSnapshot.vendor_id == ninja_vendor.id,
-                DeviceSnapshot.billable_status_name == 'billable',
-                ~DeviceSnapshot.organization_name.in_(excluded_orgs)
-            ).group_by(DeviceSnapshot.organization_name).all()
+            else:
+                # Use live device_snapshot data
+                # Excluded organizations (per STD_SEAT_ENDPOINT_DEFINITIONS.md)
+                excluded_orgs = ['Ener Systems, LLC', 'Internal Infrastructure', 'z_Terese Ashley']
 
-            endpoints_by_client = {r.organization_name: r.endpoints for r in endpoint_results}
+                # Get Ninja vendor
+                ninja_vendor = session.query(Vendor).filter_by(name='Ninja').first()
+                if not ninja_vendor:
+                    return jsonify({
+                        "success": False,
+                        "error": {
+                            "code": "VENDOR_NOT_FOUND",
+                            "message": "Ninja vendor not found in database",
+                            "status": 500
+                        }
+                    }), 500
 
-            # Query SEATS (billable workstations only, exclude internal orgs)
-            seat_results = session.query(
-                DeviceSnapshot.organization_name,
-                func.count().label('seats')
-            ).filter(
-                DeviceSnapshot.snapshot_date == last_day,
-                DeviceSnapshot.vendor_id == ninja_vendor.id,
-                DeviceSnapshot.device_type_name == 'workstation',
-                DeviceSnapshot.billable_status_name == 'billable',
-                ~DeviceSnapshot.organization_name.in_(excluded_orgs)
-            ).group_by(DeviceSnapshot.organization_name).all()
+                # Check if we have data for this date
+                data_exists = session.query(DeviceSnapshot).filter(
+                    DeviceSnapshot.snapshot_date == last_day,
+                    DeviceSnapshot.vendor_id == ninja_vendor.id
+                ).first()
 
-            seats_by_client = {r.organization_name: r.seats for r in seat_results}
+                if not data_exists:
+                    return jsonify({
+                        "success": False,
+                        "error": {
+                            "code": "NO_DATA",
+                            "message": f"No device snapshot data available for {last_day.isoformat()}. Data available from 2025-10-08 onwards.",
+                            "status": 404
+                        }
+                    }), 404
 
-            # Merge results (all clients that have either seats or endpoints)
-            all_clients = set(endpoints_by_client.keys()) | set(seats_by_client.keys())
-            clients = [
-                {
-                    'client_name': name,
-                    'seats': seats_by_client.get(name, 0),
-                    'endpoints': endpoints_by_client.get(name, 0)
-                }
-                for name in sorted(all_clients, key=lambda x: endpoints_by_client.get(x, 0), reverse=True)
-            ]
+                # Query ENDPOINTS (all billable devices, exclude internal orgs)
+                endpoint_results = session.query(
+                    DeviceSnapshot.organization_name,
+                    func.count().label('endpoints')
+                ).filter(
+                    DeviceSnapshot.snapshot_date == last_day,
+                    DeviceSnapshot.vendor_id == ninja_vendor.id,
+                    DeviceSnapshot.billable_status_name == 'billable',
+                    ~DeviceSnapshot.organization_name.in_(excluded_orgs)
+                ).group_by(DeviceSnapshot.organization_name).all()
 
-            total_seats = sum(seats_by_client.values())
-            total_endpoints = sum(endpoints_by_client.values())
+                endpoints_by_client = {r.organization_name: r.endpoints for r in endpoint_results}
 
-        return jsonify({
-            "success": True,
-            "data": {
-                "period": period,
-                "organization_id": organization_id,
-                "snapshot_date": last_day.isoformat(),
-                "clients": clients,
-                "total_seats": total_seats,
-                "total_endpoints": total_endpoints
-            }
-        })
+                # Query SEATS (billable workstations only, exclude internal orgs)
+                seat_results = session.query(
+                    DeviceSnapshot.organization_name,
+                    func.count().label('seats')
+                ).filter(
+                    DeviceSnapshot.snapshot_date == last_day,
+                    DeviceSnapshot.vendor_id == ninja_vendor.id,
+                    DeviceSnapshot.device_type_name == 'workstation',
+                    DeviceSnapshot.billable_status_name == 'billable',
+                    ~DeviceSnapshot.organization_name.in_(excluded_orgs)
+                ).group_by(DeviceSnapshot.organization_name).all()
+
+                seats_by_client = {r.organization_name: r.seats for r in seat_results}
+
+                # Merge results (all clients that have either seats or endpoints)
+                all_clients = set(endpoints_by_client.keys()) | set(seats_by_client.keys())
+                clients = [
+                    {
+                        'client_name': name,
+                        'seats': seats_by_client.get(name, 0),
+                        'endpoints': endpoints_by_client.get(name, 0)
+                    }
+                    for name in sorted(all_clients, key=lambda x: endpoints_by_client.get(x, 0), reverse=True)
+                ]
+
+                total_seats = sum(seats_by_client.values())
+                total_endpoints = sum(endpoints_by_client.values())
+
+                return jsonify({
+                    "success": True,
+                    "data": {
+                        "period": period,
+                        "organization_id": organization_id,
+                        "data_source": "live",
+                        "snapshot_date": last_day.isoformat(),
+                        "clients": clients,
+                        "total_seats": total_seats,
+                        "total_endpoints": total_endpoints
+                    }
+                })
 
     except Exception as e:
         return jsonify({

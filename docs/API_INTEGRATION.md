@@ -130,7 +130,8 @@ POST /api/windows-11-24h2/run          # Manually trigger Windows 11 24H2 assess
 ```
 
 ### **QBR (Quarterly Business Review) Metrics** 🔐
-**⚠️ Authentication Required**: All QBR endpoints require Microsoft 365 OAuth authentication.
+**⚠️ Authentication Required**: Most QBR endpoints require Microsoft 365 OAuth authentication.
+**Exception**: `/api/qbr/metrics/devices-by-client` is **public** (no auth required) - seat/endpoint data is not sensitive.
 
 ```bash
 # Authentication
@@ -151,7 +152,7 @@ GET /api/qbr/metrics/quarterly         # Aggregated quarterly metrics
     ?period=YYYY-Q1                    # Optional: specific quarter (default: latest)
     &organization_id=1                 # Optional: organization filter
 
-# Device Counts by Client (NEW)
+# Device Counts by Client (PUBLIC - no auth required)
 GET /api/qbr/metrics/devices-by-client # Seats and endpoints per client
     ?period=YYYY-MM                    # Required: month to query
     &organization_id=1                 # Optional: organization filter

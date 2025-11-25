@@ -216,7 +216,6 @@ def get_monthly_metrics():
 # ============================================================================
 
 @qbr_api.route('/api/qbr/metrics/devices-by-client', methods=['GET'])
-@require_auth
 def get_devices_by_client():
     """
     Get seat and endpoint counts by client for a given month.

@@ -39,10 +39,10 @@ def load_config():
 
 load_config()
 
-# Azure AD Configuration
-TENANT_ID = os.getenv('AZURE_TENANT_ID')
-CLIENT_ID = os.getenv('AZURE_CLIENT_ID')
-CLIENT_SECRET = os.getenv('AZURE_CLIENT_SECRET')
+# Azure AD Configuration (using QBR_ prefix from secrets file)
+TENANT_ID = os.getenv('QBR_AZURE_TENANT_ID') or os.getenv('AZURE_TENANT_ID')
+CLIENT_ID = os.getenv('QBR_AZURE_CLIENT_ID') or os.getenv('AZURE_CLIENT_ID')
+CLIENT_SECRET = os.getenv('QBR_AZURE_CLIENT_SECRET') or os.getenv('AZURE_CLIENT_SECRET')
 AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}"
 REDIRECT_URI = os.getenv('API_BASE_URL', 'https://db-api.enersystems.com:5400') + '/api/auth/microsoft/callback'
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://dashboards.enersystems.com/qbr')

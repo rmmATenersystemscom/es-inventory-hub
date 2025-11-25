@@ -10,13 +10,13 @@ Provides REST API endpoints for:
 
 import sys
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from decimal import Decimal
 from typing import Dict, List, Any, Optional
 
 from flask import Blueprint, jsonify, request
 from sqlalchemy.orm import Session
-from sqlalchemy import text, and_
+from sqlalchemy import text, and_, func
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -30,7 +30,9 @@ from storage.schema import (
     QBRSmartNumbers,
     QBRThresholds,
     QBRCollectionLog,
-    Organization
+    Organization,
+    DeviceSnapshot,
+    Vendor
 )
 from collectors.qbr.smartnumbers import (
     SmartNumbersCalculator,
@@ -197,6 +199,149 @@ def get_monthly_metrics():
             }
 
             return jsonify(result), 200
+
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": {
+                "code": "SERVER_ERROR",
+                "message": str(e),
+                "status": 500
+            }
+        }), 500
+
+
+# ============================================================================
+# GET /api/qbr/metrics/devices-by-client
+# ============================================================================
+
+@qbr_api.route('/api/qbr/metrics/devices-by-client', methods=['GET'])
+@require_auth
+def get_devices_by_client():
+    """
+    Get seat and endpoint counts by client for a given month.
+
+    Uses device_snapshot data from the Ninja collector.
+
+    Definitions (per STD_SEAT_ENDPOINT_DEFINITIONS.md):
+    - Endpoint: All billable devices (workstations + servers), excludes internal orgs
+    - Seat: Billable workstations only, excludes internal orgs
+
+    Query Parameters:
+        period (required): Month in format YYYY-MM
+        organization_id (optional): Filter by organization (default: 1)
+
+    Returns:
+        JSON response with per-client seat and endpoint counts
+    """
+    from api.api_server import get_session
+
+    period = request.args.get('period')
+    organization_id = request.args.get('organization_id', 1, type=int)
+
+    # Validate period parameter (required)
+    if not period or not validate_period(period, 'monthly'):
+        return jsonify({
+            "success": False,
+            "error": {
+                "code": "INVALID_PERIOD",
+                "message": "Period parameter required in YYYY-MM format",
+                "status": 400
+            }
+        }), 400
+
+    try:
+        # Calculate last day of month for snapshot_date
+        year, month = map(int, period.split('-'))
+        if month == 12:
+            last_day = date(year + 1, 1, 1) - timedelta(days=1)
+        else:
+            last_day = date(year, month + 1, 1) - timedelta(days=1)
+
+        # Excluded organizations (per STD_SEAT_ENDPOINT_DEFINITIONS.md)
+        excluded_orgs = ['Ener Systems, LLC', 'Internal Infrastructure', 'z_Terese Ashley']
+
+        with get_session() as session:
+            # Get Ninja vendor
+            ninja_vendor = session.query(Vendor).filter_by(name='Ninja').first()
+            if not ninja_vendor:
+                return jsonify({
+                    "success": False,
+                    "error": {
+                        "code": "VENDOR_NOT_FOUND",
+                        "message": "Ninja vendor not found in database",
+                        "status": 500
+                    }
+                }), 500
+
+            # Check if we have data for this date
+            data_exists = session.query(DeviceSnapshot).filter(
+                DeviceSnapshot.snapshot_date == last_day,
+                DeviceSnapshot.vendor_id == ninja_vendor.id
+            ).first()
+
+            if not data_exists:
+                return jsonify({
+                    "success": False,
+                    "error": {
+                        "code": "NO_DATA",
+                        "message": f"No device snapshot data available for {last_day.isoformat()}. Data available from 2025-10-08 onwards.",
+                        "status": 404
+                    }
+                }), 404
+
+            # Query ENDPOINTS (all billable devices, exclude internal orgs)
+            endpoint_results = session.query(
+                DeviceSnapshot.organization_name,
+                func.count().label('endpoints')
+            ).filter(
+                DeviceSnapshot.snapshot_date == last_day,
+                DeviceSnapshot.vendor_id == ninja_vendor.id,
+                DeviceSnapshot.billable_status_name == 'billable',
+                ~DeviceSnapshot.organization_name.in_(excluded_orgs)
+            ).group_by(DeviceSnapshot.organization_name).all()
+
+            endpoints_by_client = {r.organization_name: r.endpoints for r in endpoint_results}
+
+            # Query SEATS (billable workstations only, exclude internal orgs)
+            seat_results = session.query(
+                DeviceSnapshot.organization_name,
+                func.count().label('seats')
+            ).filter(
+                DeviceSnapshot.snapshot_date == last_day,
+                DeviceSnapshot.vendor_id == ninja_vendor.id,
+                DeviceSnapshot.device_type_name == 'workstation',
+                DeviceSnapshot.billable_status_name == 'billable',
+                ~DeviceSnapshot.organization_name.in_(excluded_orgs)
+            ).group_by(DeviceSnapshot.organization_name).all()
+
+            seats_by_client = {r.organization_name: r.seats for r in seat_results}
+
+            # Merge results (all clients that have either seats or endpoints)
+            all_clients = set(endpoints_by_client.keys()) | set(seats_by_client.keys())
+            clients = [
+                {
+                    'client_name': name,
+                    'seats': seats_by_client.get(name, 0),
+                    'endpoints': endpoints_by_client.get(name, 0)
+                }
+                for name in sorted(all_clients, key=lambda x: endpoints_by_client.get(x, 0), reverse=True)
+            ]
+
+            total_seats = sum(seats_by_client.values())
+            total_endpoints = sum(endpoints_by_client.values())
+
+        return jsonify({
+            "success": True,
+            "data": {
+                "period": period,
+                "organization_id": organization_id,
+                "snapshot_date": last_day.isoformat(),
+                "clients": clients,
+                "total_seats": total_seats,
+                "total_endpoints": total_endpoints
+            }
+        })
 
     except Exception as e:
         return jsonify({

@@ -2,8 +2,8 @@
 
 **Complete API reference for Dashboard AI to integrate with the Database AI's ES Inventory Hub system.**
 
-**Last Updated**: November 4, 2025  
-**ES Inventory Hub Version**: v1.19.8  
+**Last Updated**: November 25, 2025
+**ES Inventory Hub Version**: v1.24.0
 **Status**: ✅ **FULLY OPERATIONAL**
 
 > **📅 API Behavior Update (October 9, 2025)**: All status and exception endpoints now return **latest data only** (current date) instead of historical ranges. This ensures consistent reporting and prevents data accumulation issues.
@@ -61,7 +61,8 @@ When working with device data, **each vendor system requires its own hostname fo
 - **IP Access**: `https://192.168.99.246:5400` (HTTPS - Use `-k` flag for testing) ✅ **ALTERNATIVE**
 
 ### **Authentication**
-- **No authentication required** for current endpoints
+- **Variance/Status Endpoints**: No authentication required
+- **QBR Endpoints**: Microsoft 365 OAuth required (see QBR section below)
 - **HTTPS Required**: Mixed content security requires HTTPS for dashboard integration
 - **Certificate**: Valid Let's Encrypt certificate for db-api.enersystems.com
 
@@ -126,6 +127,47 @@ GET /api/windows-11-24h2/status        # Windows 11 24H2 compatibility status su
 GET /api/windows-11-24h2/incompatible  # List of incompatible devices with deficiencies
 GET /api/windows-11-24h2/compatible    # List of compatible devices with passed requirements
 POST /api/windows-11-24h2/run          # Manually trigger Windows 11 24H2 assessment
+```
+
+### **QBR (Quarterly Business Review) Metrics** 🔐
+**⚠️ Authentication Required**: All QBR endpoints require Microsoft 365 OAuth authentication.
+
+```bash
+# Authentication
+GET /api/auth/microsoft/login          # Initiate OAuth login (redirects to Microsoft)
+GET /api/auth/microsoft/callback       # OAuth callback (internal use)
+GET /api/auth/status                   # Check if user is authenticated
+POST /api/auth/logout                  # Logout and clear session
+
+# Monthly Metrics
+GET /api/qbr/metrics/monthly           # Raw monthly metrics
+    ?period=YYYY-MM                    # Optional: specific month (default: latest)
+    &organization_id=1                 # Optional: organization filter (default: 1)
+    &vendor_id=1                       # Optional: vendor filter
+    &metric_name=seats_managed         # Optional: specific metric
+
+# Quarterly Metrics (Aggregated)
+GET /api/qbr/metrics/quarterly         # Aggregated quarterly metrics
+    ?period=YYYY-Q1                    # Optional: specific quarter (default: latest)
+    &organization_id=1                 # Optional: organization filter
+
+# Device Counts by Client (NEW)
+GET /api/qbr/metrics/devices-by-client # Seats and endpoints per client
+    ?period=YYYY-MM                    # Required: month to query
+    &organization_id=1                 # Optional: organization filter
+
+# SmartNumbers (KPIs)
+GET /api/qbr/smartnumbers              # Calculated KPIs for quarterly review
+    ?period=YYYY-Q1                    # Required: quarter
+    &organization_id=1                 # Optional: organization filter
+
+# Performance Thresholds
+GET /api/qbr/thresholds                # Get threshold definitions (green/yellow/red zones)
+    ?organization_id=1                 # Optional: organization filter
+POST /api/qbr/thresholds               # Update threshold definitions
+
+# Manual Data Entry
+POST /api/qbr/metrics/manual           # Manually enter or update metrics
 ```
 
 ---
@@ -343,6 +385,121 @@ async function runWindows11Assessment() {
 }
 ```
 
+### **✅ 5. QBR DASHBOARD (📊 Quarterly Business Review)**
+
+**API Endpoints:**
+- `GET /api/auth/status` - Check authentication status
+- `GET /api/auth/microsoft/login` - Initiate Microsoft OAuth login
+- `GET /api/qbr/metrics/monthly` - Get monthly metrics
+- `GET /api/qbr/metrics/quarterly` - Get quarterly aggregated metrics
+- `GET /api/qbr/metrics/devices-by-client` - Get per-client seat and endpoint counts
+- `GET /api/qbr/smartnumbers` - Get calculated KPIs
+
+**Features:**
+- ✅ Microsoft 365 OAuth authentication
+- ✅ Monthly and quarterly metric tracking
+- ✅ Per-client seat and endpoint counts
+- ✅ SmartNumbers/KPI calculations
+- ✅ Configurable performance thresholds
+
+**⚠️ CRITICAL: Authentication Required**
+All QBR endpoints require authentication. You must:
+1. Check auth status first
+2. Redirect to login if not authenticated
+3. Include credentials in all fetch requests
+
+**Usage Example:**
+```javascript
+// 1. Check if user is authenticated
+async function checkAuth() {
+    const response = await fetch('https://db-api.enersystems.com:5400/api/auth/status', {
+        credentials: 'include'  // REQUIRED: Include session cookies
+    });
+    const data = await response.json();
+    return data.authenticated;
+}
+
+// 2. Redirect to login if not authenticated
+function redirectToLogin() {
+    window.location.href = 'https://db-api.enersystems.com:5400/api/auth/microsoft/login';
+}
+
+// 3. Fetch QBR data (after authentication)
+async function getDevicesByClient(period) {
+    const response = await fetch(
+        `https://db-api.enersystems.com:5400/api/qbr/metrics/devices-by-client?period=${period}`,
+        { credentials: 'include' }  // REQUIRED: Include session cookies
+    );
+
+    if (response.status === 401) {
+        // Session expired - redirect to login
+        redirectToLogin();
+        return null;
+    }
+
+    return await response.json();
+}
+
+// 4. Get monthly metrics
+async function getMonthlyMetrics(period, organizationId = 1) {
+    const params = new URLSearchParams({
+        period: period,
+        organization_id: organizationId
+    });
+
+    const response = await fetch(
+        `https://db-api.enersystems.com:5400/api/qbr/metrics/monthly?${params}`,
+        { credentials: 'include' }
+    );
+
+    return await response.json();
+}
+
+// 5. Get quarterly SmartNumbers
+async function getSmartNumbers(quarter, organizationId = 1) {
+    const params = new URLSearchParams({
+        period: quarter,  // Format: YYYY-Q1, YYYY-Q2, YYYY-Q3, YYYY-Q4
+        organization_id: organizationId
+    });
+
+    const response = await fetch(
+        `https://db-api.enersystems.com:5400/api/qbr/smartnumbers?${params}`,
+        { credentials: 'include' }
+    );
+
+    return await response.json();
+}
+
+// Example: Full authentication flow
+async function initQBRDashboard() {
+    const isAuthenticated = await checkAuth();
+
+    if (!isAuthenticated) {
+        // Show login button or auto-redirect
+        document.getElementById('login-btn').style.display = 'block';
+        document.getElementById('qbr-content').style.display = 'none';
+        return;
+    }
+
+    // User is authenticated - load data
+    const devicesData = await getDevicesByClient('2025-11');
+
+    if (devicesData && devicesData.success) {
+        // Render client table
+        devicesData.data.clients.forEach(client => {
+            console.log(`${client.client_name}: ${client.seats} seats, ${client.endpoints} endpoints`);
+        });
+
+        // Show totals
+        console.log(`Total: ${devicesData.data.total_seats} seats, ${devicesData.data.total_endpoints} endpoints`);
+    }
+}
+```
+
+**Data Availability:**
+- Device snapshot data available from **October 8, 2025** onwards
+- Use last day of month for historical queries (e.g., period=2025-10 uses Oct 31 data)
+
 ---
 
 ## 📋 **RESPONSE EXAMPLES**
@@ -474,6 +631,100 @@ async function runWindows11Assessment() {
 }
 ```
 
+### **QBR Authentication Status Response**
+```json
+{
+  "authenticated": true,
+  "user": {
+    "email": "user@enersystems.com",
+    "name": "User Name"
+  }
+}
+```
+
+### **QBR Devices by Client Response**
+```json
+{
+  "success": true,
+  "data": {
+    "period": "2025-11",
+    "organization_id": 1,
+    "snapshot_date": "2025-11-30",
+    "clients": [
+      {"client_name": "ChillCo Inc.", "seats": 104, "endpoints": 111},
+      {"client_name": "New Orleans Culinary & Hospitality Instit", "seats": 51, "endpoints": 51},
+      {"client_name": "NNW Oil", "seats": 44, "endpoints": 44},
+      {"client_name": "Southern Retinal Institute, LLC", "seats": 28, "endpoints": 30}
+    ],
+    "total_seats": 530,
+    "total_endpoints": 579
+  }
+}
+```
+
+**Field Definitions:**
+- **`seats`**: Billable workstations only (excludes servers, VMware hosts, spares, internal orgs)
+- **`endpoints`**: All billable devices including servers (excludes spares, internal orgs)
+- **`snapshot_date`**: The actual date of the device snapshot used (last day of requested month)
+
+### **QBR Monthly Metrics Response**
+```json
+{
+  "success": true,
+  "data": {
+    "period": "2025-11",
+    "organization_id": 1,
+    "metrics": [
+      {
+        "metric_name": "seats_managed",
+        "metric_value": 530,
+        "vendor_id": 1,
+        "data_source": "collected",
+        "notes": null,
+        "updated_at": "2025-11-25T12:00:00Z"
+      },
+      {
+        "metric_name": "endpoints_managed",
+        "metric_value": 579,
+        "vendor_id": 1,
+        "data_source": "collected",
+        "notes": null,
+        "updated_at": "2025-11-25T12:00:00Z"
+      },
+      {
+        "metric_name": "reactive_tickets_created",
+        "metric_value": 125,
+        "vendor_id": 2,
+        "data_source": "collected",
+        "notes": null,
+        "updated_at": "2025-11-25T12:00:00Z"
+      }
+    ]
+  }
+}
+```
+
+### **QBR SmartNumbers Response**
+```json
+{
+  "success": true,
+  "data": {
+    "period": "2025-Q4",
+    "organization_id": 1,
+    "smart_numbers": {
+      "tickets_per_endpoint": 0.85,
+      "revenue_per_endpoint": 125.50,
+      "csat_score": 4.2,
+      "first_call_resolution": 78.5
+    },
+    "thresholds": {
+      "tickets_per_endpoint": {"green_max": 1.0, "yellow_max": 1.5, "status": "green"},
+      "revenue_per_endpoint": {"green_min": 100, "yellow_min": 80, "status": "green"}
+    }
+  }
+}
+```
+
 ---
 
 ## 🔧 **TESTING COMMANDS**
@@ -524,6 +775,35 @@ curl -X POST https://db-api.enersystems.com:5400/api/collectors/run \
 # Check status
 curl https://db-api.enersystems.com:5400/api/collectors/status
 ```
+
+### **QBR Endpoints (Requires Authentication)**
+```bash
+# Check authentication status (no auth required)
+curl https://db-api.enersystems.com:5400/api/auth/status
+
+# Get devices by client for November 2025
+# Note: Requires valid session cookie from browser authentication
+curl --cookie "session=YOUR_SESSION_COOKIE" \
+  "https://db-api.enersystems.com:5400/api/qbr/metrics/devices-by-client?period=2025-11"
+
+# Get monthly metrics
+curl --cookie "session=YOUR_SESSION_COOKIE" \
+  "https://db-api.enersystems.com:5400/api/qbr/metrics/monthly?period=2025-11&organization_id=1"
+
+# Get quarterly metrics
+curl --cookie "session=YOUR_SESSION_COOKIE" \
+  "https://db-api.enersystems.com:5400/api/qbr/metrics/quarterly?period=2025-Q4&organization_id=1"
+
+# Get SmartNumbers/KPIs
+curl --cookie "session=YOUR_SESSION_COOKIE" \
+  "https://db-api.enersystems.com:5400/api/qbr/smartnumbers?period=2025-Q4&organization_id=1"
+```
+
+**Note**: QBR endpoints require Microsoft 365 OAuth authentication. To test:
+1. Open browser to `https://db-api.enersystems.com:5400/api/auth/microsoft/login`
+2. Complete Microsoft login
+3. Extract session cookie from browser dev tools
+4. Use cookie in curl commands above
 
 ---
 
@@ -576,6 +856,6 @@ The API now automatically detects and cleans up stale running jobs:
 
 ---
 
-**Version**: v1.19.10  
-**Last Updated**: November 5, 2025 02:00 UTC  
+**Version**: v1.24.0
+**Last Updated**: November 25, 2025 22:30 UTC
 **Maintainer**: ES Inventory Hub Team

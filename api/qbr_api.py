@@ -215,10 +215,168 @@ def get_monthly_metrics():
 # GET /api/qbr/metrics/devices-by-client
 # ============================================================================
 
+def get_period_range(start_period: str, end_period: str) -> List[str]:
+    """
+    Generate list of monthly periods between start and end (inclusive).
+
+    Args:
+        start_period: Start month in YYYY-MM format
+        end_period: End month in YYYY-MM format
+
+    Returns:
+        List of period strings in YYYY-MM format
+    """
+    periods = []
+    start_year, start_month = map(int, start_period.split('-'))
+    end_year, end_month = map(int, end_period.split('-'))
+
+    current_year, current_month = start_year, start_month
+    while (current_year, current_month) <= (end_year, end_month):
+        periods.append(f"{current_year:04d}-{current_month:02d}")
+        current_month += 1
+        if current_month > 12:
+            current_month = 1
+            current_year += 1
+
+    return periods
+
+
+def get_period_date_bounds(period: str) -> tuple:
+    """
+    Get the first and last day of a period.
+
+    Args:
+        period: Month in YYYY-MM format
+
+    Returns:
+        Tuple of (first_day, last_day) as date objects
+    """
+    year, month = map(int, period.split('-'))
+    first_day = date(year, month, 1)
+    if month == 12:
+        last_day = date(year + 1, 1, 1) - timedelta(days=1)
+    else:
+        last_day = date(year, month + 1, 1) - timedelta(days=1)
+    return first_day, last_day
+
+
+def get_devices_for_period(session, period: str, ninja_vendor_id: int, excluded_orgs: List[str]) -> Optional[Dict]:
+    """
+    Get seat and endpoint counts for a single period.
+
+    Args:
+        session: Database session
+        period: Month in YYYY-MM format
+        ninja_vendor_id: ID of the Ninja vendor
+        excluded_orgs: List of organization names to exclude
+
+    Returns:
+        Dict with period data or None if no data available
+    """
+    # Determine data source based on period
+    use_historical = period < '2025-10'
+
+    if use_historical:
+        # Query historical data from qbr_client_metrics table
+        historical_query = text("""
+            SELECT client_name, seats, endpoints
+            FROM qbr_client_metrics
+            WHERE period = :period
+            ORDER BY endpoints DESC
+        """)
+        results = session.execute(historical_query, {'period': period}).fetchall()
+
+        if not results:
+            return None
+
+        clients = [
+            {
+                'client_name': row[0],
+                'seats': row[1] or 0,
+                'endpoints': row[2] or 0
+            }
+            for row in results
+        ]
+
+        return {
+            "period": period,
+            "data_source": "historical",
+            "clients": clients,
+            "total_seats": sum(c['seats'] for c in clients),
+            "total_endpoints": sum(c['endpoints'] for c in clients)
+        }
+
+    else:
+        # Use live device_snapshot data
+        # Find the most recent snapshot date within this period
+        first_day, last_day = get_period_date_bounds(period)
+
+        # Query for the most recent snapshot date in the period
+        most_recent = session.query(
+            func.max(DeviceSnapshot.snapshot_date)
+        ).filter(
+            DeviceSnapshot.vendor_id == ninja_vendor_id,
+            DeviceSnapshot.snapshot_date >= first_day,
+            DeviceSnapshot.snapshot_date <= last_day
+        ).scalar()
+
+        if not most_recent:
+            return None
+
+        snapshot_date = most_recent
+
+        # Query ENDPOINTS (all billable devices, exclude internal orgs)
+        endpoint_results = session.query(
+            DeviceSnapshot.organization_name,
+            func.count().label('endpoints')
+        ).filter(
+            DeviceSnapshot.snapshot_date == snapshot_date,
+            DeviceSnapshot.vendor_id == ninja_vendor_id,
+            DeviceSnapshot.billable_status_name == 'billable',
+            ~DeviceSnapshot.organization_name.in_(excluded_orgs)
+        ).group_by(DeviceSnapshot.organization_name).all()
+
+        endpoints_by_client = {r.organization_name: r.endpoints for r in endpoint_results}
+
+        # Query SEATS (billable workstations only, exclude internal orgs)
+        seat_results = session.query(
+            DeviceSnapshot.organization_name,
+            func.count().label('seats')
+        ).filter(
+            DeviceSnapshot.snapshot_date == snapshot_date,
+            DeviceSnapshot.vendor_id == ninja_vendor_id,
+            DeviceSnapshot.device_type_name == 'workstation',
+            DeviceSnapshot.billable_status_name == 'billable',
+            ~DeviceSnapshot.organization_name.in_(excluded_orgs)
+        ).group_by(DeviceSnapshot.organization_name).all()
+
+        seats_by_client = {r.organization_name: r.seats for r in seat_results}
+
+        # Merge results (all clients that have either seats or endpoints)
+        all_clients = set(endpoints_by_client.keys()) | set(seats_by_client.keys())
+        clients = [
+            {
+                'client_name': name,
+                'seats': seats_by_client.get(name, 0),
+                'endpoints': endpoints_by_client.get(name, 0)
+            }
+            for name in sorted(all_clients, key=lambda x: endpoints_by_client.get(x, 0), reverse=True)
+        ]
+
+        return {
+            "period": period,
+            "data_source": "live",
+            "snapshot_date": snapshot_date.isoformat(),
+            "clients": clients,
+            "total_seats": sum(seats_by_client.values()),
+            "total_endpoints": sum(endpoints_by_client.values())
+        }
+
+
 @qbr_api.route('/api/qbr/metrics/devices-by-client', methods=['GET'])
 def get_devices_by_client():
     """
-    Get seat and endpoint counts by client for a given month.
+    Get seat and endpoint counts by client for one or more months.
 
     Data Sources:
     - Oct 2025 onwards: Live device_snapshot data from Ninja collector
@@ -229,170 +387,141 @@ def get_devices_by_client():
     - Seat: Billable workstations only, excludes internal orgs
 
     Query Parameters:
-        period (required): Month in format YYYY-MM
+        period (optional): Single month in YYYY-MM format
+        start_period (optional): Start month for range query (YYYY-MM)
+        end_period (optional): End month for range query (YYYY-MM)
         organization_id (optional): Filter by organization (default: 1)
 
+    Note: Either 'period' OR both 'start_period' and 'end_period' must be provided.
+
     Returns:
-        JSON response with per-client seat and endpoint counts
+        JSON response with per-client seat and endpoint counts.
+        - Single period: Returns data object directly
+        - Date range: Returns array of period objects in 'periods' field
     """
     from api.api_server import get_session
 
     period = request.args.get('period')
+    start_period = request.args.get('start_period')
+    end_period = request.args.get('end_period')
     organization_id = request.args.get('organization_id', 1, type=int)
 
-    # Validate period parameter (required)
-    if not period or not validate_period(period, 'monthly'):
-        return jsonify({
-            "success": False,
-            "error": {
-                "code": "INVALID_PERIOD",
-                "message": "Period parameter required in YYYY-MM format",
-                "status": 400
-            }
-        }), 400
+    # Validate parameters - need either period OR (start_period AND end_period)
+    is_range_query = start_period is not None or end_period is not None
+
+    if is_range_query:
+        # Range query validation
+        if not start_period or not end_period:
+            return jsonify({
+                "success": False,
+                "error": {
+                    "code": "INVALID_PARAMETERS",
+                    "message": "Both start_period and end_period are required for range queries",
+                    "status": 400
+                }
+            }), 400
+
+        if not validate_period(start_period, 'monthly') or not validate_period(end_period, 'monthly'):
+            return jsonify({
+                "success": False,
+                "error": {
+                    "code": "INVALID_PERIOD",
+                    "message": "start_period and end_period must be in YYYY-MM format",
+                    "status": 400
+                }
+            }), 400
+
+        if start_period > end_period:
+            return jsonify({
+                "success": False,
+                "error": {
+                    "code": "INVALID_PERIOD_RANGE",
+                    "message": "start_period must be before or equal to end_period",
+                    "status": 400
+                }
+            }), 400
+
+        periods = get_period_range(start_period, end_period)
+
+        # Limit to 24 months to prevent abuse
+        if len(periods) > 24:
+            return jsonify({
+                "success": False,
+                "error": {
+                    "code": "RANGE_TOO_LARGE",
+                    "message": "Date range cannot exceed 24 months",
+                    "status": 400
+                }
+            }), 400
+
+    else:
+        # Single period query
+        if not period or not validate_period(period, 'monthly'):
+            return jsonify({
+                "success": False,
+                "error": {
+                    "code": "INVALID_PERIOD",
+                    "message": "Period parameter required in YYYY-MM format, or provide start_period and end_period",
+                    "status": 400
+                }
+            }), 400
+
+        periods = [period]
 
     try:
-        # Calculate last day of month for snapshot_date
-        year, month = map(int, period.split('-'))
-        if month == 12:
-            last_day = date(year + 1, 1, 1) - timedelta(days=1)
-        else:
-            last_day = date(year, month + 1, 1) - timedelta(days=1)
-
-        # Determine data source based on period
-        # Live Ninja data available from 2025-10-08 onwards
-        use_historical = period < '2025-10'
+        # Excluded organizations (per STD_SEAT_ENDPOINT_DEFINITIONS.md)
+        excluded_orgs = ['Ener Systems, LLC', 'Internal Infrastructure', 'z_Terese Ashley']
 
         with get_session() as session:
-            if use_historical:
-                # Query historical data from qbr_client_metrics table
-                historical_query = text("""
-                    SELECT client_name, seats, endpoints
-                    FROM qbr_client_metrics
-                    WHERE period = :period
-                    ORDER BY endpoints DESC
-                """)
-                results = session.execute(historical_query, {'period': period}).fetchall()
-
-                if not results:
-                    return jsonify({
-                        "success": False,
-                        "error": {
-                            "code": "NO_DATA",
-                            "message": f"No historical data available for {period}. Data available from 2024-10 onwards.",
-                            "status": 404
-                        }
-                    }), 404
-
-                clients = [
-                    {
-                        'client_name': row[0],
-                        'seats': row[1] or 0,
-                        'endpoints': row[2] or 0
+            # Get Ninja vendor (needed for live data queries)
+            ninja_vendor = session.query(Vendor).filter_by(name='Ninja').first()
+            if not ninja_vendor:
+                return jsonify({
+                    "success": False,
+                    "error": {
+                        "code": "VENDOR_NOT_FOUND",
+                        "message": "Ninja vendor not found in database",
+                        "status": 500
                     }
-                    for row in results
-                ]
+                }), 500
 
-                total_seats = sum(c['seats'] for c in clients)
-                total_endpoints = sum(c['endpoints'] for c in clients)
+            # Fetch data for all requested periods
+            results = []
+            for p in periods:
+                period_data = get_devices_for_period(session, p, ninja_vendor.id, excluded_orgs)
+                if period_data:
+                    results.append(period_data)
 
+            if not results:
+                return jsonify({
+                    "success": False,
+                    "error": {
+                        "code": "NO_DATA",
+                        "message": f"No data available for the requested period(s). Historical data available from 2024-10, live data from 2025-10.",
+                        "status": 404
+                    }
+                }), 404
+
+            # Return format depends on query type
+            if is_range_query:
                 return jsonify({
                     "success": True,
                     "data": {
-                        "period": period,
+                        "start_period": start_period,
+                        "end_period": end_period,
                         "organization_id": organization_id,
-                        "data_source": "historical",
-                        "clients": clients,
-                        "total_seats": total_seats,
-                        "total_endpoints": total_endpoints
+                        "periods": results,
+                        "periods_returned": len(results),
+                        "periods_requested": len(periods)
                     }
                 })
-
             else:
-                # Use live device_snapshot data
-                # Excluded organizations (per STD_SEAT_ENDPOINT_DEFINITIONS.md)
-                excluded_orgs = ['Ener Systems, LLC', 'Internal Infrastructure', 'z_Terese Ashley']
-
-                # Get Ninja vendor
-                ninja_vendor = session.query(Vendor).filter_by(name='Ninja').first()
-                if not ninja_vendor:
-                    return jsonify({
-                        "success": False,
-                        "error": {
-                            "code": "VENDOR_NOT_FOUND",
-                            "message": "Ninja vendor not found in database",
-                            "status": 500
-                        }
-                    }), 500
-
-                # Check if we have data for this date
-                data_exists = session.query(DeviceSnapshot).filter(
-                    DeviceSnapshot.snapshot_date == last_day,
-                    DeviceSnapshot.vendor_id == ninja_vendor.id
-                ).first()
-
-                if not data_exists:
-                    return jsonify({
-                        "success": False,
-                        "error": {
-                            "code": "NO_DATA",
-                            "message": f"No device snapshot data available for {last_day.isoformat()}. Data available from 2025-10-08 onwards.",
-                            "status": 404
-                        }
-                    }), 404
-
-                # Query ENDPOINTS (all billable devices, exclude internal orgs)
-                endpoint_results = session.query(
-                    DeviceSnapshot.organization_name,
-                    func.count().label('endpoints')
-                ).filter(
-                    DeviceSnapshot.snapshot_date == last_day,
-                    DeviceSnapshot.vendor_id == ninja_vendor.id,
-                    DeviceSnapshot.billable_status_name == 'billable',
-                    ~DeviceSnapshot.organization_name.in_(excluded_orgs)
-                ).group_by(DeviceSnapshot.organization_name).all()
-
-                endpoints_by_client = {r.organization_name: r.endpoints for r in endpoint_results}
-
-                # Query SEATS (billable workstations only, exclude internal orgs)
-                seat_results = session.query(
-                    DeviceSnapshot.organization_name,
-                    func.count().label('seats')
-                ).filter(
-                    DeviceSnapshot.snapshot_date == last_day,
-                    DeviceSnapshot.vendor_id == ninja_vendor.id,
-                    DeviceSnapshot.device_type_name == 'workstation',
-                    DeviceSnapshot.billable_status_name == 'billable',
-                    ~DeviceSnapshot.organization_name.in_(excluded_orgs)
-                ).group_by(DeviceSnapshot.organization_name).all()
-
-                seats_by_client = {r.organization_name: r.seats for r in seat_results}
-
-                # Merge results (all clients that have either seats or endpoints)
-                all_clients = set(endpoints_by_client.keys()) | set(seats_by_client.keys())
-                clients = [
-                    {
-                        'client_name': name,
-                        'seats': seats_by_client.get(name, 0),
-                        'endpoints': endpoints_by_client.get(name, 0)
-                    }
-                    for name in sorted(all_clients, key=lambda x: endpoints_by_client.get(x, 0), reverse=True)
-                ]
-
-                total_seats = sum(seats_by_client.values())
-                total_endpoints = sum(endpoints_by_client.values())
-
+                # Single period - return in original format for backward compatibility
+                result = results[0]
+                result["organization_id"] = organization_id
                 return jsonify({
                     "success": True,
-                    "data": {
-                        "period": period,
-                        "organization_id": organization_id,
-                        "data_source": "live",
-                        "snapshot_date": last_day.isoformat(),
-                        "clients": clients,
-                        "total_seats": total_seats,
-                        "total_endpoints": total_endpoints
-                    }
+                    "data": result
                 })
 
     except Exception as e:

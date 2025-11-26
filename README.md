@@ -1,6 +1,6 @@
 # ES Inventory Hub
 
-**Current Version**: v1.25.0 (stable)
+**Current Version**: v1.26.0 (stable)
 
 A centralized inventory management system for collecting and storing data from various sources including Ninja and ThreatLocker.
 
@@ -44,9 +44,9 @@ If ES Inventory Hub needs dashboard-related changes, put your request in a text 
 - Provide dashboards for analysis (seat counts, spares, billing vs non-billing, etc.).
 - Highlight mismatches and exceptions (e.g., ThreatLocker device missing in Ninja).
 
-## Current Version (v1.23.3)
+## Current Version (v1.26.0)
 
-This patch release completes the hostname truncation fix by updating the cross-vendor matching algorithms. Following v1.23.2's fix to use full DNS hostnames in the Ninja collector, this release removes the 15-character truncation from all cross-vendor comparison logic (MISSING_NINJA, DISPLAY_NAME_MISMATCH, and DUPLICATE_TL checks). This eliminates false positives where devices like "QP-NUC150BX25100031" and "QP-NUC150BX25100035" were incorrectly flagged as duplicates or cross-matched due to truncation to the same 15-character key. The variance detection system now uses full hostnames for accurate device matching across Ninja and ThreatLocker.
+This minor release enhances the devices-by-client API endpoint with two key improvements: (1) Smart snapshot date selection - instead of requiring data for the exact last day of the month, the API now uses the most recent available snapshot date within the requested period, fixing NO_DATA errors for October/November 2025; (2) Date range support - new `start_period` and `end_period` parameters allow fetching up to 24 months of per-client seat/endpoint data in a single API call, reducing dashboard API calls from 13+ to just 1 for typical use cases.
 
 ## Current State
 

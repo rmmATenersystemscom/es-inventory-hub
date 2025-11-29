@@ -1,0 +1,19 @@
+[Unit]
+Description=VadeSecure Collection Timer (Daily at 11:13pm Central)
+Documentation=file:///opt/es-inventory-hub/docs/README.md
+Requires=vadesecure-collector.service
+
+[Timer]
+# Run daily at 11:13pm America/Chicago (23:13 CST)
+# Schedule: After M365 (23:00), Veeam (23:04), Duo (23:07), before Dropsuite (23:16)
+OnCalendar=*-*-* 23:13:00 America/Chicago
+
+# If system was down when timer should have triggered, run on next boot
+Persistent=true
+
+# Run service immediately if it missed a scheduled run
+# (but only if missed by less than 12 hours to avoid duplicate runs)
+AccuracySec=1h
+
+[Install]
+WantedBy=timers.target

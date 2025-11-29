@@ -524,3 +524,230 @@ class QBRCollectionLog(Base):
         Index('idx_qbr_collection_log_vendor_id', 'vendor_id'),
         Index('idx_qbr_collection_log_status', 'status'),
     )
+
+
+class QBRClientMetrics(Base):
+    """QBR Client Metrics table - stores per-client historical seat/endpoint data"""
+    __tablename__ = 'qbr_client_metrics'
+
+    id = Column(Integer, primary_key=True)
+    period = Column(String(7), nullable=False)  # YYYY-MM format
+    client_name = Column(String(255), nullable=False)
+    seats = Column(Integer, nullable=True)
+    endpoints = Column(Integer, nullable=True)
+    data_source = Column(String(20), nullable=False, server_default='imported')  # 'imported' or 'collected'
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default='CURRENT_TIMESTAMP')
+
+    __table_args__ = (
+        UniqueConstraint('period', 'client_name', name='uq_qbr_client_metrics_period_client'),
+        Index('idx_qbr_client_metrics_period', 'period'),
+        Index('idx_qbr_client_metrics_client_name', 'client_name'),
+    )
+
+
+# Vendor-specific snapshot tables (non-device data)
+
+class VadeSecureSnapshot(Base):
+    """VadeSecure snapshot table - stores daily customer/license data"""
+    __tablename__ = 'vadesecure_snapshot'
+
+    id = Column(Integer, primary_key=True)
+    snapshot_date = Column(Date, nullable=False)
+    customer_id = Column(String(255), nullable=False)  # vendor_device_key equivalent
+    customer_name = Column(String(255), nullable=True)
+    company_domain = Column(String(255), nullable=True)
+    contact_email = Column(String(255), nullable=True)
+
+    # License info
+    license_id = Column(String(255), nullable=True)
+    product_type = Column(String(100), nullable=True)
+    license_status = Column(String(50), nullable=True)  # active, expired
+    license_start_date = Column(Date, nullable=True)
+    license_end_date = Column(Date, nullable=True)
+    tenant_id = Column(String(255), nullable=True)
+
+    # Usage metrics
+    usage_count = Column(Integer, nullable=True)  # actual user activity
+
+    # Customer contact/location info
+    migrated = Column(Boolean, nullable=True)
+    created_date = Column(DateTime, nullable=True)  # ctime from API
+    contact_name = Column(String(255), nullable=True)  # firstname + lastname
+    phone = Column(String(50), nullable=True)
+    address = Column(String(500), nullable=True)
+    city = Column(String(100), nullable=True)
+    state = Column(String(100), nullable=True)
+
+    # Metadata
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default='CURRENT_TIMESTAMP')
+
+    __table_args__ = (
+        UniqueConstraint('snapshot_date', 'customer_id', name='uq_vadesecure_snapshot_date_customer'),
+        Index('idx_vadesecure_snapshot_date', 'snapshot_date'),
+        Index('idx_vadesecure_snapshot_customer_id', 'customer_id'),
+        Index('idx_vadesecure_snapshot_customer_name', 'customer_name'),
+        Index('idx_vadesecure_snapshot_license_status', 'license_status'),
+    )
+
+
+class DropsuiteSnapshot(Base):
+    """Dropsuite snapshot table - stores daily email backup/archiving data"""
+    __tablename__ = 'dropsuite_snapshot'
+
+    id = Column(Integer, primary_key=True)
+    snapshot_date = Column(Date, nullable=False)
+    user_id = Column(String(255), nullable=False)  # Dropsuite user/org ID
+    organization_name = Column(String(255), nullable=True)
+    seats_used = Column(Integer, nullable=True)
+    archive_type = Column(String(50), nullable=True)  # Archive, Backup Only
+    status = Column(String(50), nullable=True)  # Active, Deactivated, Suspended
+    total_emails = Column(Integer, nullable=True)
+    storage_gb = Column(Numeric(10, 2), nullable=True)
+    last_backup = Column(TIMESTAMP(timezone=True), nullable=True)
+    compliance = Column(Boolean, nullable=True)
+
+    # Metadata
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default='CURRENT_TIMESTAMP')
+
+    __table_args__ = (
+        UniqueConstraint('snapshot_date', 'user_id', name='uq_dropsuite_snapshot_date_user'),
+        Index('idx_dropsuite_snapshot_date', 'snapshot_date'),
+        Index('idx_dropsuite_snapshot_user_id', 'user_id'),
+        Index('idx_dropsuite_snapshot_org_name', 'organization_name'),
+        Index('idx_dropsuite_snapshot_status', 'status'),
+    )
+
+
+class DuoSnapshot(Base):
+    """Duo MFA snapshot table - stores daily MFA account data"""
+    __tablename__ = 'duo_snapshot'
+
+    id = Column(Integer, primary_key=True)
+    snapshot_date = Column(Date, nullable=False)
+    account_id = Column(String(255), nullable=False)  # Duo account ID
+    organization_name = Column(String(255), nullable=True)
+    user_count = Column(Integer, nullable=True)
+    admin_count = Column(Integer, nullable=True)
+    integration_count = Column(Integer, nullable=True)
+    phone_count = Column(Integer, nullable=True)
+    status = Column(String(50), nullable=True)  # active, inactive, suspended
+    last_activity = Column(TIMESTAMP(timezone=True), nullable=True)
+    group_count = Column(Integer, nullable=True)
+    webauthn_count = Column(Integer, nullable=True)
+    last_login = Column(TIMESTAMP(timezone=True), nullable=True)
+    enrollment_pct = Column(Numeric(5, 2), nullable=True)  # Percentage of enrolled users
+    auth_methods = Column(JSONB, nullable=True)  # Array of enabled auth methods
+    directory_sync = Column(Boolean, nullable=True)
+    telephony_credits = Column(Integer, nullable=True)  # Credits used in period
+    auth_volume = Column(Integer, nullable=True)  # Auth count in last 24h
+    failed_auth_pct = Column(Numeric(5, 2), nullable=True)  # Failed auth percentage
+    peak_usage = Column(String(50), nullable=True)  # Peak hour range
+    account_type = Column(String(100), nullable=True)  # Edition type
+
+    # Metadata
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default='CURRENT_TIMESTAMP')
+
+    __table_args__ = (
+        UniqueConstraint('snapshot_date', 'account_id', name='uq_duo_snapshot_date_account'),
+        Index('idx_duo_snapshot_date', 'snapshot_date'),
+        Index('idx_duo_snapshot_account_id', 'account_id'),
+        Index('idx_duo_snapshot_org_name', 'organization_name'),
+        Index('idx_duo_snapshot_status', 'status'),
+    )
+
+
+class DuoUserSnapshot(Base):
+    """Duo user snapshot table - stores daily per-user MFA data"""
+    __tablename__ = 'duo_user_snapshot'
+
+    id = Column(Integer, primary_key=True)
+    snapshot_date = Column(Date, nullable=False)
+    account_id = Column(String(255), nullable=False)  # Duo account ID
+    organization_name = Column(String(255), nullable=True)
+    user_id = Column(String(255), nullable=False)  # Duo user ID
+    username = Column(String(255), nullable=True)
+    full_name = Column(String(255), nullable=True)
+    email = Column(String(255), nullable=True)
+    status = Column(String(50), nullable=True)  # active, bypass, disabled, locked out
+    last_login = Column(TIMESTAMP(timezone=True), nullable=True)
+    phone = Column(String(50), nullable=True)  # Primary phone number
+    is_enrolled = Column(Boolean, nullable=True)
+
+    # Metadata
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default='CURRENT_TIMESTAMP')
+
+    __table_args__ = (
+        UniqueConstraint('snapshot_date', 'account_id', 'user_id', name='uq_duo_user_snapshot_date_account_user'),
+        Index('idx_duo_user_snapshot_date', 'snapshot_date'),
+        Index('idx_duo_user_snapshot_account_id', 'account_id'),
+        Index('idx_duo_user_snapshot_user_id', 'user_id'),
+        Index('idx_duo_user_snapshot_org_name', 'organization_name'),
+    )
+
+
+class M365Snapshot(Base):
+    """Microsoft 365 snapshot table - stores daily user/license data per tenant"""
+    __tablename__ = 'm365_snapshot'
+
+    id = Column(Integer, primary_key=True)
+    snapshot_date = Column(Date, nullable=False)
+    tenant_id = Column(String(255), nullable=False)  # Azure tenant ID
+    organization_name = Column(String(255), nullable=True)
+    user_count = Column(Integer, nullable=True)  # Filtered user count
+
+    # Metadata
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default='CURRENT_TIMESTAMP')
+
+    __table_args__ = (
+        UniqueConstraint('snapshot_date', 'tenant_id', name='uq_m365_snapshot_date_tenant'),
+        Index('idx_m365_snapshot_date', 'snapshot_date'),
+        Index('idx_m365_snapshot_tenant_id', 'tenant_id'),
+        Index('idx_m365_snapshot_org_name', 'organization_name'),
+    )
+
+
+class M365UserSnapshot(Base):
+    """Microsoft 365 user snapshot table - stores daily per-user license data"""
+    __tablename__ = 'm365_user_snapshot'
+
+    id = Column(Integer, primary_key=True)
+    snapshot_date = Column(Date, nullable=False)
+    tenant_id = Column(String(255), nullable=False)  # Azure tenant ID
+    organization_name = Column(String(255), nullable=True)
+    username = Column(String(255), nullable=False)  # userPrincipalName
+    display_name = Column(String(255), nullable=True)
+    licenses = Column(Text, nullable=True)  # Comma-separated license names
+
+    # Metadata
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default='CURRENT_TIMESTAMP')
+
+    __table_args__ = (
+        UniqueConstraint('snapshot_date', 'tenant_id', 'username', name='uq_m365_user_snapshot_date_tenant_user'),
+        Index('idx_m365_user_snapshot_date', 'snapshot_date'),
+        Index('idx_m365_user_snapshot_tenant_id', 'tenant_id'),
+        Index('idx_m365_user_snapshot_org_name', 'organization_name'),
+        Index('idx_m365_user_snapshot_username', 'username'),
+    )
+
+
+class VeeamSnapshot(Base):
+    """Veeam VSPC snapshot table - stores daily cloud storage usage per organization"""
+    __tablename__ = 'veeam_snapshot'
+
+    id = Column(Integer, primary_key=True)
+    snapshot_date = Column(Date, nullable=False)
+    company_uid = Column(String(255), nullable=False)  # VSPC company UID
+    organization_name = Column(String(255), nullable=True)
+    storage_gb = Column(Numeric(12, 2), nullable=True)  # Cloud storage used in GB
+    quota_gb = Column(Numeric(12, 2), nullable=True)  # Storage quota in GB
+    usage_pct = Column(Numeric(5, 1), nullable=True)  # Usage percentage
+
+    # Metadata
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default='CURRENT_TIMESTAMP')
+
+    __table_args__ = (
+        UniqueConstraint('snapshot_date', 'company_uid', name='uq_veeam_snapshot_date_company'),
+        Index('idx_veeam_snapshot_date', 'snapshot_date'),
+        Index('idx_veeam_snapshot_company_uid', 'company_uid'),
+        Index('idx_veeam_snapshot_org_name', 'organization_name'),
+    )

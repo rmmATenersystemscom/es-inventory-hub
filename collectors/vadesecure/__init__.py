@@ -1,0 +1,1 @@
+"""VadeSecure collector module."""

@@ -1,0 +1,1 @@
+"""Veeam VSPC collector package."""

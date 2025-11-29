@@ -1,0 +1,26 @@
+{
+  "excluded_licenses": [
+    "Microsoft Teams Phone Resource Account",
+    "Microsoft Fabric (Free)",
+    "Microsoft Power Automate Free",
+    "Communications Credits",
+    "Skype for Business PSTN Domestic Calling",
+    "Microsoft 365 Apps for Business",
+    "Microsoft Teams Rooms Pro"
+  ],
+  "description": "Licenses that exclude users from being counted if these are their only licenses",
+  "last_updated": "2025-10-20",
+  "notes": [
+    "These licenses are typically resource accounts, free services, or communication credits",
+    "Users with only these licenses should not be counted in user totals",
+    "Users with these licenses plus other paid licenses should still be counted"
+  ],
+  "examples": [
+    "Microsoft Teams Phone Resource Account - Phone system resource accounts",
+    "Microsoft Fabric (Free) - Free tier of Fabric service", 
+    "Microsoft Power Automate Free - Free tier of Power Automate",
+    "Communications Credits - Prepaid calling credits",
+    "Skype for Business PSTN Domestic Calling - Legacy calling service",
+    "Microsoft Teams Rooms Pro - Room system licenses"
+  ]
+}

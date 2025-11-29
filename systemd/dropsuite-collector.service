@@ -1,0 +1,31 @@
+[Unit]
+Description=Dropsuite Email Backup Collector
+Documentation=file:///opt/es-inventory-hub/docs/README.md
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+User=svc_es-hub
+Group=svc_es-hub
+WorkingDirectory=/opt/es-inventory-hub
+
+# Environment variables
+EnvironmentFile=/opt/es-inventory-hub/.env
+
+# Run the collector script
+ExecStart=/opt/es-inventory-hub/scripts/run_dropsuite_daily.sh
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=dropsuite-collector
+
+# Resource limits
+CPUQuota=50%
+MemoryLimit=512M
+
+# Restart policy (don't restart - it's a scheduled job)
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

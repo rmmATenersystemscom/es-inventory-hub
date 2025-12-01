@@ -1,6 +1,6 @@
 # ES Inventory Hub
 
-**Current Version**: v1.27.0 (stable)
+**Current Version**: v1.28.0 (stable)
 
 A centralized inventory management system for collecting and storing data from various sources including Ninja and ThreatLocker.
 
@@ -44,9 +44,9 @@ If ES Inventory Hub needs dashboard-related changes, put your request in a text 
 - Provide dashboards for analysis (seat counts, spares, billing vs non-billing, etc.).
 - Highlight mismatches and exceptions (e.g., ThreatLocker device missing in Ninja).
 
-## Current Version (v1.27.0)
+## Current Version (v1.28.0)
 
-Major QBR data collection expansion with 5 new collectors for comprehensive client reporting. New collectors include: Microsoft 365 (user counts per tenant), Duo MFA (user/phone/integration counts), VadeSecure (email security license counts), Veeam VSPC (cloud backup quota/usage), and Dropsuite (email backup seat counts). Each collector runs on scheduled systemd timers, stores daily snapshots in PostgreSQL, and integrates with the QBR reporting system for automated client metrics.
+Security hardening release with comprehensive server security audit and remediation. Implemented SSH hardening (disabled password authentication, root login, X11 forwarding), restricted SSH/API access to authorized subnets only via UFW firewall, and secured PostgreSQL pg_hba.conf to limit database connections to trusted networks. All changes documented in SECURITY_AUDIT_LOG.md.
 
 ## Current State
 

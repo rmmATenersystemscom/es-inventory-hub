@@ -25,6 +25,7 @@ cd "$SCRIPT_DIR"
 
 # Load environment variables
 set -a
+. /opt/shared-secrets/api-secrets.env
 . /opt/es-inventory-hub/.env
 set +a
 

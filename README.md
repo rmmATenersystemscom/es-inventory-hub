@@ -1,6 +1,6 @@
 # ES Inventory Hub
 
-**Current Version**: v1.28.0 (stable)
+**Current Version**: v1.29.0 (stable)
 
 A centralized inventory management system for collecting and storing data from various sources including Ninja and ThreatLocker.
 
@@ -44,9 +44,9 @@ If ES Inventory Hub needs dashboard-related changes, put your request in a text 
 - Provide dashboards for analysis (seat counts, spares, billing vs non-billing, etc.).
 - Highlight mismatches and exceptions (e.g., ThreatLocker device missing in Ninja).
 
-## Current Version (v1.28.0)
+## Current Version (v1.29.0)
 
-Security hardening release with comprehensive server security audit and remediation. Implemented SSH hardening (disabled password authentication, root login, X11 forwarding), restricted SSH/API access to authorized subnets only via UFW firewall, and secured PostgreSQL pg_hba.conf to limit database connections to trusted networks. All changes documented in SECURITY_AUDIT_LOG.md.
+Secrets management consolidation and automatic API reload. Reduced local `.env` to only contain `DB_DSN`, with all API credentials now sourced from centrally managed `/opt/shared-secrets/api-secrets.env`. Updated all daily collector scripts to source from shared secrets. Added systemd path monitor (`es-secrets-monitor.path`) that automatically restarts the API server when secrets file changes, enabling seamless credential rotation from the master server.
 
 ## Current State
 

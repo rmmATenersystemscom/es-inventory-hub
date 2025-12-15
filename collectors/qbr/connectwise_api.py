@@ -37,6 +37,9 @@ class ConnectWiseAPI:
             timeout: Request timeout in seconds (default: 120)
         """
         self.server = server or os.environ.get('CONNECTWISE_SERVER')
+        # Ensure server has https:// scheme
+        if self.server and not self.server.startswith(('http://', 'https://')):
+            self.server = f'https://{self.server}'
         self.company_id = company_id or os.environ.get('CONNECTWISE_COMPANY_ID')
         self.public_key = public_key or os.environ.get('CONNECTWISE_PUBLIC_KEY')
         self.private_key = private_key or os.environ.get('CONNECTWISE_PRIVATE_KEY')

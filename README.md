@@ -1,6 +1,6 @@
 # ES Inventory Hub
 
-**Current Version**: v1.29.0 (stable)
+**Current Version**: v1.29.1 (stable)
 
 A centralized inventory management system for collecting and storing data from various sources including Ninja and ThreatLocker.
 
@@ -44,9 +44,9 @@ If ES Inventory Hub needs dashboard-related changes, put your request in a text 
 - Provide dashboards for analysis (seat counts, spares, billing vs non-billing, etc.).
 - Highlight mismatches and exceptions (e.g., ThreatLocker device missing in Ninja).
 
-## Current Version (v1.29.0)
+## Current Version (v1.29.1)
 
-Secrets management consolidation and automatic API reload. Reduced local `.env` to only contain `DB_DSN`, with all API credentials now sourced from centrally managed `/opt/shared-secrets/api-secrets.env`. Updated all daily collector scripts to source from shared secrets. Added systemd path monitor (`es-secrets-monitor.path`) that automatically restarts the API server when secrets file changes, enabling seamless credential rotation from the master server.
+QBR collector fixes for secrets consolidation compatibility. Added shared secrets environment file to QBR systemd service. Fixed ConnectWise API client to auto-add `https://` scheme when server hostname is provided without protocol prefix.
 
 ## Current State
 

@@ -11,6 +11,7 @@ WorkingDirectory=/opt/es-inventory-hub
 
 # Environment variables
 EnvironmentFile=/opt/es-inventory-hub/.env
+EnvironmentFile=/opt/shared-secrets/api-secrets.env
 
 # Activate venv and run collector
 ExecStart=/opt/es-inventory-hub/.venv/bin/python3 -m collectors.qbr.collect_all

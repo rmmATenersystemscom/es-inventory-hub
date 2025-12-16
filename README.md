@@ -1,6 +1,6 @@
 # ES Inventory Hub
 
-**Current Version**: v1.29.1 (stable)
+**Current Version**: v1.30.0 (stable)
 
 A centralized inventory management system for collecting and storing data from various sources including Ninja and ThreatLocker.
 
@@ -44,9 +44,9 @@ If ES Inventory Hub needs dashboard-related changes, put your request in a text 
 - Provide dashboards for analysis (seat counts, spares, billing vs non-billing, etc.).
 - Highlight mismatches and exceptions (e.g., ThreatLocker device missing in Ninja).
 
-## Current Version (v1.29.1)
+## Current Version (v1.30.0)
 
-QBR collector fixes for secrets consolidation compatibility. Added shared secrets environment file to QBR systemd service. Fixed ConnectWise API client to auto-add `https://` scheme when server hostname is provided without protocol prefix.
+TenantSweep API and cross-subdomain authentication. Added new TenantSweep API with 8 endpoints for M365 tenant security audit storage and retrieval. Enabled cross-subdomain session cookies for dashboard integration. Added `/prompts/` endpoint for AI-to-AI communication. Fixed ThreatLocker and Ninja collectors missing API credentials (load_dotenv paths).
 
 ## Current State
 

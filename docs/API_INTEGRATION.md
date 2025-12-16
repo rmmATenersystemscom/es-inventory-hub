@@ -2,7 +2,7 @@
 
 **Complete API reference for Dashboard AI to integrate with the Database AI's ES Inventory Hub system.**
 
-**Last Updated**: December 15, 2025
+**Last Updated**: December 16, 2025
 **ES Inventory Hub Version**: v1.30.0
 **Status**: ✅ **FULLY OPERATIONAL**
 
@@ -1162,5 +1162,5 @@ The API now automatically detects and cleans up stale running jobs:
 ---
 
 **Version**: v1.30.0
-**Last Updated**: December 15, 2025
+**Last Updated**: December 16, 2025 13:38 UTC
 **Maintainer**: ES Inventory Hub Team

@@ -21,7 +21,7 @@ import io
 from datetime import date, datetime, timedelta
 from typing import Dict, List, Any, Optional
 
-from flask import Flask, jsonify, request, Response
+from flask import Flask, jsonify, request, Response, send_from_directory
 from flask_cors import CORS
 from flask_session import Session
 from sqlalchemy import create_engine, text
@@ -62,6 +62,7 @@ app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=int(os.getenv('SESSIO
 app.config['SESSION_COOKIE_SECURE'] = True  # HTTPS only
 app.config['SESSION_COOKIE_HTTPONLY'] = True  # JavaScript can't access
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # CSRF protection
+app.config['SESSION_COOKIE_DOMAIN'] = '.enersystems.com'  # Share across subdomains
 Session(app)
 
 # Import and register authentication blueprint
@@ -71,6 +72,39 @@ app.register_blueprint(auth_bp)
 # Import and register QBR API blueprint
 from api.qbr_api import qbr_api
 app.register_blueprint(qbr_api)
+
+# Import and register TenantSweep API blueprint
+from api.tenantsweep_api import tenantsweep_api
+app.register_blueprint(tenantsweep_api)
+
+# Prompts directory for AI-to-AI communication
+PROMPTS_DIR = '/opt/es-inventory-hub/prompts'
+
+
+@app.route('/prompts/')
+def list_prompts():
+    """List all prompt files in the prompts directory."""
+    try:
+        files = []
+        for f in os.listdir(PROMPTS_DIR):
+            filepath = os.path.join(PROMPTS_DIR, f)
+            if os.path.isfile(filepath):
+                stat = os.stat(filepath)
+                files.append({
+                    'name': f,
+                    'size': stat.st_size,
+                    'modified': datetime.fromtimestamp(stat.st_mtime).isoformat()
+                })
+        return jsonify({'success': True, 'files': files})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/prompts/<path:filename>')
+def serve_prompt(filename):
+    """Serve a specific prompt file."""
+    return send_from_directory(PROMPTS_DIR, filename)
+
 
 def _format_date_string(date_str):
     """Format date string to consistent ISO 8601 format without microseconds"""

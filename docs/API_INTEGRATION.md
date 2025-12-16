@@ -2,8 +2,8 @@
 
 **Complete API reference for Dashboard AI to integrate with the Database AI's ES Inventory Hub system.**
 
-**Last Updated**: November 25, 2025
-**ES Inventory Hub Version**: v1.25.0
+**Last Updated**: December 15, 2025
+**ES Inventory Hub Version**: v1.30.0
 **Status**: ✅ **FULLY OPERATIONAL**
 
 > **📅 API Behavior Update (October 9, 2025)**: All status and exception endpoints now return **latest data only** (current date) instead of historical ranges. This ensures consistent reporting and prevents data accumulation issues.
@@ -169,6 +169,42 @@ POST /api/qbr/thresholds               # Update threshold definitions
 
 # Manual Data Entry
 POST /api/qbr/metrics/manual           # Manually enter or update metrics
+```
+
+### **TenantSweep (M365 Security Audits)** 🔐
+**⚠️ Authentication Required**: All TenantSweep endpoints require Microsoft 365 OAuth authentication.
+
+```bash
+# Create Audit Run
+POST /api/tenantsweep/audits           # Create new audit run
+    # Body: {"tenant_name": "ACME", "tenant_id": "abc-123", "initiated_by": "user@company.com"}
+
+# Update Audit Run
+PATCH /api/tenantsweep/audits/<id>     # Update audit (complete/fail)
+    # Body: {"status": "completed", "summary": {"Critical": 1, "High": 2}}
+
+# Add Findings
+POST /api/tenantsweep/audits/<id>/findings      # Add single finding
+POST /api/tenantsweep/audits/<id>/findings/bulk # Bulk add findings
+    # Body: {"findings": [{...}, {...}]}
+
+# Retrieve Audits
+GET /api/tenantsweep/audits/<id>       # Get audit with findings
+    ?include_findings=true             # Optional: include findings (default: true)
+    &severity=Critical                 # Optional: filter by severity
+
+GET /api/tenantsweep/audits            # List audits with filtering
+    ?tenant_name=ACME                  # Optional: filter by tenant name (partial match)
+    &status=completed                  # Optional: filter by status
+    &limit=50                          # Optional: max results (default: 50, max: 200)
+    &offset=0                          # Optional: pagination offset
+
+# Get Latest Audit for Tenant
+GET /api/tenantsweep/tenants/<tenant_name>/latest-audit
+
+# Export to CSV
+GET /api/tenantsweep/audits/<id>/export/csv
+    ?severity=High                     # Optional: filter by severity
 ```
 
 ---
@@ -501,6 +537,123 @@ async function initQBRDashboard() {
 - Device snapshot data available from **October 8, 2025** onwards
 - Use last day of month for historical queries (e.g., period=2025-10 uses Oct 31 data)
 
+### **✅ 6. TENANTSWEEP DASHBOARD (🔒 M365 Security Audits)**
+
+**API Endpoints:**
+- `POST /api/tenantsweep/audits` - Create new audit run
+- `PATCH /api/tenantsweep/audits/<id>` - Update audit (complete/fail)
+- `POST /api/tenantsweep/audits/<id>/findings` - Add single finding
+- `POST /api/tenantsweep/audits/<id>/findings/bulk` - Bulk add findings
+- `GET /api/tenantsweep/audits/<id>` - Get audit with findings
+- `GET /api/tenantsweep/audits` - List audits
+- `GET /api/tenantsweep/tenants/<tenant_name>/latest-audit` - Get latest audit for tenant
+- `GET /api/tenantsweep/audits/<id>/export/csv` - Export findings to CSV
+
+**Features:**
+- ✅ Create and track M365 tenant security audit runs
+- ✅ Record individual security check findings with severity levels
+- ✅ Bulk import findings from security scans
+- ✅ Filter audits by tenant, status, and severity
+- ✅ Export findings to CSV for reporting
+
+**⚠️ CRITICAL: Authentication Required**
+All TenantSweep endpoints require Microsoft 365 OAuth authentication (same as QBR).
+
+**Usage Example:**
+```javascript
+// 1. Create a new audit run
+async function createAudit(tenantName, tenantId, initiatedBy) {
+    const response = await fetch('https://db-api.enersystems.com:5400/api/tenantsweep/audits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+            tenant_name: tenantName,
+            tenant_id: tenantId,
+            initiated_by: initiatedBy
+        })
+    });
+    return await response.json();
+}
+
+// 2. Bulk add findings
+async function bulkAddFindings(auditId, findings) {
+    const response = await fetch(
+        `https://db-api.enersystems.com:5400/api/tenantsweep/audits/${auditId}/findings/bulk`,
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ findings })
+        }
+    );
+    return await response.json();
+}
+
+// 3. Complete the audit with summary
+async function completeAudit(auditId, summary) {
+    const response = await fetch(
+        `https://db-api.enersystems.com:5400/api/tenantsweep/audits/${auditId}`,
+        {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+                status: 'completed',
+                summary: summary  // {"Critical": 1, "High": 2, "Medium": 3}
+            })
+        }
+    );
+    return await response.json();
+}
+
+// 4. Get latest audit for a tenant
+async function getLatestAudit(tenantName) {
+    const encodedName = encodeURIComponent(tenantName);
+    const response = await fetch(
+        `https://db-api.enersystems.com:5400/api/tenantsweep/tenants/${encodedName}/latest-audit`,
+        { credentials: 'include' }
+    );
+    return await response.json();
+}
+
+// Example: Full audit workflow
+async function runTenantAudit(tenantName, tenantId, findings) {
+    // Create audit
+    const auditResult = await createAudit(tenantName, tenantId, 'user@enersystems.com');
+    if (!auditResult.success) throw new Error(auditResult.error.message);
+
+    const auditId = auditResult.data.id;
+
+    // Add findings
+    await bulkAddFindings(auditId, findings);
+
+    // Calculate summary
+    const summary = findings.reduce((acc, f) => {
+        acc[f.severity] = (acc[f.severity] || 0) + 1;
+        return acc;
+    }, {});
+
+    // Complete audit
+    await completeAudit(auditId, summary);
+
+    console.log(`Audit ${auditId} completed for ${tenantName}`);
+}
+```
+
+**Severity Levels:**
+- `Critical` - Immediate action required
+- `High` - Should be addressed soon
+- `Medium` - Plan to address
+- `Low` - Minor concern
+- `Info` - Informational only
+
+**Finding Statuses:**
+- `pass` - Check passed
+- `fail` - Check failed
+- `warning` - Potential issue
+- `error` - Check could not complete
+
 ---
 
 ## 📋 **RESPONSE EXAMPLES**
@@ -756,6 +909,87 @@ async function initQBRDashboard() {
 }
 ```
 
+### **TenantSweep Create Audit Response**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "tenant_name": "ACME Corp",
+    "tenant_id": "abc-123-def-456",
+    "status": "running",
+    "started_at": "2025-12-15T10:00:00Z",
+    "completed_at": null,
+    "summary": null,
+    "error_message": null,
+    "initiated_by": "user@enersystems.com",
+    "created_at": "2025-12-15T10:00:00Z"
+  }
+}
+```
+
+### **TenantSweep Get Audit with Findings Response**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "tenant_name": "ACME Corp",
+    "tenant_id": "abc-123-def-456",
+    "status": "completed",
+    "started_at": "2025-12-15T10:00:00Z",
+    "completed_at": "2025-12-15T10:02:30Z",
+    "summary": {"Critical": 1, "High": 2, "Medium": 5},
+    "error_message": null,
+    "initiated_by": "user@enersystems.com",
+    "created_at": "2025-12-15T10:00:00Z",
+    "findings": [
+      {
+        "id": 1,
+        "audit_id": 1,
+        "check_id": "MFA_ENFORCEMENT",
+        "check_name": "MFA Enforcement",
+        "severity": "Critical",
+        "status": "fail",
+        "current_value": "MFA not enforced for 45 users",
+        "expected_value": "MFA required for all users",
+        "details": {"users_without_mfa": 45, "total_users": 100},
+        "recommendation": "Enable MFA via Conditional Access policy",
+        "created_at": "2025-12-15T10:01:00Z"
+      }
+    ],
+    "findings_count": 8,
+    "severity_summary": {"Critical": 1, "High": 2, "Medium": 5}
+  }
+}
+```
+
+### **TenantSweep List Audits Response**
+```json
+{
+  "success": true,
+  "data": {
+    "audits": [
+      {
+        "id": 1,
+        "tenant_name": "ACME Corp",
+        "tenant_id": "abc-123-def-456",
+        "status": "completed",
+        "started_at": "2025-12-15T10:00:00Z",
+        "completed_at": "2025-12-15T10:02:30Z",
+        "summary": {"Critical": 1, "High": 2},
+        "error_message": null,
+        "initiated_by": "user@enersystems.com",
+        "created_at": "2025-12-15T10:00:00Z"
+      }
+    ],
+    "total_count": 1,
+    "limit": 50,
+    "offset": 0
+  }
+}
+```
+
 ---
 
 ## 🔧 **TESTING COMMANDS**
@@ -836,6 +1070,46 @@ curl --cookie "session=YOUR_SESSION_COOKIE" \
 3. Extract session cookie from browser dev tools
 4. Use cookie in curl commands above
 
+### **TenantSweep Endpoints (Requires Authentication)**
+```bash
+# Create an audit
+curl --cookie "session=YOUR_SESSION_COOKIE" \
+  -X POST https://db-api.enersystems.com:5400/api/tenantsweep/audits \
+  -H "Content-Type: application/json" \
+  -d '{"tenant_name": "ACME Corp", "tenant_id": "abc-123-def", "initiated_by": "user@enersystems.com"}'
+
+# Add a finding to audit ID 1
+curl --cookie "session=YOUR_SESSION_COOKIE" \
+  -X POST https://db-api.enersystems.com:5400/api/tenantsweep/audits/1/findings \
+  -H "Content-Type: application/json" \
+  -d '{"check_id": "MFA_ENFORCEMENT", "check_name": "MFA Enforcement", "severity": "Critical", "status": "fail", "current_value": "MFA not enforced", "expected_value": "MFA required for all users"}'
+
+# Complete an audit
+curl --cookie "session=YOUR_SESSION_COOKIE" \
+  -X PATCH https://db-api.enersystems.com:5400/api/tenantsweep/audits/1 \
+  -H "Content-Type: application/json" \
+  -d '{"status": "completed", "summary": {"Critical": 1, "High": 2}}'
+
+# Get audit with findings
+curl --cookie "session=YOUR_SESSION_COOKIE" \
+  "https://db-api.enersystems.com:5400/api/tenantsweep/audits/1"
+
+# List all audits
+curl --cookie "session=YOUR_SESSION_COOKIE" \
+  "https://db-api.enersystems.com:5400/api/tenantsweep/audits?limit=10"
+
+# Get latest audit for tenant
+curl --cookie "session=YOUR_SESSION_COOKIE" \
+  "https://db-api.enersystems.com:5400/api/tenantsweep/tenants/ACME%20Corp/latest-audit"
+
+# Export findings to CSV
+curl --cookie "session=YOUR_SESSION_COOKIE" \
+  "https://db-api.enersystems.com:5400/api/tenantsweep/audits/1/export/csv" \
+  -o audit_findings.csv
+```
+
+**Note**: TenantSweep endpoints use the same Microsoft 365 OAuth authentication as QBR endpoints.
+
 ---
 
 ## 🚨 **CRITICAL NOTES FOR DASHBOARD AI**
@@ -887,6 +1161,6 @@ The API now automatically detects and cleans up stale running jobs:
 
 ---
 
-**Version**: v1.24.0
-**Last Updated**: November 25, 2025 22:30 UTC
+**Version**: v1.30.0
+**Last Updated**: December 15, 2025
 **Maintainer**: ES Inventory Hub Team

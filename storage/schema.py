@@ -751,3 +751,64 @@ class VeeamSnapshot(Base):
         Index('idx_veeam_snapshot_company_uid', 'company_uid'),
         Index('idx_veeam_snapshot_org_name', 'organization_name'),
     )
+
+
+# ============================================================================
+# TenantSweep Tables - M365 Security Audit Results
+# ============================================================================
+
+class TenantSweepAudit(Base):
+    """TenantSweep audit table - stores M365 tenant security audit run metadata"""
+    __tablename__ = 'tenant_sweep_audits'
+
+    id = Column(Integer, primary_key=True)
+    tenant_name = Column(String(255), nullable=False)
+    tenant_id = Column(String(255), nullable=False)  # Azure AD tenant ID (GUID)
+    status = Column(String(50), nullable=False, server_default='running')  # running, completed, failed
+    started_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default='CURRENT_TIMESTAMP')
+    completed_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    summary = Column(JSONB, nullable=True)  # Counts per severity: {"Critical": 1, "High": 2, ...}
+    error_message = Column(Text, nullable=True)
+    initiated_by = Column(String(255), nullable=True)  # User email who ran audit
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default='CURRENT_TIMESTAMP')
+
+    # Relationships
+    findings = relationship("TenantSweepFinding", back_populates="audit", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index('idx_tenant_sweep_audits_tenant_name', 'tenant_name'),
+        Index('idx_tenant_sweep_audits_tenant_id', 'tenant_id'),
+        Index('idx_tenant_sweep_audits_status', 'status'),
+        Index('idx_tenant_sweep_audits_started_at', 'started_at'),
+        CheckConstraint("status IN ('running', 'completed', 'failed')", name='chk_tenant_sweep_audit_status'),
+    )
+
+
+class TenantSweepFinding(Base):
+    """TenantSweep finding table - stores individual security check results"""
+    __tablename__ = 'tenant_sweep_findings'
+
+    id = Column(Integer, primary_key=True)
+    audit_id = Column(Integer, ForeignKey('tenant_sweep_audits.id', ondelete='CASCADE'), nullable=False)
+    check_id = Column(String(100), nullable=False)  # e.g., 'MFA_ENFORCEMENT'
+    check_name = Column(String(255), nullable=False)  # Human-readable name
+    severity = Column(String(20), nullable=False)  # Critical, High, Medium, Low, Info
+    status = Column(String(50), nullable=False)  # pass, fail, warning, error
+    current_value = Column(Text, nullable=True)  # What was found
+    expected_value = Column(Text, nullable=True)  # What's recommended
+    details = Column(JSONB, nullable=True)  # Additional context
+    recommendation = Column(Text, nullable=True)  # Remediation guidance
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default='CURRENT_TIMESTAMP')
+
+    # Relationships
+    audit = relationship("TenantSweepAudit", back_populates="findings")
+
+    __table_args__ = (
+        Index('idx_tenant_sweep_findings_audit_id', 'audit_id'),
+        Index('idx_tenant_sweep_findings_check_id', 'check_id'),
+        Index('idx_tenant_sweep_findings_severity', 'severity'),
+        Index('idx_tenant_sweep_findings_status', 'status'),
+        Index('idx_tenant_sweep_findings_audit_severity', 'audit_id', 'severity'),
+        CheckConstraint("severity IN ('Critical', 'High', 'Medium', 'Low', 'Info')", name='chk_tenant_sweep_finding_severity'),
+        CheckConstraint("status IN ('pass', 'fail', 'warning', 'error')", name='chk_tenant_sweep_finding_status'),
+    )

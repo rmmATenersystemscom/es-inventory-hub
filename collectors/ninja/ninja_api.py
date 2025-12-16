@@ -5,6 +5,11 @@ import requests
 import time
 from typing import Dict, Any, List, Optional
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Load environment variables from shared secrets and project .env
+load_dotenv('/opt/shared-secrets/api-secrets.env')
+load_dotenv('/opt/es-inventory-hub/.env')
 
 
 class NinjaRMMAPI:

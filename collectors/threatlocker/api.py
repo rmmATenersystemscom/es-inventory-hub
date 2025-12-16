@@ -7,8 +7,9 @@ from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
 from .log import get_logger
 
-# Load environment variables from .env file
-load_dotenv()
+# Load environment variables from shared secrets and project .env
+load_dotenv('/opt/shared-secrets/api-secrets.env')
+load_dotenv('/opt/es-inventory-hub/.env')
 
 
 def fetch_devices(limit: Optional[int] = None, since: Optional[str] = None) -> List[Dict[str, Any]]:

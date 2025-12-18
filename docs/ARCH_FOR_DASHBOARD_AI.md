@@ -211,6 +211,6 @@ Use lowercase with hyphens:
 
 ---
 
-**Version**: v1.31.0
-**Last Updated**: December 18, 2025 17:30 UTC
+**Version**: v1.32.0
+**Last Updated**: December 18, 2025 22:10 UTC
 **Maintainer**: ES Inventory Hub Team

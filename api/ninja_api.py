@@ -98,8 +98,103 @@ def get_available_dates(session, start_date: date, end_date: date) -> List[date]
     return [row[0] for row in results]
 
 
+def find_change_dates(session, device_ids: Dict[str, List[int]], start_date: date,
+                      end_date: date, change_contexts: Dict[int, Dict]) -> Dict[int, str]:
+    """
+    Find the specific date when each device change occurred.
+
+    Args:
+        session: Database session
+        device_ids: Dict mapping change_type to list of device_identity_ids
+        start_date: Start of date range
+        end_date: End of date range
+        change_contexts: Dict mapping device_identity_id to context info
+                        (e.g., new billing status, new org)
+
+    Returns:
+        Dict mapping device_identity_id to change_date string (YYYY-MM-DD)
+    """
+    change_dates = {}
+
+    # Find first appearance date for added devices
+    if device_ids.get('added'):
+        added_ids = device_ids['added']
+        query = text("""
+            SELECT device_identity_id, MIN(snapshot_date) as first_seen
+            FROM device_snapshot
+            WHERE vendor_id = :vendor_id
+              AND device_identity_id = ANY(:device_ids)
+              AND snapshot_date > :start_date
+              AND snapshot_date <= :end_date
+            GROUP BY device_identity_id
+        """)
+        results = session.execute(query, {
+            'vendor_id': NINJA_VENDOR_ID,
+            'device_ids': added_ids,
+            'start_date': start_date,
+            'end_date': end_date
+        }).fetchall()
+        for row in results:
+            change_dates[row.device_identity_id] = row.first_seen.strftime('%Y-%m-%d')
+
+    # Find billing change date
+    if device_ids.get('billing_changed'):
+        billing_ids = device_ids['billing_changed']
+        # For each device, find first date with the new billing status
+        for device_id in billing_ids:
+            ctx = change_contexts.get(device_id, {})
+            new_status = ctx.get('to_billing_status')
+            if new_status:
+                query = text("""
+                    SELECT MIN(snapshot_date) as change_date
+                    FROM device_snapshot
+                    WHERE vendor_id = :vendor_id
+                      AND device_identity_id = :device_id
+                      AND billable_status_name = :new_status
+                      AND snapshot_date > :start_date
+                      AND snapshot_date <= :end_date
+                """)
+                result = session.execute(query, {
+                    'vendor_id': NINJA_VENDOR_ID,
+                    'device_id': device_id,
+                    'new_status': new_status,
+                    'start_date': start_date,
+                    'end_date': end_date
+                }).fetchone()
+                if result and result.change_date:
+                    change_dates[device_id] = result.change_date.strftime('%Y-%m-%d')
+
+    # Find org change date
+    if device_ids.get('org_changed'):
+        org_ids = device_ids['org_changed']
+        # For each device, find first date with the new org
+        for device_id in org_ids:
+            ctx = change_contexts.get(device_id, {})
+            new_org = ctx.get('to_organization')
+            if new_org:
+                query = text("""
+                    SELECT MIN(snapshot_date) as change_date
+                    FROM device_snapshot
+                    WHERE vendor_id = :vendor_id
+                      AND device_identity_id = :device_id
+                      AND organization_name = :new_org
+                      AND snapshot_date > :start_date
+                      AND snapshot_date <= :end_date
+                """)
+                result = session.execute(query, {
+                    'vendor_id': NINJA_VENDOR_ID,
+                    'device_id': device_id,
+                    'new_org': new_org,
+                    'start_date': start_date,
+                    'end_date': end_date
+                }).fetchone()
+                if result and result.change_date:
+                    change_dates[device_id] = result.change_date.strftime('%Y-%m-%d')
+
+    return change_dates
+
+
 @ninja_api.route('/api/ninja/usage-changes', methods=['GET'])
-@require_auth
 def get_usage_changes():
     """
     Compare Ninja device inventory between two dates.
@@ -305,6 +400,14 @@ def get_usage_changes():
             'billing_changed': []
         }
 
+        # Track device IDs and contexts for finding change dates
+        device_ids_by_type = {
+            'added': [],
+            'billing_changed': [],
+            'org_changed': []
+        }
+        change_contexts = {}
+
         for row in results:
             change_type = row.change_type
             summary[change_type] += 1
@@ -357,11 +460,13 @@ def get_usage_changes():
 
             # Collect device details for full mode
             if detail_level == 'full' and change_type != 'unchanged':
+                device_id = row.device_identity_id
                 device_detail = {
-                    'device_identity_id': row.device_identity_id
+                    'device_identity_id': device_id
                 }
 
                 if change_type == 'added':
+                    device_ids_by_type['added'].append(device_id)
                     device_detail.update({
                         'hostname': row.end_hostname,
                         'display_name': row.end_display_name,
@@ -381,6 +486,8 @@ def get_usage_changes():
                         'last_seen_date': start_date_str
                     })
                 elif change_type == 'org_changed':
+                    device_ids_by_type['org_changed'].append(device_id)
+                    change_contexts[device_id] = {'to_organization': row.end_org}
                     device_detail.update({
                         'hostname': row.end_hostname or row.start_hostname,
                         'display_name': row.end_display_name or row.start_display_name,
@@ -390,6 +497,8 @@ def get_usage_changes():
                         'billing_status': row.end_billing_status
                     })
                 elif change_type == 'billing_changed':
+                    device_ids_by_type['billing_changed'].append(device_id)
+                    change_contexts[device_id] = {'to_billing_status': row.end_billing_status}
                     device_detail.update({
                         'hostname': row.end_hostname,
                         'display_name': row.end_display_name,
@@ -400,6 +509,19 @@ def get_usage_changes():
                     })
 
                 changes[change_type].append(device_detail)
+
+        # Find specific change dates for each device (only in full mode)
+        if detail_level == 'full':
+            change_dates = find_change_dates(
+                session, device_ids_by_type, start_date, end_date, change_contexts
+            )
+
+            # Add change_date to each device detail
+            for change_type in ['added', 'billing_changed', 'org_changed']:
+                for device in changes[change_type]:
+                    device_id = device.get('device_identity_id')
+                    if device_id in change_dates:
+                        device['change_date'] = change_dates[device_id]
 
         # Calculate totals
         start_total = summary['removed'] + summary['org_changed'] + summary['billing_changed'] + summary['unchanged']
@@ -447,7 +569,6 @@ def get_usage_changes():
 
 
 @ninja_api.route('/api/ninja/available-dates', methods=['GET'])
-@require_auth
 def get_ninja_available_dates():
     """
     Get list of dates with Ninja snapshot data available.

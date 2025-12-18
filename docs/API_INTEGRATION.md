@@ -129,6 +129,20 @@ GET /api/windows-11-24h2/compatible    # List of compatible devices with passed 
 POST /api/windows-11-24h2/run          # Manually trigger Windows 11 24H2 assessment
 ```
 
+### **Ninja Usage Changes** 🔐
+**⚠️ Authentication Required**: Ninja API endpoints require Microsoft 365 OAuth authentication.
+
+```bash
+GET /api/ninja/usage-changes           # Compare device inventory between two dates
+    ?start_date=YYYY-MM-DD             # Required: Baseline date
+    &end_date=YYYY-MM-DD               # Required: Comparison date
+    &detail_level=summary              # Optional: "summary" (default) or "full"
+    &organization_name=Acme            # Optional: Filter by organization
+
+GET /api/ninja/available-dates         # Get dates with Ninja snapshot data available
+    ?days=65                           # Optional: Days to look back (default: 65)
+```
+
 ### **QBR (Quarterly Business Review) Metrics** 🔐
 **⚠️ Authentication Required**: Most QBR endpoints require Microsoft 365 OAuth authentication.
 **Exception**: `/api/qbr/metrics/devices-by-client` is **public** (no auth required) - seat/endpoint data is not sensitive.
@@ -654,6 +668,110 @@ async function runTenantAudit(tenantName, tenantId, findings) {
 - `warning` - Potential issue
 - `error` - Check could not complete
 
+### **✅ 7. NINJA USAGE CHANGES DASHBOARD (📊 Device Billing Changes)**
+
+**API Endpoints:**
+- `GET /api/ninja/usage-changes` - Compare device inventory between two dates
+- `GET /api/ninja/available-dates` - Get dates with Ninja snapshot data available
+
+**Features:**
+- ✅ Compare device counts between any two dates
+- ✅ Identify newly added devices
+- ✅ Identify removed devices
+- ✅ Track organization reassignments
+- ✅ Monitor billing status changes (billable ↔ spare)
+- ✅ Per-organization breakdown
+- ✅ Summary counts and device-level details
+
+**⚠️ CRITICAL: Authentication Required**
+Ninja API endpoints require Microsoft 365 OAuth authentication (same as QBR/TenantSweep).
+
+**Usage Example:**
+```javascript
+// 1. Get available dates for date picker
+async function getAvailableDates(days = 65) {
+    const response = await fetch(
+        `https://db-api.enersystems.com:5400/api/ninja/available-dates?days=${days}`,
+        { credentials: 'include' }
+    );
+    return await response.json();
+}
+
+// 2. Get usage changes between two dates (summary)
+async function getUsageChangesSummary(startDate, endDate) {
+    const params = new URLSearchParams({
+        start_date: startDate,
+        end_date: endDate,
+        detail_level: 'summary'
+    });
+
+    const response = await fetch(
+        `https://db-api.enersystems.com:5400/api/ninja/usage-changes?${params}`,
+        { credentials: 'include' }
+    );
+
+    if (response.status === 401) {
+        // Session expired - redirect to login
+        window.location.href = 'https://db-api.enersystems.com:5400/api/auth/microsoft/login';
+        return null;
+    }
+
+    return await response.json();
+}
+
+// 3. Get detailed device-level changes
+async function getUsageChangesDetail(startDate, endDate, organizationName = null) {
+    const params = new URLSearchParams({
+        start_date: startDate,
+        end_date: endDate,
+        detail_level: 'full'
+    });
+
+    if (organizationName) {
+        params.append('organization_name', organizationName);
+    }
+
+    const response = await fetch(
+        `https://db-api.enersystems.com:5400/api/ninja/usage-changes?${params}`,
+        { credentials: 'include' }
+    );
+
+    return await response.json();
+}
+
+// Example: Monthly comparison dashboard
+async function loadMonthlyComparison() {
+    // Get available dates first
+    const datesData = await getAvailableDates();
+    if (!datesData.success) return;
+
+    // Use first and last dates for comparison
+    const dates = datesData.data.dates;
+    const startDate = dates[0];  // Oldest
+    const endDate = dates[dates.length - 1];  // Most recent
+
+    // Get summary
+    const summary = await getUsageChangesSummary(startDate, endDate);
+    if (summary && summary.success) {
+        console.log(`Net change: ${summary.data.summary.net_change} devices`);
+        console.log(`Added: ${summary.data.summary.changes.added}`);
+        console.log(`Removed: ${summary.data.summary.changes.removed}`);
+        console.log(`Org changes: ${summary.data.summary.changes.org_changed}`);
+        console.log(`Billing changes: ${summary.data.summary.changes.billing_changed}`);
+    }
+}
+```
+
+**Change Types:**
+- `added` - Device exists on end_date but not start_date
+- `removed` - Device exists on start_date but not end_date
+- `org_changed` - Device moved between organizations
+- `billing_changed` - Device changed from billable to spare (or vice versa)
+
+**Data Availability:**
+- Device snapshots retained for **65 days**
+- Use `/api/ninja/available-dates` to verify data availability before querying
+
 ---
 
 ## 📋 **RESPONSE EXAMPLES**
@@ -990,6 +1108,130 @@ async function runTenantAudit(tenantName, tenantId, findings) {
 }
 ```
 
+### **Ninja Usage Changes Response (Summary)**
+```json
+{
+  "success": true,
+  "data": {
+    "start_date": "2025-12-01",
+    "end_date": "2025-12-18",
+    "summary": {
+      "start_total_devices": 1250,
+      "end_total_devices": 1275,
+      "net_change": 25,
+      "changes": {
+        "added": 35,
+        "removed": 10,
+        "org_changed": 5,
+        "billing_changed": 8
+      }
+    },
+    "by_organization": {
+      "Acme Corp": {
+        "start_count": 45,
+        "end_count": 48,
+        "added": 5,
+        "removed": 2,
+        "org_in": 1,
+        "org_out": 0,
+        "billing_changed": 1
+      },
+      "Widget Inc": {
+        "start_count": 32,
+        "end_count": 35,
+        "added": 4,
+        "removed": 1,
+        "org_in": 2,
+        "org_out": 0,
+        "billing_changed": 0
+      }
+    },
+    "metadata": {
+      "vendor_id": 3,
+      "vendor_name": "Ninja",
+      "query_time_ms": 245,
+      "detail_level": "summary",
+      "data_retention_note": "Device-level data available for last 65 days"
+    }
+  }
+}
+```
+
+### **Ninja Usage Changes Response (Full)**
+```json
+{
+  "success": true,
+  "data": {
+    "start_date": "2025-12-01",
+    "end_date": "2025-12-18",
+    "summary": { ... },
+    "by_organization": { ... },
+    "changes": {
+      "added": [
+        {
+          "device_identity_id": 12345,
+          "hostname": "ACME-WKS-042",
+          "display_name": "John Smith Workstation",
+          "organization_name": "Acme Corp",
+          "device_type": "workstation",
+          "billing_status": "billable",
+          "location_name": "Main Office"
+        }
+      ],
+      "removed": [
+        {
+          "device_identity_id": 11234,
+          "hostname": "WIDGET-OLD-PC",
+          "display_name": "Old Workstation",
+          "organization_name": "Widget Inc",
+          "device_type": "workstation",
+          "billing_status": "billable",
+          "last_seen_date": "2025-12-01"
+        }
+      ],
+      "org_changed": [
+        {
+          "device_identity_id": 10987,
+          "hostname": "LAPTOP-TRANSFER",
+          "display_name": "Transferred Laptop",
+          "from_organization": "Acme Corp",
+          "to_organization": "Widget Inc",
+          "device_type": "workstation",
+          "billing_status": "billable"
+        }
+      ],
+      "billing_changed": [
+        {
+          "device_identity_id": 10555,
+          "hostname": "SERVER-SPARE",
+          "display_name": "Server Now Spare",
+          "organization_name": "Acme Corp",
+          "device_type": "server",
+          "from_billing_status": "billable",
+          "to_billing_status": "spare"
+        }
+      ]
+    },
+    "metadata": { ... }
+  }
+}
+```
+
+### **Ninja Available Dates Response**
+```json
+{
+  "success": true,
+  "data": {
+    "dates": ["2025-10-14", "2025-10-15", "2025-10-16", "..."],
+    "count": 65,
+    "range": {
+      "start": "2025-10-14",
+      "end": "2025-12-18"
+    }
+  }
+}
+```
+
 ---
 
 ## 🔧 **TESTING COMMANDS**
@@ -1110,6 +1352,27 @@ curl --cookie "session=YOUR_SESSION_COOKIE" \
 
 **Note**: TenantSweep endpoints use the same Microsoft 365 OAuth authentication as QBR endpoints.
 
+### **Ninja Usage Changes Endpoints (Requires Authentication)**
+```bash
+# Get available dates for date picker
+curl --cookie "session=YOUR_SESSION_COOKIE" \
+  "https://db-api.enersystems.com:5400/api/ninja/available-dates?days=65"
+
+# Get usage changes summary (month-over-month)
+curl --cookie "session=YOUR_SESSION_COOKIE" \
+  "https://db-api.enersystems.com:5400/api/ninja/usage-changes?start_date=2025-12-01&end_date=2025-12-18&detail_level=summary"
+
+# Get usage changes with device details
+curl --cookie "session=YOUR_SESSION_COOKIE" \
+  "https://db-api.enersystems.com:5400/api/ninja/usage-changes?start_date=2025-12-01&end_date=2025-12-18&detail_level=full"
+
+# Get usage changes for specific organization
+curl --cookie "session=YOUR_SESSION_COOKIE" \
+  "https://db-api.enersystems.com:5400/api/ninja/usage-changes?start_date=2025-12-01&end_date=2025-12-18&organization_name=ChillCo%20Inc."
+```
+
+**Note**: Ninja API endpoints use the same Microsoft 365 OAuth authentication as QBR/TenantSweep endpoints.
+
 ---
 
 ## 🚨 **CRITICAL NOTES FOR DASHBOARD AI**
@@ -1161,6 +1424,6 @@ The API now automatically detects and cleans up stale running jobs:
 
 ---
 
-**Version**: v1.30.0
-**Last Updated**: December 16, 2025 13:38 UTC
+**Version**: v1.31.0
+**Last Updated**: December 18, 2025 17:24 UTC
 **Maintainer**: ES Inventory Hub Team

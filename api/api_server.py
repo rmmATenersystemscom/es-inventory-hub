@@ -77,6 +77,14 @@ app.register_blueprint(qbr_api)
 from api.tenantsweep_api import tenantsweep_api
 app.register_blueprint(tenantsweep_api)
 
+# Import and register QBWC API blueprint (QuickBooks Web Connector)
+from api.qbwc_api import qbwc_api
+app.register_blueprint(qbwc_api)
+
+# Import and register Ninja API blueprint
+from api.ninja_api import ninja_api
+app.register_blueprint(ninja_api)
+
 # Prompts directory for AI-to-AI communication
 PROMPTS_DIR = '/opt/es-inventory-hub/prompts'
 

@@ -812,3 +812,116 @@ class TenantSweepFinding(Base):
         CheckConstraint("severity IN ('Critical', 'High', 'Medium', 'Low', 'Info')", name='chk_tenant_sweep_finding_severity'),
         CheckConstraint("status IN ('pass', 'fail', 'warning', 'error')", name='chk_tenant_sweep_finding_status'),
     )
+
+
+# ============================================================================
+# QBWC Tables - QuickBooks Web Connector Integration
+# ============================================================================
+
+class QBWCSyncSession(Base):
+    """QBWC sync session table - tracks active Web Connector sync sessions"""
+    __tablename__ = 'qbwc_sync_sessions'
+
+    id = Column(Integer, primary_key=True)
+    ticket = Column(String(36), nullable=False, unique=True)  # UUID session ticket
+    organization_id = Column(Integer, ForeignKey('organization.id'), nullable=False, server_default='1')
+    company_file = Column(String(500), nullable=True)
+    status = Column(String(20), nullable=False, server_default='active')  # active, completed, failed
+    queries_total = Column(Integer, nullable=True, server_default='0')
+    queries_completed = Column(Integer, nullable=True, server_default='0')
+    current_query_type = Column(String(50), nullable=True)  # 'profit_loss', 'employees'
+    current_period = Column(String(7), nullable=True)  # 'YYYY-MM' format
+    error_message = Column(Text, nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default='CURRENT_TIMESTAMP')
+    completed_at = Column(TIMESTAMP(timezone=True), nullable=True)
+
+    # Relationships
+    organization = relationship("Organization")
+    sync_history = relationship("QBWCSyncHistory", back_populates="session", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index('idx_qbwc_sync_sessions_ticket', 'ticket'),
+        Index('idx_qbwc_sync_sessions_status', 'status'),
+        Index('idx_qbwc_sync_sessions_created_at', 'created_at'),
+        Index('idx_qbwc_sync_sessions_org_id', 'organization_id'),
+        CheckConstraint("status IN ('active', 'completed', 'failed')", name='chk_qbwc_session_status'),
+    )
+
+
+class QBWCAccountMapping(Base):
+    """QBWC account mapping table - maps QuickBooks account names to QBR metric keys"""
+    __tablename__ = 'qbwc_account_mappings'
+
+    id = Column(Integer, primary_key=True)
+    organization_id = Column(Integer, ForeignKey('organization.id'), nullable=False, server_default='1')
+    qbr_metric_key = Column(String(50), nullable=False)  # e.g., 'mrr', 'nrr', 'employee_expense'
+    qb_account_pattern = Column(String(255), nullable=False)  # Pattern to match QB account names
+    match_type = Column(String(20), nullable=False, server_default='contains')  # contains, exact, regex
+    is_active = Column(Boolean, nullable=False, server_default='true')
+    notes = Column(Text, nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default='CURRENT_TIMESTAMP')
+    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default='CURRENT_TIMESTAMP')
+
+    # Relationships
+    organization = relationship("Organization")
+
+    __table_args__ = (
+        UniqueConstraint('organization_id', 'qbr_metric_key', 'qb_account_pattern',
+                        name='uq_qbwc_mapping_org_metric_pattern'),
+        Index('idx_qbwc_account_mappings_org_id', 'organization_id'),
+        Index('idx_qbwc_account_mappings_metric_key', 'qbr_metric_key'),
+        Index('idx_qbwc_account_mappings_is_active', 'is_active'),
+        CheckConstraint("match_type IN ('contains', 'exact', 'regex')", name='chk_qbwc_mapping_match_type'),
+    )
+
+
+class QBWCSyncHistory(Base):
+    """QBWC sync history table - stores raw sync data for debugging and audit"""
+    __tablename__ = 'qbwc_sync_history'
+
+    id = Column(Integer, primary_key=True)
+    session_id = Column(Integer, ForeignKey('qbwc_sync_sessions.id', ondelete='CASCADE'), nullable=True)
+    organization_id = Column(Integer, ForeignKey('organization.id'), nullable=False, server_default='1')
+    sync_type = Column(String(50), nullable=False)  # 'profit_loss', 'employees'
+    period_start = Column(Date, nullable=False)
+    period_end = Column(Date, nullable=False)
+    raw_response = Column(Text, nullable=True)  # Original QBXML response
+    parsed_data = Column(JSONB, nullable=True)  # Parsed account/balance data
+    metrics_updated = Column(Integer, nullable=True, server_default='0')
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default='CURRENT_TIMESTAMP')
+
+    # Relationships
+    session = relationship("QBWCSyncSession", back_populates="sync_history")
+    organization = relationship("Organization")
+
+    __table_args__ = (
+        Index('idx_qbwc_sync_history_session_id', 'session_id'),
+        Index('idx_qbwc_sync_history_org_id', 'organization_id'),
+        Index('idx_qbwc_sync_history_sync_type', 'sync_type'),
+        Index('idx_qbwc_sync_history_org_period', 'organization_id', 'period_start'),
+        Index('idx_qbwc_sync_history_created_at', 'created_at'),
+    )
+
+
+class QBRAuditLog(Base):
+    """QBR audit log table - tracks all access attempts to QBR data for compliance"""
+    __tablename__ = 'qbr_audit_log'
+
+    id = Column(Integer, primary_key=True)
+    timestamp = Column(TIMESTAMP(timezone=True), nullable=False, server_default='CURRENT_TIMESTAMP')
+    user_email = Column(String(255), nullable=False)  # 'anonymous' if not authenticated
+    action = Column(String(50), nullable=False)  # dashboard_view, metrics_request, qbwc_sync, qbwc_auth, export
+    success = Column(Boolean, nullable=False, server_default='true')
+    resource = Column(String(100), nullable=True)  # Specific resource accessed
+    details = Column(JSONB, nullable=True)  # Additional context (period, filters, etc.)
+    ip_address = Column(String(45), nullable=True)  # IPv4 or IPv6
+    user_agent = Column(Text, nullable=True)
+    failure_reason = Column(String(255), nullable=True)  # Why access was denied
+
+    __table_args__ = (
+        Index('idx_qbr_audit_log_timestamp', 'timestamp'),
+        Index('idx_qbr_audit_log_user_email', 'user_email'),
+        Index('idx_qbr_audit_log_action', 'action'),
+        Index('idx_qbr_audit_log_success', 'success'),
+        Index('idx_qbr_audit_log_timestamp_action', 'timestamp', 'action'),
+    )

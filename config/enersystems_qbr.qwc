@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<QBWCXML>
+  <AppName>Enersystems QBR Sync</AppName>
+  <AppID></AppID>
+  <AppURL>https://db-api.enersystems.com:5400/api/qbwc</AppURL>
+  <AppDescription>Syncs financial data from QuickBooks to QBR dashboard</AppDescription>
+  <AppSupport>https://dashboards.enersystems.com</AppSupport>
+  <UserName>enersystems_qbr</UserName>
+  <OwnerID>{596CAFAB-63B5-4763-A3C4-12386756C73A}</OwnerID>
+  <FileID>{585CCDD7-9999-4C2C-B55E-D0C9E0B6A087}</FileID>
+  <QBType>QBFS</QBType>
+  <Scheduler>
+    <RunEveryNMinutes>60</RunEveryNMinutes>
+  </Scheduler>
+  <IsReadOnly>true</IsReadOnly>
+</QBWCXML>

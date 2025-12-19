@@ -85,6 +85,10 @@ app.register_blueprint(qbwc_api)
 from api.ninja_api import ninja_api
 app.register_blueprint(ninja_api)
 
+# Import and register Vade API blueprint
+from api.vade_api import vade_api
+app.register_blueprint(vade_api)
+
 # Prompts directory for AI-to-AI communication
 PROMPTS_DIR = '/opt/es-inventory-hub/prompts'
 

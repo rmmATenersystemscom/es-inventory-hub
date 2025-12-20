@@ -89,6 +89,10 @@ app.register_blueprint(ninja_api)
 from api.vade_api import vade_api
 app.register_blueprint(vade_api)
 
+# Import and register ThreatLocker API blueprint
+from api.threatlocker_api import threatlocker_api
+app.register_blueprint(threatlocker_api)
+
 # Prompts directory for AI-to-AI communication
 PROMPTS_DIR = '/opt/es-inventory-hub/prompts'
 

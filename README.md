@@ -1,6 +1,6 @@
 # ES Inventory Hub
 
-**Current Version**: v1.33.0 (stable)
+**Current Version**: v1.34.0 (stable)
 
 A centralized inventory management system for collecting and storing data from various sources including Ninja and ThreatLocker.
 
@@ -44,9 +44,13 @@ If ES Inventory Hub needs dashboard-related changes, put your request in a text 
 - Provide dashboards for analysis (seat counts, spares, billing vs non-billing, etc.).
 - Highlight mismatches and exceptions (e.g., ThreatLocker device missing in Ninja).
 
-## Current Version (v1.33.0)
+## Current Version (v1.34.0)
 
-Critical bug fix release. Fixed unquoted bcrypt hash in api-secrets.env that broke all scheduled collectors since Dec 17. Added ExecStartPre to API systemd service to auto-fix file permissions on startup, preventing future permission-denied errors. All collectors verified working: Ninja, M365, Veeam, Duo, VadeSecure, ThreatLocker, Dropsuite, Cross-Vendor Checks, QBR, and Win11 24H2 Assessment.
+ThreatLocker Usage Changes API release. Added new API endpoints for ThreatLocker device usage tracking:
+- `GET /api/threatlocker/available-dates` - Returns dates with available ThreatLocker data
+- `GET /api/threatlocker/usage-changes` - Returns device adds/removes by organization
+
+These endpoints mirror the existing Ninja usage changes API pattern, enabling Dashboard AI to track ThreatLocker license changes across all managed organizations.
 
 ## Current State
 

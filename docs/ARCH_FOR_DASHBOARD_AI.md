@@ -192,7 +192,7 @@ Use lowercase with hyphens:
 
 | File | Purpose |
 |------|---------|
-| `ninja-usage-changes-api.md` | Ninja device change tracking API reference |
+| `m365-usage-changes-api.md` | M365 user and license change tracking API reference |
 
 ## Checklist for New Prompts
 
@@ -211,6 +211,6 @@ Use lowercase with hyphens:
 
 ---
 
-**Version**: v1.32.0
-**Last Updated**: December 18, 2025 22:10 UTC
+**Version**: v1.35.0
+**Last Updated**: December 20, 2025 20:49 UTC
 **Maintainer**: ES Inventory Hub Team

@@ -93,6 +93,10 @@ app.register_blueprint(vade_api)
 from api.threatlocker_api import threatlocker_api
 app.register_blueprint(threatlocker_api)
 
+# Import and register M365 API blueprint
+from api.m365_api import m365_api
+app.register_blueprint(m365_api)
+
 # Prompts directory for AI-to-AI communication
 PROMPTS_DIR = '/opt/es-inventory-hub/prompts'
 

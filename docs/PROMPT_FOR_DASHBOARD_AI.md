@@ -192,7 +192,7 @@ Use lowercase with hyphens:
 
 | File | Purpose |
 |------|---------|
-| `m365-usage-changes-api.md` | M365 user and license change tracking API reference |
+| `veeam-usage-changes-api.md` | Veeam cloud storage usage changes API reference |
 
 ## Checklist for New Prompts
 
@@ -211,6 +211,6 @@ Use lowercase with hyphens:
 
 ---
 
-**Version**: v1.35.0
-**Last Updated**: December 20, 2025 20:49 UTC
+**Version**: v1.36.0
+**Last Updated**: December 23, 2025 11:50 UTC
 **Maintainer**: ES Inventory Hub Team

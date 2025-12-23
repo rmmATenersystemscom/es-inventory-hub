@@ -1361,6 +1361,118 @@ curl "https://db-api.enersystems.com:5400/api/ninja/usage-changes?start_date=202
 
 ---
 
+## 📈 **USAGE CHANGES APIs**
+
+The Usage Changes APIs provide consistent endpoints across all vendors to compare data between two snapshot dates. This enables billing review, usage trend analysis, and identification of changes.
+
+### **Available Vendors**
+
+| Vendor | Available Dates Endpoint | Usage Changes Endpoint |
+|--------|-------------------------|------------------------|
+| **Ninja** | `GET /api/ninja/available-dates` | `GET /api/ninja/usage-changes` |
+| **M365** | `GET /api/m365/available-dates` | `GET /api/m365/usage-changes` |
+| **ThreatLocker** | `GET /api/threatlocker/available-dates` | `GET /api/threatlocker/usage-changes` |
+| **Vade** | `GET /api/vade/available-dates` | `GET /api/vade/usage-changes` |
+| **Veeam** | `GET /api/veeam/available-dates` | `GET /api/veeam/usage-changes` |
+
+### **Common Parameters**
+
+All `/available-dates` endpoints:
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `days` | integer | No | 65 | Number of days to look back (max: 365) |
+
+All `/usage-changes` endpoints:
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `start_date` | string | Yes | - | Baseline date (YYYY-MM-DD) |
+| `end_date` | string | Yes | - | Comparison date (YYYY-MM-DD) |
+| `detail_level` | string | No | `full` | `summary` or `full` |
+
+### **Response Structure (Available Dates)**
+
+```json
+{
+  "success": true,
+  "data": {
+    "dates": ["2025-12-01", "2025-12-15", "2025-12-22"],
+    "count": 3,
+    "earliest": "2025-11-01",
+    "latest": "2025-12-22"
+  }
+}
+```
+
+### **Response Structure (Usage Changes)**
+
+```json
+{
+  "success": true,
+  "data": {
+    "period": {
+      "start_date": "2025-12-01",
+      "end_date": "2025-12-22"
+    },
+    "summary": {
+      "total_start": 100,
+      "total_end": 105,
+      "added": 7,
+      "removed": 2,
+      "changed": 15
+    },
+    "changes": {
+      "added": [...],
+      "removed": [...],
+      "increased": [...],
+      "decreased": [...],
+      "unchanged": [...]
+    },
+    "metadata": {
+      "vendor_name": "Veeam",
+      "query_time_ms": 7,
+      "detail_level": "full"
+    }
+  }
+}
+```
+
+### **Vendor-Specific Details**
+
+| Vendor | Tracks | Change Categories |
+|--------|--------|-------------------|
+| **Ninja** | Device count per organization | added, removed, increased, decreased, unchanged |
+| **M365** | User/license count per tenant | added, removed, user_count_changed, license_changed |
+| **ThreatLocker** | Computer count per organization | added, removed, increased, decreased, unchanged |
+| **Vade** | Mailbox usage per customer | added, removed, usage_changed, license_changed |
+| **Veeam** | Cloud storage (GB) per organization | added, removed, increased, decreased, unchanged |
+
+### **Additional ThreatLocker Endpoints**
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/threatlocker/sync-device` | POST | Sync device display name from ThreatLocker |
+| `/api/threatlocker/update-name` | POST | Manually update device display name |
+
+### **Example Requests**
+
+```bash
+# Get available dates for any vendor
+curl -k "https://db-api.enersystems.com:5400/api/veeam/available-dates"
+curl -k "https://db-api.enersystems.com:5400/api/m365/available-dates"
+curl -k "https://db-api.enersystems.com:5400/api/threatlocker/available-dates"
+
+# Compare usage between dates
+curl -k "https://db-api.enersystems.com:5400/api/veeam/usage-changes?start_date=2025-12-01&end_date=2025-12-22"
+curl -k "https://db-api.enersystems.com:5400/api/m365/usage-changes?start_date=2025-12-01&end_date=2025-12-22&detail_level=summary"
+```
+
+### **Detailed Prompt References**
+
+For complete API documentation including field definitions, see the prompt files:
+- `https://db-api.enersystems.com:5400/prompts/veeam-usage-changes-api.md`
+
+---
+
 ## 🚨 **CRITICAL NOTES FOR DASHBOARD AI**
 
 ### **Connection Requirements**
@@ -1410,6 +1522,6 @@ The API now automatically detects and cleans up stale running jobs:
 
 ---
 
-**Version**: v1.35.1
-**Last Updated**: December 23, 2025 10:54 UTC
+**Version**: v1.36.0
+**Last Updated**: December 23, 2025 11:50 UTC
 **Maintainer**: ES Inventory Hub Team

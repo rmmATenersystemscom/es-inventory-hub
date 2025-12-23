@@ -97,6 +97,10 @@ app.register_blueprint(threatlocker_api)
 from api.m365_api import m365_api
 app.register_blueprint(m365_api)
 
+# Import and register Veeam API blueprint
+from api.veeam_api import veeam_api
+app.register_blueprint(veeam_api)
+
 # Prompts directory for AI-to-AI communication
 PROMPTS_DIR = '/opt/es-inventory-hub/prompts'
 

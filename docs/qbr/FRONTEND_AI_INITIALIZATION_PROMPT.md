@@ -1,6 +1,6 @@
 # QBR Dashboard - Frontend AI Initialization Prompt
 
-**Purpose**: Copy this entire file and paste it into the frontend AI session on 192.168.99.245
+**Purpose**: Copy this entire file and paste it into the frontend AI session on 192.168.4.245
 
 ---
 
@@ -53,12 +53,12 @@ All documentation is accessible via the backend API server:
 
 ### Backend Details
 - **API Base URL**: `https://db-api.enersystems.com:5400`
-- **Backend Server**: Ubuntu at 192.168.99.246 (DMZ)
+- **Backend Server**: Ubuntu at 192.168.4.246 (DMZ)
 - **Status**: ✅ Running and tested
 - **Authentication**: ✅ Microsoft 365 OAuth implemented
 
 ### Your Environment
-- **Frontend Server**: Ubuntu at 192.168.99.245 (DMZ) - **You are here**
+- **Frontend Server**: Ubuntu at 192.168.4.245 (DMZ) - **You are here**
 - **Deployment URL**: `https://dashboards.enersystems.com/qbr`
 - **Network**: Internal-only (requires LAN/VPN access for testing)
 
@@ -89,8 +89,8 @@ All documentation is accessible via the backend API server:
 **IMPORTANT**: This is an internal-only system.
 
 - Must be on Enersystems LAN (192.168.5.0/24) or VPN to test
-- Backend resolves to 192.168.99.246 internally
-- Frontend will be served from 192.168.99.245 (this server)
+- Backend resolves to 192.168.4.246 internally
+- Frontend will be served from 192.168.4.245 (this server)
 - Microsoft OAuth requires outbound internet access (already configured)
 
 **Development Options:**

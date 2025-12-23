@@ -21,7 +21,7 @@ pip install -r api/requirements-api.txt
 
 ### **3. Test API**
 ```bash
-# Basic endpoints (from Dashboard AI server 192.168.99.245)
+# Basic endpoints (from Dashboard AI server 192.168.4.245)
 curl https://db-api.enersystems.com:5400/api/health
 curl https://db-api.enersystems.com:5400/api/status
 curl https://db-api.enersystems.com:5400/api/variance-report/latest
@@ -47,7 +47,7 @@ curl https://db-api.enersystems.com:5400/api/windows-11-24h2/compatible
 curl -X POST https://db-api.enersystems.com:5400/api/windows-11-24h2/run
 
 # Alternative IP access (use -k flag for testing)
-curl -k https://192.168.99.246:5400/api/health
+curl -k https://192.168.4.246:5400/api/health
 ```
 
 ---
@@ -85,7 +85,7 @@ curl https://db-api.enersystems.com:5400/api/health
 curl https://db-api.enersystems.com:5400/api/variance-report/latest
 
 # Test with IP address (use -k flag for testing)
-curl -k https://192.168.99.246:5400/api/health
+curl -k https://192.168.4.246:5400/api/health
 ```
 
 ### **Firewall Configuration:**
@@ -175,20 +175,20 @@ cd /opt/es-inventory-hub/ssl
 
 #### **API Server Debugging**
 ```bash
-# Check API server status (from Dashboard AI server 192.168.99.245)
-curl -k https://192.168.99.246:5400/api/health
+# Check API server status (from Dashboard AI server 192.168.4.245)
+curl -k https://192.168.4.246:5400/api/health
 
 # Check API server logs
 sudo journalctl -u es-inventory-api.service --since "1 hour ago"
 
 # Test specific endpoints
-curl -k https://192.168.99.246:5400/api/status
-curl -k https://192.168.99.246:5400/api/variance-report/latest
+curl -k https://192.168.4.246:5400/api/status
+curl -k https://192.168.4.246:5400/api/variance-report/latest
 ```
 
 #### **Database Debugging**
 ```bash
-# Check database connection (from Dashboard AI server 192.168.99.245)
+# Check database connection (from Dashboard AI server 192.168.4.245)
 psql postgresql://username:password@hostname:port/database_name
 
 # Check database status
@@ -200,13 +200,13 @@ sudo journalctl -u postgresql --since "1 hour ago"
 
 #### **Collector Debugging**
 ```bash
-# Test collectors (from Dashboard AI server 192.168.99.245)
-curl -k -X POST https://192.168.99.246:5400/api/collectors/run \
+# Test collectors (from Dashboard AI server 192.168.4.245)
+curl -k -X POST https://192.168.4.246:5400/api/collectors/run \
   -H "Content-Type: application/json" \
   -d '{"collector": "both", "run_cross_vendor": true}'
 
 # Check collector status
-curl -k https://192.168.99.246:5400/api/collectors/status
+curl -k https://192.168.4.246:5400/api/collectors/status
 
 # Check collector logs
 sudo journalctl -u ninja-collector.service -f
@@ -216,10 +216,10 @@ sudo journalctl -u threatlocker-collector.service -f
 #### **Windows 11 24H2 Assessment Debugging**
 ```bash
 # Check assessment status
-curl -k https://192.168.99.246:5400/api/windows-11-24h2/status
+curl -k https://192.168.4.246:5400/api/windows-11-24h2/status
 
 # Run assessment manually
-curl -k -X POST https://192.168.99.246:5400/api/windows-11-24h2/run
+curl -k -X POST https://192.168.4.246:5400/api/windows-11-24h2/run
 
 # Check assessment logs
 sudo journalctl -u windows-11-24h2-assessment.service -f

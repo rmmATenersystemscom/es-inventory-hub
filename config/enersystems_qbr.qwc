@@ -6,8 +6,8 @@
   <AppDescription>Syncs financial data from QuickBooks to QBR dashboard</AppDescription>
   <AppSupport>https://dashboards.enersystems.com</AppSupport>
   <UserName>enersystems_qbr</UserName>
-  <OwnerID>{596CAFAB-63B5-4763-A3C4-12386756C73A}</OwnerID>
-  <FileID>{585CCDD7-9999-4C2C-B55E-D0C9E0B6A087}</FileID>
+  <OwnerID>{C39FE853-94BC-4A4C-9B01-BB8CD28E6C16}</OwnerID>
+  <FileID>{C69521EA-4777-42D4-9FF0-E051FF4FCCDE}</FileID>
   <QBType>QBFS</QBType>
   <Scheduler>
     <RunEveryNMinutes>60</RunEveryNMinutes>

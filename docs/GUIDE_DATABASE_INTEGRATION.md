@@ -73,14 +73,14 @@ Start with: **[Database Schema Guide](./GUIDE_DATABASE_SCHEMA.md)** - Database r
 ### **Option 1: REST API Server (Recommended for Dashboard AI)**
 
 **🚨 CRITICAL FOR DASHBOARD AI:**
-- **Your Server**: 192.168.99.245 (Dashboard AI)
-- **Database AI Server**: 192.168.99.246 (API Server)
+- **Your Server**: 192.168.4.245 (Dashboard AI)
+- **Database AI Server**: 192.168.4.246 (API Server)
 - **NEVER use localhost** - Dashboard AI has no local API server
 - **ALWAYS use external URLs** to connect to Database AI's API server
 
 **API Base URL for Dashboard AI:** 
 - **Production HTTPS**: `https://db-api.enersystems.com:5400` (Let's Encrypt Certificate) ✅ **RECOMMENDED**
-- **IP Access**: `https://192.168.99.246:5400` (HTTPS - Use `-k` flag for testing) ✅ **ALTERNATIVE**
+- **IP Access**: `https://192.168.4.246:5400` (HTTPS - Use `-k` flag for testing) ✅ **ALTERNATIVE**
 
 **Documentation**: See [API Integration Guide](./API_INTEGRATION.md) for complete API reference
 
@@ -215,14 +215,14 @@ The Windows 11 24H2 API endpoints now provide enhanced field data through NinjaR
 
 ### **Debug Commands**
 ```bash
-# Check API server status (from Dashboard AI server 192.168.99.245)
-curl -k https://192.168.99.246:5400/api/health
+# Check API server status (from Dashboard AI server 192.168.4.245)
+curl -k https://192.168.4.246:5400/api/health
 
-# Check database connection (from Dashboard AI server 192.168.99.245)
+# Check database connection (from Dashboard AI server 192.168.4.245)
 psql postgresql://username:password@hostname:port/database_name
 
-# Test collectors (from Dashboard AI server 192.168.99.245)
-curl -k -X POST https://192.168.99.246:5400/api/collectors/run \
+# Test collectors (from Dashboard AI server 192.168.4.245)
+curl -k -X POST https://192.168.4.246:5400/api/collectors/run \
   -H "Content-Type: application/json" \
   -d '{"collector": "both", "run_cross_vendor": true}'
 ```

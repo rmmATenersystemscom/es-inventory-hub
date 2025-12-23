@@ -1,6 +1,6 @@
 # ES Inventory Hub
 
-**Current Version**: v1.34.0 (stable)
+**Current Version**: v1.35.1 (stable)
 
 A centralized inventory management system for collecting and storing data from various sources including Ninja and ThreatLocker.
 

@@ -51,14 +51,14 @@ When working with device data, **each vendor system requires its own hostname fo
 ## 🚀 **Quick Start**
 
 ### **Connection Information**
-- **Your Server**: 192.168.99.245 (Dashboard AI)
-- **Database AI Server**: 192.168.99.246 (API Server)
+- **Your Server**: 192.168.4.245 (Dashboard AI)
+- **Database AI Server**: 192.168.4.246 (API Server)
 - **NEVER use localhost** - Dashboard AI has no local API server
 - **ALWAYS use external URLs** to connect to Database AI's API server
 
 ### **API Base URLs**
 - **Production HTTPS**: `https://db-api.enersystems.com:5400` (Let's Encrypt Certificate) ✅ **RECOMMENDED**
-- **IP Access**: `https://192.168.99.246:5400` (HTTPS - Use `-k` flag for testing) ✅ **ALTERNATIVE**
+- **IP Access**: `https://192.168.4.246:5400` (HTTPS - Use `-k` flag for testing) ✅ **ALTERNATIVE**
 
 ### **Authentication**
 - **Variance/Status Endpoints**: No authentication required
@@ -1410,6 +1410,6 @@ The API now automatically detects and cleans up stale running jobs:
 
 ---
 
-**Version**: v1.32.0
-**Last Updated**: December 18, 2025 22:10 UTC
+**Version**: v1.35.1
+**Last Updated**: December 23, 2025 10:54 UTC
 **Maintainer**: ES Inventory Hub Team

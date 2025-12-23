@@ -22,7 +22,7 @@
 ### Step 2: Create New Session
 1. Click **"New Session"** button
 2. **File Protocol**: Select `SFTP`
-3. **Host name**: Enter the server IP address or hostname (e.g., `192.168.99.246` or `goldberry`)
+3. **Host name**: Enter the server IP address or hostname (e.g., `192.168.4.246` or `goldberry`)
 4. **Port number**: `22` (default SSH port)
 5. **User name**: `rene`
 6. **Password**: Enter your SSH password (or use key file - see Step 3)
@@ -78,7 +78,7 @@ scp -r . rene@goldberry:/opt/es-inventory-hub/docs/
 
 **Or if using IP address:**
 ```powershell
-scp -r . rene@192.168.99.246:/opt/es-inventory-hub/docs/
+scp -r . rene@192.168.4.246:/opt/es-inventory-hub/docs/
 ```
 
 ### Step 4: Copy Specific Files
@@ -278,8 +278,8 @@ rsync -avz --progress /mnt/c/path/to/docs/ rene@goldberry:/opt/es-inventory-hub/
 
 ---
 
-**Version**: v1.23.0
-**Last Updated**: November 19, 2025 13:36 UTC
+**Version**: v1.35.1
+**Last Updated**: December 23, 2025 10:54 UTC
 **Maintainer**: ES Inventory Hub Team
 
 

@@ -6,7 +6,7 @@ This document tracks security audits, hardening changes, and remediation actions
 
 ## Audit: 2025-11-30 - Server Security Hardening
 
-**Server:** goldberry (192.168.99.246)
+**Server:** goldberry (192.168.4.246)
 **Performed by:** Claude Code AI Assistant
 **Date:** November 30, 2025
 
@@ -59,7 +59,7 @@ x11forwarding no
 
 **After:**
 ```
-22/tcp    ALLOW    192.168.99.0/24    # SSH from local subnet
+22/tcp    ALLOW    192.168.4.0/24    # SSH from local subnet
 22/tcp    ALLOW    192.168.5.0/24     # SSH from office
 22/tcp    ALLOW    10.9.8.0/24        # SSH from VPN
 ```
@@ -75,7 +75,7 @@ host    es_inventory_hub    postgres    0.0.0.0/0    md5
 
 **After:**
 ```
-host    es_inventory_hub    postgres    192.168.99.0/24    scram-sha-256
+host    es_inventory_hub    postgres    192.168.4.0/24    scram-sha-256
 host    es_inventory_hub    postgres    192.168.5.0/24     scram-sha-256
 host    es_inventory_hub    postgres    10.9.8.0/24        scram-sha-256
 ```
@@ -93,10 +93,10 @@ host    es_inventory_hub    postgres    10.9.8.0/24        scram-sha-256
 
 **After:**
 ```
-5400       ALLOW    192.168.99.245
+5400       ALLOW    192.168.4.245
 5400       ALLOW    192.168.5.0/24
 5400       ALLOW    10.9.8.0/24
-5400/tcp   ALLOW    192.168.99.0/24    # API from local subnet
+5400/tcp   ALLOW    192.168.4.0/24    # API from local subnet
 ```
 
 ### Authorized Networks
@@ -105,7 +105,7 @@ All services are now restricted to these networks only:
 
 | Network | Purpose |
 |---------|---------|
-| 192.168.99.0/24 | Local subnet (server network) |
+| 192.168.4.0/24 | Local subnet (server network) |
 | 192.168.5.0/24 | Office network |
 | 10.9.8.0/24 | VPN network |
 
@@ -140,6 +140,6 @@ PGPASSWORD='[password]' psql -h localhost -U postgres -d es_inventory_hub -c "SE
 
 ---
 
-**Version**: v1.28.0
-**Last Updated**: December 01, 2025 01:26 UTC
+**Version**: v1.35.1
+**Last Updated**: December 23, 2025 10:54 UTC
 **Maintainer**: ES Inventory Hub Team

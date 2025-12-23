@@ -745,8 +745,8 @@ useEffect(() => {
 #### Network Access Requirements
 
 - **Location**: Must be on Enersystems LAN (192.168.5.0/24) or connected via VPN
-- **Backend API**: https://db-api.enersystems.com:5400 (resolves to 192.168.99.246 internally)
-- **Frontend Deployment**: https://dashboards.enersystems.com/qbr (will be on 192.168.99.245)
+- **Backend API**: https://db-api.enersystems.com:5400 (resolves to 192.168.4.246 internally)
+- **Frontend Deployment**: https://dashboards.enersystems.com/qbr (will be on 192.168.4.245)
 - **Internet Access**: Required for Microsoft OAuth login (login.microsoftonline.com, graph.microsoft.com)
 
 #### Development Options
@@ -761,7 +761,7 @@ useEffect(() => {
 - Build UI components and layout without authentication
 - Use mock JSON data for SmartNumbers (copy from examples below)
 - Test authentication later when deployed to production server
-- Deploy to 192.168.99.245 for integration testing
+- Deploy to 192.168.4.245 for integration testing
 
 #### Testing Authentication Flow
 
@@ -882,7 +882,7 @@ Focus on Phase 1 requirements first:
 ### Step 5: Deploy to Production
 
 **Deployment Target:**
-- **Server**: Ubuntu 22.04 at `192.168.99.245` (dashboards.enersystems.com)
+- **Server**: Ubuntu 22.04 at `192.168.4.245` (dashboards.enersystems.com)
 - **Domain**: dashboards.enersystems.com
 - **Path**: `/qbr`
 - **Full URL**: `https://dashboards.enersystems.com/qbr`
@@ -941,7 +941,7 @@ npm run build
 yarn build
 
 # 2. Copy build artifacts to server
-scp -r build/* user@192.168.99.245:/var/www/dashboards/qbr/
+scp -r build/* user@192.168.4.245:/var/www/dashboards/qbr/
 
 # 3. Verify deployment
 # Open browser and navigate to: https://dashboards.enersystems.com/qbr
@@ -1014,7 +1014,7 @@ scp -r build/* user@192.168.99.245:/var/www/dashboards/qbr/
 
 ---
 
-**Version**: v1.0
-**Last Updated**: November 15, 2025
+**Version**: v1.35.1
+**Last Updated**: December 23, 2025 10:54 UTC
 **Status**: Ready for Frontend Development
 **Backend API**: ✅ Complete and Operational

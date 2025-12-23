@@ -303,7 +303,7 @@ curl -X POST https://db-api.enersystems.com:5400/api/windows-11-24h2/run
 ### **Alternative IP Access**
 ```bash
 # Use IP address with -k flag for testing
-curl -k https://192.168.99.246:5400/api/windows-11-24h2/status
+curl -k https://192.168.4.246:5400/api/windows-11-24h2/status
 ```
 
 ---

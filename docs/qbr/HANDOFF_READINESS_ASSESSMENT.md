@@ -222,7 +222,7 @@ Questions a frontend developer MIGHT ask:
    - **Answer**: They can't fully test locally because:
      - Backend is on `https://db-api.enersystems.com:5400` (not localhost)
      - Azure redirect URI is configured for production URLs
-     - Need VPN/LAN access to 192.168.99.246
+     - Need VPN/LAN access to 192.168.4.246
    - **Solution**: Document this in "Getting Started" section
 
 2. **"What happens if I'm not on the LAN?"**
@@ -236,7 +236,7 @@ Questions a frontend developer MIGHT ask:
    - **Status**: Not documented
 
 4. **"Where do I deploy the frontend?"**
-   - **Answer**: `192.168.99.245` at `https://dashboards.enersystems.com/qbr`
+   - **Answer**: `192.168.4.245` at `https://dashboards.enersystems.com/qbr`
    - **Status**: Mentioned but not detailed in deployment guide
 
 ---
@@ -256,8 +256,8 @@ Add a new section after "Getting Started":
 
 **Requirements:**
 - Must be on Enersystems LAN (192.168.5.0/24) or have VPN access
-- Backend API: https://db-api.enersystems.com:5400 (resolves to 192.168.99.246 internally)
-- Frontend: https://dashboards.enersystems.com/qbr (will be on 192.168.99.245)
+- Backend API: https://db-api.enersystems.com:5400 (resolves to 192.168.4.246 internally)
+- Frontend: https://dashboards.enersystems.com/qbr (will be on 192.168.4.245)
 
 **Development Options:**
 
@@ -305,7 +305,7 @@ curl -k https://db-api.enersystems.com:5400/api/qbr/smartnumbers?period=2025-Q4
 ### Frontend Deployment
 
 **Deployment Target:**
-- Server: Ubuntu 22.04 at 192.168.99.245
+- Server: Ubuntu 22.04 at 192.168.4.245
 - Domain: dashboards.enersystems.com
 - Path: /qbr
 - Full URL: https://dashboards.enersystems.com/qbr

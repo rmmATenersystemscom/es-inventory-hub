@@ -362,5 +362,217 @@ def get_sync_history():
         })
 
 
+# ==============================================================================
+# Debug Endpoints (TEMPORARY - for account mapping setup)
+# ==============================================================================
+
+@qbwc_api.route('/api/qbwc/debug/clear-period/<period>', methods=['DELETE'])
+def debug_clear_period(period):
+    """
+    TEMPORARY DEBUG: Clear sync history for a specific period to force re-sync.
+    Period format: YYYY-MM (e.g., 2025-01)
+    """
+    try:
+        year, month = map(int, period.split('-'))
+        from datetime import date
+        period_start = date(year, month, 1)
+    except:
+        return jsonify({'success': False, 'error': 'Invalid period format. Use YYYY-MM'}), 400
+
+    with session_scope() as db_session:
+        deleted = db_session.query(QBWCSyncHistory).filter(
+            QBWCSyncHistory.period_start == period_start,
+            QBWCSyncHistory.sync_type == 'profit_loss'
+        ).delete()
+        db_session.commit()
+
+    return jsonify({
+        'success': True,
+        'message': f'Cleared {deleted} sync record(s) for period {period}. Run QBWC Update to re-sync.'
+    })
+
+
+@qbwc_api.route('/api/qbwc/debug/raw-response/<period>', methods=['GET'])
+def debug_raw_response(period):
+    """
+    TEMPORARY DEBUG: View raw QB response for a period.
+    Period format: YYYY-MM (e.g., 2025-01)
+    """
+    try:
+        year, month = map(int, period.split('-'))
+        from datetime import date
+        period_start = date(year, month, 1)
+    except:
+        return jsonify({'success': False, 'error': 'Invalid period format. Use YYYY-MM'}), 400
+
+    with session_scope() as db_session:
+        history = db_session.query(QBWCSyncHistory).filter(
+            QBWCSyncHistory.period_start == period_start,
+            QBWCSyncHistory.sync_type == 'profit_loss'
+        ).order_by(QBWCSyncHistory.created_at.desc()).first()
+
+        if not history:
+            return jsonify({'success': False, 'error': f'No sync history for period {period}'}), 404
+
+        return jsonify({
+            'success': True,
+            'period': period,
+            'parsed_data': history.parsed_data,
+            'metrics_updated': history.metrics_updated,
+            'raw_response_length': len(history.raw_response) if history.raw_response else 0,
+            'raw_response_preview': history.raw_response[:5000] if history.raw_response else None
+        })
+
+
+@qbwc_api.route('/api/qbwc/debug/add-mapping', methods=['POST'])
+def debug_add_mapping():
+    """
+    TEMPORARY DEBUG: Add account mapping without auth.
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({'success': False, 'error': 'No data provided'}), 400
+
+    required = ['qbr_metric_key', 'qb_account_pattern']
+    for field in required:
+        if field not in data:
+            return jsonify({'success': False, 'error': f'Missing: {field}'}), 400
+
+    with session_scope() as db_session:
+        # Check if mapping already exists
+        existing = db_session.query(QBWCAccountMapping).filter_by(
+            qbr_metric_key=data['qbr_metric_key'],
+            qb_account_pattern=data['qb_account_pattern']
+        ).first()
+
+        if existing:
+            return jsonify({'success': False, 'error': 'Mapping already exists'}), 409
+
+        mapping = QBWCAccountMapping(
+            organization_id=data.get('organization_id', 1),
+            qbr_metric_key=data['qbr_metric_key'],
+            qb_account_pattern=data['qb_account_pattern'],
+            match_type=data.get('match_type', 'contains'),
+            is_active=True,
+            notes=data.get('notes', 'Added via debug endpoint')
+        )
+        db_session.add(mapping)
+        db_session.commit()
+
+        return jsonify({
+            'success': True,
+            'mapping': {
+                'id': mapping.id,
+                'qbr_metric_key': mapping.qbr_metric_key,
+                'qb_account_pattern': mapping.qb_account_pattern
+            }
+        }), 201
+
+
+@qbwc_api.route('/api/qbwc/debug/list-mappings', methods=['GET'])
+def debug_list_mappings():
+    """TEMPORARY DEBUG: List all mappings without auth."""
+    with session_scope() as db_session:
+        mappings = db_session.query(QBWCAccountMapping).filter_by(is_active=True).order_by(
+            QBWCAccountMapping.qbr_metric_key
+        ).all()
+
+        return jsonify({
+            'success': True,
+            'count': len(mappings),
+            'mappings': [{
+                'id': m.id,
+                'qbr_metric_key': m.qbr_metric_key,
+                'qb_account_pattern': m.qb_account_pattern,
+                'match_type': m.match_type
+            } for m in mappings]
+        })
+
+
+@qbwc_api.route('/api/qbwc/debug/reparse/<period>', methods=['GET'])
+def debug_reparse(period):
+    """
+    TEMPORARY DEBUG: Re-parse raw QB response for a period with updated parser.
+    Shows all parsed accounts/subtotals to verify expense totals.
+    """
+    from api.qbwc_service import parse_pl_response
+
+    try:
+        year, month = map(int, period.split('-'))
+        from datetime import date
+        period_start = date(year, month, 1)
+    except:
+        return jsonify({'success': False, 'error': 'Invalid period format. Use YYYY-MM'}), 400
+
+    with session_scope() as db_session:
+        history = db_session.query(QBWCSyncHistory).filter(
+            QBWCSyncHistory.period_start == period_start,
+            QBWCSyncHistory.sync_type == 'profit_loss'
+        ).order_by(QBWCSyncHistory.created_at.desc()).first()
+
+        if not history or not history.raw_response:
+            return jsonify({'success': False, 'error': f'No raw response for period {period}'}), 404
+
+        # Re-parse with updated parser
+        parsed = parse_pl_response(history.raw_response)
+
+        # Separate subtotals from individual accounts
+        subtotals = {k: str(v) for k, v in parsed.items() if 'Total' in k}
+        individual = {k: str(v) for k, v in parsed.items() if 'Total' not in k}
+
+        return jsonify({
+            'success': True,
+            'period': period,
+            'subtotals': subtotals,
+            'subtotals_count': len(subtotals),
+            'individual_accounts_count': len(individual),
+            'key_expense_totals': {
+                'Total 6300': subtotals.get('Total 6300 · Payroll Expenses', 'NOT FOUND'),
+                'Total 5000': subtotals.get('Total 5000 · Cost of Goods Sold', 'NOT FOUND'),
+                'Total COGS': subtotals.get('Total COGS', 'NOT FOUND'),
+                'Total Expenses': subtotals.get('Total Expenses', 'NOT FOUND')
+            }
+        })
+
+
+@qbwc_api.route('/api/qbwc/debug/deactivate-mapping/<int:mapping_id>', methods=['POST'])
+def debug_deactivate_mapping(mapping_id):
+    """TEMPORARY DEBUG: Deactivate a mapping by ID."""
+    with session_scope() as db_session:
+        mapping = db_session.query(QBWCAccountMapping).filter_by(id=mapping_id).first()
+        if not mapping:
+            return jsonify({'success': False, 'error': 'Mapping not found'}), 404
+
+        mapping.is_active = False
+        db_session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': f'Deactivated mapping {mapping_id}: {mapping.qb_account_pattern} -> {mapping.qbr_metric_key}'
+        })
+
+
+@qbwc_api.route('/api/qbwc/debug/deactivate-by-metric/<metric_key>', methods=['POST'])
+def debug_deactivate_by_metric(metric_key):
+    """TEMPORARY DEBUG: Deactivate all mappings for a specific metric key."""
+    with session_scope() as db_session:
+        mappings = db_session.query(QBWCAccountMapping).filter_by(
+            qbr_metric_key=metric_key,
+            is_active=True
+        ).all()
+
+        count = 0
+        for mapping in mappings:
+            mapping.is_active = False
+            count += 1
+
+        db_session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': f'Deactivated {count} mappings for metric key: {metric_key}'
+        })
+
+
 # Export blueprint
 __all__ = ['qbwc_api']

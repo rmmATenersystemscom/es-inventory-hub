@@ -1,6 +1,6 @@
 # ES Inventory Hub
 
-**Current Version**: v1.36.0 (stable)
+**Current Version**: v1.37.0 (stable)
 
 A centralized inventory management system for collecting and storing data from various sources including Ninja and ThreatLocker.
 
@@ -44,13 +44,14 @@ If ES Inventory Hub needs dashboard-related changes, put your request in a text 
 - Provide dashboards for analysis (seat counts, spares, billing vs non-billing, etc.).
 - Highlight mismatches and exceptions (e.g., ThreatLocker device missing in Ninja).
 
-## Current Version (v1.34.0)
+## Current Version (v1.37.0)
 
-ThreatLocker Usage Changes API release. Added new API endpoints for ThreatLocker device usage tracking:
-- `GET /api/threatlocker/available-dates` - Returns dates with available ThreatLocker data
-- `GET /api/threatlocker/usage-changes` - Returns device adds/removes by organization
-
-These endpoints mirror the existing Ninja usage changes API pattern, enabling Dashboard AI to track ThreatLocker license changes across all managed organizations.
+QBR QuickBooks Integration Enhancements:
+- **Product Sales Calculation**: Added automatic calculation of `product_sales = total_income - nrr - mrr - orr`
+- **Calculated Metrics**: Formula-derived metrics (product_sales, total_revenue, net_profit) now use `data_source='calculated'` for proper priority handling
+- **Fixed Expenses Endpoint**: `/api/qbr/expenses/calculate` now properly sets vendor_id (was causing 500 errors)
+- **Fixed Manual Metrics Endpoint**: `/api/qbr/metrics/manual` now properly sets vendor_id for manual entries
+- **Net Profit Corrections**: Fixed net_profit calculation for all 2025 months (was showing negative values)
 
 ## Current State
 

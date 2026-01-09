@@ -127,6 +127,8 @@ def get_monthly_metrics():
         organization_id (optional): Filter by organization (default: 1)
         vendor_id (optional): Filter by vendor
         metric_name (optional): Filter by specific metric name
+        data_source (optional): Filter by data source: 'quickbooks', 'manual', 'collected', or 'best'
+                               'best' returns highest-priority value per metric (quickbooks > collected > manual)
 
     Returns:
         JSON response with monthly metrics
@@ -137,6 +139,7 @@ def get_monthly_metrics():
     organization_id = request.args.get('organization_id', 1, type=int)
     vendor_id = request.args.get('vendor_id', type=int)
     metric_name = request.args.get('metric_name')
+    data_source = request.args.get('data_source')
 
     # Validate period if provided
     if period and not validate_period(period, 'monthly'):
@@ -145,6 +148,18 @@ def get_monthly_metrics():
             "error": {
                 "code": "INVALID_PERIOD",
                 "message": "Period format must be YYYY-MM",
+                "status": 400
+            }
+        }), 400
+
+    # Validate data_source if provided
+    valid_sources = ['quickbooks', 'manual', 'collected', 'best']
+    if data_source and data_source not in valid_sources:
+        return jsonify({
+            "success": False,
+            "error": {
+                "code": "INVALID_DATA_SOURCE",
+                "message": f"data_source must be one of: {', '.join(valid_sources)}",
                 "status": 400
             }
         }), 400
@@ -166,6 +181,7 @@ def get_monthly_metrics():
 
                 if latest_period:
                     query = query.filter(QBRMetricsMonthly.period == latest_period[0])
+                    period = latest_period[0]
 
             if vendor_id:
                 query = query.filter(QBRMetricsMonthly.vendor_id == vendor_id)
@@ -173,17 +189,35 @@ def get_monthly_metrics():
             if metric_name:
                 query = query.filter(QBRMetricsMonthly.metric_name == metric_name)
 
+            # Filter by data_source (except 'best' which needs post-processing)
+            if data_source and data_source != 'best':
+                query = query.filter(QBRMetricsMonthly.data_source == data_source)
+
             metrics = query.order_by(
                 QBRMetricsMonthly.period.desc(),
                 QBRMetricsMonthly.vendor_id,
                 QBRMetricsMonthly.metric_name
             ).all()
 
+            # If 'best' mode, select highest-priority source per metric
+            if data_source == 'best':
+                # Priority: calculated > quickbooks > collected > manual
+                source_priority = {'calculated': 1, 'quickbooks': 2, 'collected': 3, 'manual': 4}
+                metrics_by_name = {}
+                for m in metrics:
+                    priority = source_priority.get(m.data_source, 99)
+                    if m.metric_name not in metrics_by_name:
+                        metrics_by_name[m.metric_name] = (m, priority)
+                    elif priority < metrics_by_name[m.metric_name][1]:
+                        metrics_by_name[m.metric_name] = (m, priority)
+                metrics = [item[0] for item in metrics_by_name.values()]
+
             result = {
                 "success": True,
                 "data": {
                     "period": period or (metrics[0].period if metrics else None),
                     "organization_id": organization_id,
+                    "data_source_filter": data_source,
                     "metrics": [
                         {
                             "metric_name": m.metric_name,
@@ -1045,6 +1079,15 @@ def manual_metrics_entry():
 
     try:
         with get_session() as session:
+            # Get or create the Manual vendor for manual entries
+            from storage.schema import Vendor
+            manual_vendor = session.query(Vendor).filter_by(name='Manual').first()
+            if not manual_vendor:
+                manual_vendor = Vendor(name='Manual')
+                session.add(manual_vendor)
+                session.flush()
+            default_vendor_id = manual_vendor.id
+
             updated_count = 0
 
             for metric_data in data['metrics']:
@@ -1054,14 +1097,15 @@ def manual_metrics_entry():
                 if not metric_name:
                     continue
 
-                vendor_id = metric_data.get('vendor_id')
+                # Use provided vendor_id or default to Manual vendor
+                vendor_id = metric_data.get('vendor_id') or default_vendor_id
 
-                # Upsert metric
+                # Upsert metric - check for existing with same vendor or with manual data_source
                 metric = session.query(QBRMetricsMonthly).filter(
                     QBRMetricsMonthly.organization_id == organization_id,
                     QBRMetricsMonthly.period == period,
                     QBRMetricsMonthly.metric_name == metric_name,
-                    QBRMetricsMonthly.vendor_id == vendor_id if vendor_id else QBRMetricsMonthly.vendor_id.is_(None)
+                    QBRMetricsMonthly.data_source == 'manual'
                 ).first()
 
                 if metric:
@@ -1093,6 +1137,197 @@ def manual_metrics_entry():
                     "period": period,
                     "organization_id": organization_id,
                     "updated_count": updated_count
+                }
+            }
+
+            return jsonify(result), 200
+
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": {
+                "code": "SERVER_ERROR",
+                "message": str(e),
+                "status": 500
+            }
+        }), 500
+
+
+# ============================================================================
+# POST /api/qbr/expenses/calculate
+# ============================================================================
+
+@qbr_api.route('/api/qbr/expenses/calculate', methods=['POST'])
+@require_auth
+def calculate_expenses():
+    """
+    Calculate and store expense breakdown for a period.
+
+    Takes CFO manual inputs (owner_comp, owner_comp_taxes), fetches QuickBooks
+    data (payroll_total, total_expenses_qb), calculates derived values
+    (employee_expense, other_expenses), and stores everything.
+
+    Request Body:
+        {
+            "period": "2025-11",
+            "organization_id": 1,
+            "owner_comp": 15000.00,
+            "owner_comp_taxes": 5000.00
+        }
+
+    Formulas:
+        employee_expense = payroll_total - owner_comp_taxes - owner_comp
+        other_expenses = total_expenses_qb - employee_expense - owner_comp_taxes - owner_comp
+
+    Returns:
+        JSON response with complete expense breakdown
+    """
+    from api.api_server import get_session
+
+    data = request.get_json()
+
+    if not data or 'period' not in data:
+        return jsonify({
+            "success": False,
+            "error": {
+                "code": "MISSING_DATA",
+                "message": "Request body must include 'period'",
+                "status": 400
+            }
+        }), 400
+
+    period = data['period']
+    organization_id = data.get('organization_id', 1)
+    owner_comp = Decimal(str(data.get('owner_comp', 0)))
+    owner_comp_taxes = Decimal(str(data.get('owner_comp_taxes', 0)))
+
+    if not validate_period(period, 'monthly'):
+        return jsonify({
+            "success": False,
+            "error": {
+                "code": "INVALID_PERIOD",
+                "message": "Period format must be YYYY-MM",
+                "status": 400
+            }
+        }), 400
+
+    try:
+        with get_session() as session:
+            # Get or create the CFO vendor for manual/calculated entries
+            from storage.schema import Vendor
+            cfo_vendor = session.query(Vendor).filter_by(name='CFO').first()
+            if not cfo_vendor:
+                cfo_vendor = Vendor(name='CFO')
+                session.add(cfo_vendor)
+                session.flush()
+            cfo_vendor_id = cfo_vendor.id
+
+            # Fetch QuickBooks data for this period
+            qb_metrics = session.query(QBRMetricsMonthly).filter(
+                QBRMetricsMonthly.organization_id == organization_id,
+                QBRMetricsMonthly.period == period,
+                QBRMetricsMonthly.data_source == 'quickbooks'
+            ).all()
+
+            # Build lookup dict
+            qb_data = {m.metric_name: m.metric_value for m in qb_metrics}
+
+            # Get required QuickBooks values
+            payroll_total = qb_data.get('payroll_total', Decimal('0'))
+            product_cogs = qb_data.get('product_cogs', Decimal('0'))
+            total_expenses_qb = qb_data.get('total_expenses_qb', Decimal('0'))
+
+            if payroll_total == 0 or total_expenses_qb == 0:
+                return jsonify({
+                    "success": False,
+                    "error": {
+                        "code": "MISSING_QB_DATA",
+                        "message": f"QuickBooks data not found for period {period}. "
+                                   f"payroll_total={payroll_total}, total_expenses_qb={total_expenses_qb}. "
+                                   "Please run QBWC sync first.",
+                        "status": 400
+                    }
+                }), 400
+
+            # Calculate derived values
+            employee_expense = payroll_total - owner_comp_taxes - owner_comp
+            other_expenses = total_expenses_qb - employee_expense - owner_comp_taxes - owner_comp
+
+            # Prepare all expense metrics to store
+            expense_metrics = {
+                'owner_comp': owner_comp,
+                'owner_comp_taxes': owner_comp_taxes,
+                'employee_expense': employee_expense,
+                'other_expenses': other_expenses,
+                # Also store the QB values under canonical names for consistency
+                'payroll_total': payroll_total,
+                'product_cogs': product_cogs,
+                'total_expenses': total_expenses_qb,  # Store as total_expenses for dashboard
+            }
+
+            # Store/update each metric
+            stored_count = 0
+            for metric_name, metric_value in expense_metrics.items():
+                # Determine data source based on metric type
+                if metric_name in ['owner_comp', 'owner_comp_taxes']:
+                    source = 'manual'
+                elif metric_name in ['employee_expense', 'other_expenses']:
+                    source = 'calculated'
+                else:
+                    source = 'quickbooks'
+
+                existing = session.query(QBRMetricsMonthly).filter(
+                    QBRMetricsMonthly.organization_id == organization_id,
+                    QBRMetricsMonthly.period == period,
+                    QBRMetricsMonthly.metric_name == metric_name,
+                    QBRMetricsMonthly.vendor_id == cfo_vendor_id,
+                    QBRMetricsMonthly.data_source == source
+                ).first()
+
+                if existing:
+                    existing.metric_value = metric_value
+                    existing.notes = f"Calculated via /api/qbr/expenses/calculate"
+                else:
+                    new_metric = QBRMetricsMonthly(
+                        organization_id=organization_id,
+                        period=period,
+                        vendor_id=cfo_vendor_id,
+                        metric_name=metric_name,
+                        metric_value=metric_value,
+                        data_source=source,
+                        notes=f"Calculated via /api/qbr/expenses/calculate"
+                    )
+                    session.add(new_metric)
+                stored_count += 1
+
+            session.commit()
+
+            # Return complete expense breakdown
+            result = {
+                "success": True,
+                "data": {
+                    "period": period,
+                    "organization_id": organization_id,
+                    "inputs": {
+                        "from_quickbooks": {
+                            "payroll_total": float(payroll_total),
+                            "product_cogs": float(product_cogs),
+                            "total_expenses_qb": float(total_expenses_qb)
+                        },
+                        "from_cfo": {
+                            "owner_comp": float(owner_comp),
+                            "owner_comp_taxes": float(owner_comp_taxes)
+                        }
+                    },
+                    "calculated": {
+                        "employee_expense": float(employee_expense),
+                        "other_expenses": float(other_expenses)
+                    },
+                    "formulas": {
+                        "employee_expense": "payroll_total - owner_comp_taxes - owner_comp",
+                        "other_expenses": "total_expenses_qb - employee_expense - owner_comp_taxes - owner_comp"
+                    },
+                    "stored_metrics": stored_count
                 }
             }
 

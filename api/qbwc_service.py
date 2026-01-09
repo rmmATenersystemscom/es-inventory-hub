@@ -141,21 +141,20 @@ def get_synced_periods(session_db, organization_id: int = 1) -> set:
 
 
 def build_pl_query(start_date: str, end_date: str) -> str:
-    """Build QBXML Profit & Loss Detail query"""
+    """Build QBXML Profit & Loss Standard report query (Cash basis - QB default)"""
     return f'''<?xml version="1.0" encoding="utf-8"?>
-<?qbxml version="16.0"?>
+<?qbxml version="13.0"?>
 <QBXML>
-  <QBXMLMsgsRq onError="continueOnError">
-    <GeneralDetailReportQueryRq>
-      <GeneralDetailReportType>ProfitAndLossDetail</GeneralDetailReportType>
+  <QBXMLMsgsRq onError="stopOnError">
+    <GeneralSummaryReportQueryRq requestID="1">
+      <GeneralSummaryReportType>ProfitAndLossStandard</GeneralSummaryReportType>
       <DisplayReport>false</DisplayReport>
       <ReportPeriod>
         <FromReportDate>{start_date}</FromReportDate>
         <ToReportDate>{end_date}</ToReportDate>
       </ReportPeriod>
-      <ReportDetailLevelFilter>All</ReportDetailLevelFilter>
       <SummarizeColumnsBy>TotalOnly</SummarizeColumnsBy>
-    </GeneralDetailReportQueryRq>
+    </GeneralSummaryReportQueryRq>
   </QBXMLMsgsRq>
 </QBXML>'''
 
@@ -163,7 +162,7 @@ def build_pl_query(start_date: str, end_date: str) -> str:
 def build_employee_query() -> str:
     """Build QBXML Employee count query"""
     return '''<?xml version="1.0" encoding="utf-8"?>
-<?qbxml version="16.0"?>
+<?qbxml version="13.0"?>
 <QBXML>
   <QBXMLMsgsRq onError="continueOnError">
     <EmployeeQueryRq>
@@ -178,6 +177,7 @@ def build_employee_query() -> str:
 def parse_pl_response(qbxml_response: str) -> Dict[str, Decimal]:
     """
     Parse Profit & Loss response into account name -> balance dict.
+    Captures both individual DataRow accounts and SubtotalRow totals.
     """
     accounts = {}
 
@@ -188,7 +188,7 @@ def parse_pl_response(qbxml_response: str) -> Dict[str, Decimal]:
 
         root = etree.fromstring(qbxml_response.encode('utf-8'))
 
-        # Find all data rows in the report
+        # Find all data rows in the report (individual account lines)
         for data_row in root.findall('.//DataRow'):
             account_name = None
             balance = None
@@ -214,7 +214,32 @@ def parse_pl_response(qbxml_response: str) -> Dict[str, Decimal]:
             if account_name and balance is not None:
                 accounts[account_name] = balance
 
-        # Also parse TextRow for totals
+        # Parse SubtotalRow elements for category totals (e.g., Total 6300, Total 5000, Total Expenses)
+        for subtotal_row in root.findall('.//SubtotalRow'):
+            label = None
+            balance = None
+
+            # Get label from colID="1" and value from colID="2"
+            for col_data in subtotal_row.findall('.//ColData'):
+                col_id = col_data.get('colID')
+                value = col_data.get('value', '')
+
+                if col_id == '1':
+                    label = value
+                elif col_id == '2' and value:
+                    try:
+                        clean_value = value.replace(',', '').replace('$', '').strip()
+                        if clean_value and clean_value not in ['-', '']:
+                            balance = Decimal(clean_value)
+                    except:
+                        pass
+
+            # Store subtotals that have "Total" in the label
+            if label and balance is not None and 'Total' in label:
+                accounts[label] = balance
+                logger.info(f"Parsed subtotal: '{label}' = ${balance}")
+
+        # Also parse TextRow for totals (legacy support)
         for text_row in root.findall('.//TextRow'):
             row_type = text_row.get('rowType')
             if row_type == 'TextRow':
@@ -229,7 +254,7 @@ def parse_pl_response(qbxml_response: str) -> Dict[str, Decimal]:
                         except:
                             pass
 
-        logger.info(f"Parsed {len(accounts)} accounts from P&L response")
+        logger.info(f"Parsed {len(accounts)} accounts/subtotals from P&L response")
 
     except Exception as e:
         logger.error(f"Error parsing P&L response: {e}")
@@ -277,34 +302,55 @@ def calculate_qbr_metrics(parsed_accounts: Dict[str, Decimal],
                           mappings: List[QBWCAccountMapping]) -> Dict[str, Decimal]:
     """Apply account mappings to calculate QBR metric values."""
     metrics = defaultdict(Decimal)
+    unmatched_accounts = []
+
+    logger.info(f"Applying {len(mappings)} mappings to {len(parsed_accounts)} accounts")
 
     for account_name, balance in parsed_accounts.items():
+        matched = False
         for mapping in mappings:
             if not mapping.is_active:
                 continue
             if matches_pattern(account_name, mapping.qb_account_pattern, mapping.match_type):
                 metrics[mapping.qbr_metric_key] += balance
-                logger.debug(f"Mapped '{account_name}' ({balance}) -> {mapping.qbr_metric_key}")
+                logger.info(f"MATCHED: '{account_name}' (${balance}) -> {mapping.qbr_metric_key}")
+                matched = True
                 break
+        if not matched:
+            unmatched_accounts.append((account_name, balance))
 
-    # Calculate totals
+    # Log unmatched accounts for debugging
+    if unmatched_accounts:
+        logger.info(f"UNMATCHED ACCOUNTS ({len(unmatched_accounts)}):")
+        for name, bal in unmatched_accounts[:20]:  # Log first 20
+            logger.info(f"  - '{name}': ${bal}")
+
+    # Calculate product_sales from Total Income minus categorized revenue
+    # Formula: product_sales = total_income - nrr - mrr - orr
+    total_income = metrics.get('total_income', Decimal('0'))
+    nrr = metrics.get('nrr', Decimal('0'))
+    mrr = metrics.get('mrr', Decimal('0'))
+    orr = metrics.get('orr', Decimal('0'))
+
+    if total_income > 0:
+        metrics['product_sales'] = total_income - nrr - mrr - orr
+        logger.info(f"Calculated product_sales: ${total_income} - ${nrr} - ${mrr} - ${orr} = ${metrics['product_sales']}")
+
+    # Calculate total_revenue from mapped revenue categories
     metrics['total_revenue'] = (
-        metrics.get('nrr', Decimal('0')) +
-        metrics.get('mrr', Decimal('0')) +
-        metrics.get('orr', Decimal('0')) +
+        nrr + mrr + orr +
         metrics.get('product_sales', Decimal('0')) +
         metrics.get('misc_revenue', Decimal('0'))
     )
 
-    metrics['total_expenses'] = (
-        metrics.get('employee_expense', Decimal('0')) +
-        metrics.get('owner_comp_taxes', Decimal('0')) +
-        metrics.get('owner_comp', Decimal('0')) +
-        metrics.get('product_cogs', Decimal('0')) +
-        metrics.get('other_expenses', Decimal('0'))
-    )
+    # Note: total_expenses_qb, payroll_total, and product_cogs come directly from QB subtotals
+    # The derived metrics (employee_expense, other_expenses) are calculated in the dashboard
+    # using manual CFO inputs (owner_comp_taxes, owner_comp)
 
-    metrics['net_profit'] = metrics['total_revenue'] - metrics['total_expenses']
+    # Calculate net_profit using QB's total expense if available
+    total_expenses = metrics.get('total_expenses_qb', Decimal('0'))
+    if total_expenses > 0 and metrics['total_revenue'] > 0:
+        metrics['net_profit'] = metrics['total_revenue'] - total_expenses
 
     return dict(metrics)
 
@@ -323,32 +369,42 @@ def store_qbr_metrics(organization_id: int, period: str, metrics: Dict[str, Deci
                 session.flush()
             vendor_id = vendor.id
 
+        # Metrics that are calculated from formulas (not directly from QB accounts)
+        calculated_metrics = {'product_sales', 'total_revenue', 'net_profit'}
+
         for metric_name, metric_value in metrics.items():
             if metric_value == 0:
                 continue
 
-            stmt = pg_insert(QBRMetricsMonthly).values(
+            # Determine data source: 'calculated' for formula-derived, 'quickbooks' for direct mapping
+            data_source = 'calculated' if metric_name in calculated_metrics else 'quickbooks'
+
+            # Check if metric exists - do update or insert
+            existing = session.query(QBRMetricsMonthly).filter_by(
                 period=period,
                 organization_id=organization_id,
                 vendor_id=vendor_id,
-                metric_name=metric_name,
-                metric_value=metric_value,
-                data_source='quickbooks',
-                collected_at=datetime.utcnow(),
-                notes='Synced via QuickBooks Web Connector'
-            )
+                metric_name=metric_name
+            ).first()
 
-            stmt = stmt.on_conflict_do_update(
-                constraint='uq_metrics_monthly_period_metric_org_vendor',
-                set_={
-                    'metric_value': stmt.excluded.metric_value,
-                    'data_source': 'quickbooks',
-                    'collected_at': stmt.excluded.collected_at,
-                    'updated_at': datetime.utcnow()
-                }
-            )
+            if existing:
+                existing.metric_value = metric_value
+                existing.data_source = data_source
+                existing.collected_at = datetime.utcnow()
+                existing.updated_at = datetime.utcnow()
+            else:
+                new_metric = QBRMetricsMonthly(
+                    period=period,
+                    organization_id=organization_id,
+                    vendor_id=vendor_id,
+                    metric_name=metric_name,
+                    metric_value=metric_value,
+                    data_source=data_source,
+                    collected_at=datetime.utcnow(),
+                    notes='Synced via QuickBooks Web Connector'
+                )
+                session.add(new_metric)
 
-            session.execute(stmt)
             count += 1
 
         session.commit()
@@ -597,7 +653,16 @@ def handle_receive_response_xml(params: Dict[str, str]) -> str:
             logger.error(f"Invalid session ticket: {ticket}")
             return '-1'
 
-        if hresult and int(hresult) < 0:
+        # Handle hresult - can be decimal or hex (e.g., '0x80040400')
+        if hresult:
+            try:
+                hresult_int = int(hresult, 0) if hresult.startswith('0x') else int(hresult)
+            except ValueError:
+                hresult_int = -1  # Treat unparseable as error
+        else:
+            hresult_int = 0
+
+        if hresult_int != 0:
             logger.error(f"QuickBooks returned error: {hresult} - {message}")
             sync_session.error_message = f"{hresult}: {message}"
             sync_session.status = 'failed'
@@ -779,6 +844,16 @@ def process_qbwc_request(soap_request: bytes) -> bytes:
         elif method_name == 'closeConnection':
             result = handle_close_connection(params)
             return build_soap_response('closeConnection', [result])
+
+        elif method_name == 'serverVersion':
+            # Return our service version
+            return build_soap_response('serverVersion', ['1.0.0'])
+
+        elif method_name == 'clientVersion':
+            # Receive client version, return empty string if OK or warning message
+            client_ver = params.get('strVersion', '')
+            logger.info(f"QBWC client version: {client_ver}")
+            return build_soap_response('clientVersion', [''])
 
         else:
             logger.warning(f"Unknown QBWC method: {method_name}")

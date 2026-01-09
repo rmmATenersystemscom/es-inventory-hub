@@ -1178,6 +1178,7 @@ def calculate_expenses():
     Formulas:
         employee_expense = payroll_total - owner_comp_taxes - owner_comp
         other_expenses = total_expenses_qb - employee_expense - owner_comp_taxes - owner_comp
+        total_expenses = employee_expense + other_expenses + owner_comp_taxes + owner_comp + product_cogs
 
     Returns:
         JSON response with complete expense breakdown
@@ -1250,8 +1251,15 @@ def calculate_expenses():
                 }), 400
 
             # Calculate derived values
+            # employee_expense = payroll_total - owner_comp_taxes - owner_comp
+            # other_expenses = total_expenses_qb - employee_expense - owner_comp_taxes - owner_comp
+            # NOTE: product_cogs is NOT subtracted from other_expenses per user's formula
             employee_expense = payroll_total - owner_comp_taxes - owner_comp
             other_expenses = total_expenses_qb - employee_expense - owner_comp_taxes - owner_comp
+
+            # Calculate total_expenses as sum of all expense components
+            # This ensures product_cogs is properly included
+            total_expenses_calculated = employee_expense + other_expenses + owner_comp + owner_comp_taxes + product_cogs
 
             # Prepare all expense metrics to store
             expense_metrics = {
@@ -1262,7 +1270,7 @@ def calculate_expenses():
                 # Also store the QB values under canonical names for consistency
                 'payroll_total': payroll_total,
                 'product_cogs': product_cogs,
-                'total_expenses': total_expenses_qb,  # Store as total_expenses for dashboard
+                'total_expenses': total_expenses_calculated,  # Calculated sum that includes all components
             }
 
             # Store/update each metric
@@ -1271,8 +1279,8 @@ def calculate_expenses():
                 # Determine data source based on metric type
                 if metric_name in ['owner_comp', 'owner_comp_taxes']:
                     source = 'manual'
-                elif metric_name in ['employee_expense', 'other_expenses']:
-                    source = 'calculated'
+                elif metric_name in ['employee_expense', 'other_expenses', 'total_expenses']:
+                    source = 'calculated'  # total_expenses is calculated as sum of all components
                 else:
                     source = 'quickbooks'
 
@@ -1321,11 +1329,13 @@ def calculate_expenses():
                     },
                     "calculated": {
                         "employee_expense": float(employee_expense),
-                        "other_expenses": float(other_expenses)
+                        "other_expenses": float(other_expenses),
+                        "total_expenses": float(total_expenses_calculated)
                     },
                     "formulas": {
                         "employee_expense": "payroll_total - owner_comp_taxes - owner_comp",
-                        "other_expenses": "total_expenses_qb - employee_expense - owner_comp_taxes - owner_comp"
+                        "other_expenses": "total_expenses_qb - employee_expense - owner_comp_taxes - owner_comp",
+                        "total_expenses": "employee_expense + other_expenses + owner_comp + owner_comp_taxes + product_cogs"
                     },
                     "stored_metrics": stored_count
                 }

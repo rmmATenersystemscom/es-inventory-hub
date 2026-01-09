@@ -1,6 +1,6 @@
 # ES Inventory Hub
 
-**Current Version**: v1.37.1 (stable)
+**Current Version**: v1.38.0 (stable)
 
 A centralized inventory management system for collecting and storing data from various sources including Ninja and ThreatLocker.
 
@@ -44,13 +44,13 @@ If ES Inventory Hub needs dashboard-related changes, put your request in a text 
 - Provide dashboards for analysis (seat counts, spares, billing vs non-billing, etc.).
 - Highlight mismatches and exceptions (e.g., ThreatLocker device missing in Ninja).
 
-## Current Version (v1.37.1)
+## Current Version (v1.38.0)
 
-QBR Expense Calculation Fixes:
-- **Fixed other_expenses Formula**: Corrected formula to `total_expenses_qb - employee_expense - owner_comp_taxes - owner_comp` (was incorrectly subtracting product_cogs)
-- **Fixed total_expenses Calculation**: Now calculated as sum of all components: `employee_expense + other_expenses + owner_comp_taxes + owner_comp + product_cogs`
-- **Fixed net_profit Calculation**: Now correctly calculated as `total_revenue - total_expenses`
-- **Data Cleanup**: Removed old incorrect calculated values to ensure dashboard displays correct data
+QBR Access Logging & Expense Formula Updates:
+- **QBR Access Logging**: All QBR endpoint access now logged to `qbr_audit_log` table with user email, IP address, endpoint, and timestamp
+- **Login Audit Trail**: Successful and failed login attempts logged for compliance
+- **Uncategorized Expenses**: Added support for account 6999 (uncategorized expenses) in total_expenses formula
+- **Updated Formula**: `total_expenses = employee_expense + other_expenses + owner_comp_taxes + owner_comp + product_cogs - uncategorized_expenses`
 
 ## Current State
 

@@ -16,6 +16,12 @@ from flask import Blueprint, request, redirect, session, jsonify, url_for
 from msal import ConfidentialClientApplication
 import requests
 
+# Import audit logging (lazy import to avoid circular dependency)
+def get_log_audit():
+    """Lazy import of log_audit to avoid circular imports"""
+    from api.qbwc_service import log_audit
+    return log_audit
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -154,9 +160,29 @@ def microsoft_callback():
 
         logger.info(f"User authenticated: {user_email}")
 
+        # Get request details for logging
+        ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
+        user_agent = request.headers.get('User-Agent', 'unknown')[:200]
+
         # Validate user is authorized
         if user_email not in AUTHORIZED_USERS:
             logger.warning(f"Unauthorized user attempted login: {user_email}")
+            # Log failed login attempt
+            try:
+                log_audit = get_log_audit()
+                log_audit(
+                    user_email=user_email,
+                    action='qbr_login_denied',
+                    success=False,
+                    resource='login',
+                    details={'user_name': user_name},
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                    failure_reason='User not in authorized list'
+                )
+            except Exception as e:
+                logger.error(f"Failed to log login attempt: {e}")
+
             return jsonify({
                 "error": "Access denied",
                 "message": f"Your account ({user_email}) is not authorized to access this dashboard. Please contact your administrator."
@@ -171,6 +197,21 @@ def microsoft_callback():
         session.permanent = True  # Use configured session lifetime
 
         logger.info(f"Session created for {user_email}")
+
+        # Log successful login
+        try:
+            log_audit = get_log_audit()
+            log_audit(
+                user_email=user_email,
+                action='qbr_login',
+                success=True,
+                resource='login',
+                details={'user_name': user_name},
+                ip_address=ip_address,
+                user_agent=user_agent
+            )
+        except Exception as e:
+            logger.error(f"Failed to log login: {e}")
 
         # Redirect to frontend dashboard
         return redirect(FRONTEND_URL)
@@ -224,6 +265,7 @@ def require_auth(f):
     """
     Decorator to protect API endpoints.
     Requires valid authenticated session.
+    Logs all access attempts (success and failure) to qbr_audit_log.
 
     Usage:
         @app.route('/api/qbr/smartnumbers')
@@ -234,8 +276,31 @@ def require_auth(f):
     """
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        # Get request details for logging
+        ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
+        user_agent = request.headers.get('User-Agent', 'unknown')[:200]  # Truncate
+        endpoint = request.path
+        method = request.method
+
+        # Check if authenticated
         if not session.get('authenticated'):
-            logger.warning(f"Unauthorized access attempt to {request.path}")
+            logger.warning(f"Unauthorized access attempt to {endpoint}")
+            # Log failed access attempt
+            try:
+                log_audit = get_log_audit()
+                log_audit(
+                    user_email='anonymous',
+                    action='qbr_access_denied',
+                    success=False,
+                    resource=f"{method} {endpoint}",
+                    details={'reason': 'not_authenticated'},
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                    failure_reason='No valid session'
+                )
+            except Exception as e:
+                logger.error(f"Failed to log access attempt: {e}")
+
             return jsonify({
                 "error": "Authentication required",
                 "message": "Please log in to access this resource"
@@ -245,11 +310,43 @@ def require_auth(f):
         user_email = session.get('user_email')
         if user_email not in AUTHORIZED_USERS:
             logger.warning(f"User no longer authorized: {user_email}")
+            # Log unauthorized access attempt
+            try:
+                log_audit = get_log_audit()
+                log_audit(
+                    user_email=user_email,
+                    action='qbr_access_denied',
+                    success=False,
+                    resource=f"{method} {endpoint}",
+                    details={'reason': 'user_not_in_whitelist'},
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                    failure_reason='User not in authorized list'
+                )
+            except Exception as e:
+                logger.error(f"Failed to log access attempt: {e}")
+
             session.clear()
             return jsonify({
                 "error": "Access denied",
                 "message": "Your authorization has been revoked"
             }), 403
+
+        # Log successful access (only for QBR endpoints to avoid noise)
+        if '/api/qbr' in endpoint:
+            try:
+                log_audit = get_log_audit()
+                log_audit(
+                    user_email=user_email,
+                    action='qbr_access',
+                    success=True,
+                    resource=f"{method} {endpoint}",
+                    details={'query_params': dict(request.args)},
+                    ip_address=ip_address,
+                    user_agent=user_agent
+                )
+            except Exception as e:
+                logger.error(f"Failed to log access: {e}")
 
         return f(*args, **kwargs)
 

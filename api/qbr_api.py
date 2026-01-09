@@ -1178,7 +1178,9 @@ def calculate_expenses():
     Formulas:
         employee_expense = payroll_total - owner_comp_taxes - owner_comp
         other_expenses = total_expenses_qb - employee_expense - owner_comp_taxes - owner_comp
-        total_expenses = employee_expense + other_expenses + owner_comp_taxes + owner_comp + product_cogs
+        total_expenses = employee_expense + other_expenses + owner_comp_taxes + owner_comp + product_cogs - uncategorized_expenses
+
+    Note: uncategorized_expenses is QuickBooks account 6999; most months it will be zero.
 
     Returns:
         JSON response with complete expense breakdown
@@ -1237,6 +1239,7 @@ def calculate_expenses():
             payroll_total = qb_data.get('payroll_total', Decimal('0'))
             product_cogs = qb_data.get('product_cogs', Decimal('0'))
             total_expenses_qb = qb_data.get('total_expenses_qb', Decimal('0'))
+            uncategorized_expenses = qb_data.get('uncategorized_expenses', Decimal('0'))
 
             if payroll_total == 0 or total_expenses_qb == 0:
                 return jsonify({
@@ -1257,9 +1260,10 @@ def calculate_expenses():
             employee_expense = payroll_total - owner_comp_taxes - owner_comp
             other_expenses = total_expenses_qb - employee_expense - owner_comp_taxes - owner_comp
 
-            # Calculate total_expenses as sum of all expense components
-            # This ensures product_cogs is properly included
-            total_expenses_calculated = employee_expense + other_expenses + owner_comp + owner_comp_taxes + product_cogs
+            # Calculate total_expenses as sum of all expense components minus uncategorized
+            # Formula: employee_expense + other_expenses + owner_comp + owner_comp_taxes + product_cogs - uncategorized_expenses
+            # Note: uncategorized_expenses (account 6999) is subtracted; most months it will be zero
+            total_expenses_calculated = employee_expense + other_expenses + owner_comp + owner_comp_taxes + product_cogs - uncategorized_expenses
 
             # Prepare all expense metrics to store
             expense_metrics = {
@@ -1270,7 +1274,8 @@ def calculate_expenses():
                 # Also store the QB values under canonical names for consistency
                 'payroll_total': payroll_total,
                 'product_cogs': product_cogs,
-                'total_expenses': total_expenses_calculated,  # Calculated sum that includes all components
+                'uncategorized_expenses': uncategorized_expenses,  # Account 6999, subtracted from total
+                'total_expenses': total_expenses_calculated,  # Calculated sum minus uncategorized
             }
 
             # Store/update each metric
@@ -1320,7 +1325,8 @@ def calculate_expenses():
                         "from_quickbooks": {
                             "payroll_total": float(payroll_total),
                             "product_cogs": float(product_cogs),
-                            "total_expenses_qb": float(total_expenses_qb)
+                            "total_expenses_qb": float(total_expenses_qb),
+                            "uncategorized_expenses": float(uncategorized_expenses)
                         },
                         "from_cfo": {
                             "owner_comp": float(owner_comp),
@@ -1335,7 +1341,7 @@ def calculate_expenses():
                     "formulas": {
                         "employee_expense": "payroll_total - owner_comp_taxes - owner_comp",
                         "other_expenses": "total_expenses_qb - employee_expense - owner_comp_taxes - owner_comp",
-                        "total_expenses": "employee_expense + other_expenses + owner_comp + owner_comp_taxes + product_cogs"
+                        "total_expenses": "employee_expense + other_expenses + owner_comp + owner_comp_taxes + product_cogs - uncategorized_expenses"
                     },
                     "stored_metrics": stored_count
                 }

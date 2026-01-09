@@ -1,6 +1,6 @@
 # ES Inventory Hub
 
-**Current Version**: v1.38.0 (stable)
+**Current Version**: v1.38.1 (stable)
 
 A centralized inventory management system for collecting and storing data from various sources including Ninja and ThreatLocker.
 
@@ -44,7 +44,15 @@ If ES Inventory Hub needs dashboard-related changes, put your request in a text 
 - Provide dashboards for analysis (seat counts, spares, billing vs non-billing, etc.).
 - Highlight mismatches and exceptions (e.g., ThreatLocker device missing in Ninja).
 
-## Current Version (v1.38.0)
+## Current Version (v1.38.1)
+
+QBR Metrics Cleanup & Dashboard Data Filtering:
+- **Intermediate Metrics Hidden**: API now filters out working values (`payroll_total`, `total_expenses_qb`, `total_income`, `uncategorized_expenses`) from dashboard responses
+- **Duplicate Records Removed**: Cleaned up 29 duplicate metric records with different vendor_ids
+- **Simplified Data Model**: Dashboard only receives final display values, not intermediate calculation inputs
+- **Reprocess Script**: Added `scripts/reprocess_qbwc_sync.py` to re-apply account mappings to stored sync data
+
+### Previous Version (v1.38.0)
 
 QBR Access Logging & Expense Formula Updates:
 - **QBR Access Logging**: All QBR endpoint access now logged to `qbr_audit_log` table with user email, IP address, endpoint, and timestamp

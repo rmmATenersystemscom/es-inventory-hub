@@ -45,6 +45,15 @@ from collectors.qbr.utils import get_period_boundaries
 # Create Blueprint for QBR API
 qbr_api = Blueprint('qbr_api', __name__)
 
+# Intermediate/working metrics - used for calculations but NOT returned to dashboard
+# These are internal values needed to compute display metrics
+INTERMEDIATE_METRICS = {
+    'payroll_total',        # Used to calculate employee_expense
+    'total_expenses_qb',    # Raw QB value, used in other_expenses calculation
+    'total_income',         # Raw QB value
+    'uncategorized_expenses',  # Subtracted from total_expenses
+}
+
 
 def validate_period(period: str, period_type: str = 'monthly') -> bool:
     """
@@ -168,6 +177,11 @@ def get_monthly_metrics():
         with get_session() as session:
             query = session.query(QBRMetricsMonthly).filter(
                 QBRMetricsMonthly.organization_id == organization_id
+            )
+
+            # Exclude intermediate/working metrics from dashboard results
+            query = query.filter(
+                ~QBRMetricsMonthly.metric_name.in_(INTERMEDIATE_METRICS)
             )
 
             if period:
@@ -629,10 +643,11 @@ def get_quarterly_metrics():
             # Get monthly periods for this quarter
             monthly_periods = period_to_months(period)
 
-            # Fetch monthly data for all 3 months
+            # Fetch monthly data for all 3 months (excluding intermediate metrics)
             monthly_data = session.query(QBRMetricsMonthly).filter(
                 QBRMetricsMonthly.organization_id == organization_id,
-                QBRMetricsMonthly.period.in_(monthly_periods)
+                QBRMetricsMonthly.period.in_(monthly_periods),
+                ~QBRMetricsMonthly.metric_name.in_(INTERMEDIATE_METRICS)
             ).order_by(
                 QBRMetricsMonthly.period,
                 QBRMetricsMonthly.metric_name
@@ -758,10 +773,11 @@ def get_smartnumbers():
             # Get monthly periods for this quarter
             monthly_periods = period_to_months(period)
 
-            # Fetch monthly data for all 3 months
+            # Fetch monthly data for all 3 months (excluding intermediate metrics)
             monthly_data = session.query(QBRMetricsMonthly).filter(
                 QBRMetricsMonthly.organization_id == organization_id,
-                QBRMetricsMonthly.period.in_(monthly_periods)
+                QBRMetricsMonthly.period.in_(monthly_periods),
+                ~QBRMetricsMonthly.metric_name.in_(INTERMEDIATE_METRICS)
             ).order_by(
                 QBRMetricsMonthly.period,
                 QBRMetricsMonthly.metric_name

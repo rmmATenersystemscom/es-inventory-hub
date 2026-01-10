@@ -92,3 +92,6 @@ temp_*.timer
 variances-*.service
 .env
 reports/
+
+# Token and credential storage (runtime data, not in git)
+data/

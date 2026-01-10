@@ -1,6 +1,6 @@
 # ES Inventory Hub
 
-**Current Version**: v1.38.1 (stable)
+**Current Version**: v1.38.2 (stable)
 
 A centralized inventory management system for collecting and storing data from various sources including Ninja and ThreatLocker.
 
@@ -44,7 +44,15 @@ If ES Inventory Hub needs dashboard-related changes, put your request in a text 
 - Provide dashboards for analysis (seat counts, spares, billing vs non-billing, etc.).
 - Highlight mismatches and exceptions (e.g., ThreatLocker device missing in Ninja).
 
-## Current Version (v1.38.1)
+## Current Version (v1.38.2)
+
+NinjaRMM Token Rotation & Local Credentials:
+- **Token Rotation**: Implemented automatic NinjaRMM refresh token rotation to prevent token expiration
+- **Token Manager**: New `collectors/ninja/token_manager.py` handles OAuth token lifecycle
+- **Local Credentials**: NINJA_* and QBWC_* credentials moved to local `.env` to prevent overwrites from shared secrets
+- **Secrets File Fix**: Fixed bcrypt hash quoting issue in api-secrets.env (`$2b` variable expansion)
+
+### Previous Version (v1.38.1)
 
 QBR Metrics Cleanup & Dashboard Data Filtering:
 - **Intermediate Metrics Hidden**: API now filters out working values (`payroll_total`, `total_expenses_qb`, `total_income`, `uncategorized_expenses`) from dashboard responses

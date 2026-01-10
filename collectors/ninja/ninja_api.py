@@ -11,60 +11,43 @@ from dotenv import load_dotenv
 load_dotenv('/opt/shared-secrets/api-secrets.env')
 load_dotenv('/opt/es-inventory-hub/.env')
 
+from collectors.ninja.token_manager import get_access_token as get_rotated_access_token
+
 
 class NinjaRMMAPI:
     """Enhanced NinjaRMM API client for device data collection with organization/location mapping."""
-    
+
     def __init__(self):
         """Initialize the API client with credentials from environment."""
         self.base_url = os.getenv('NINJA_BASE_URL', 'https://app.ninjarmm.com').rstrip('/')
         self.client_id = os.getenv('NINJA_CLIENT_ID')
         self.client_secret = os.getenv('NINJA_CLIENT_SECRET')
         self.refresh_token = os.getenv('NINJA_REFRESH_TOKEN')
-        
+
         # Check for required credentials
         if not self.client_id or not self.client_secret:
             raise ValueError(
                 "Missing required NinjaRMM environment variables: "
                 "NINJA_CLIENT_ID and NINJA_CLIENT_SECRET"
             )
-        
+
         # Initialize session
         self.session = requests.Session()
         self.session.headers.update({"Accept": "application/json"})
-    
+
     def _get_access_token(self) -> str:
-        """Get OAuth access token using refresh token flow."""
-        token_url = f"{self.base_url}/oauth/token"
-        
-        if self.refresh_token:
-            # Use refresh token flow (preferred)
-            data = {
-                'grant_type': 'refresh_token',
-                'refresh_token': self.refresh_token,
-                'client_id': self.client_id,
-                'client_secret': self.client_secret,
-            }
-        else:
-            # Fallback to client credentials flow
-            data = {
-                'grant_type': 'client_credentials',
-                'client_id': self.client_id,
-                'client_secret': self.client_secret,
-                'scope': 'monitoring'
-            }
-        
-        headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-        
-        response = self.session.post(token_url, data=data, headers=headers, timeout=30)
-        response.raise_for_status()
-        
-        token_data = response.json()
-        access_token = token_data.get('access_token')
-        
+        """Get OAuth access token using refresh token flow with automatic rotation handling."""
+        # Use token manager for automatic refresh token rotation
+        access_token = get_rotated_access_token(
+            self.base_url,
+            self.client_id,
+            self.client_secret,
+            self.refresh_token  # Fallback to env variable
+        )
+
         if not access_token:
             raise Exception('Failed to obtain NinjaRMM access token')
-        
+
         return access_token
     
     def _get_api_headers(self) -> Dict[str, str]:

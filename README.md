@@ -1,6 +1,6 @@
 # ES Inventory Hub
 
-**Current Version**: v1.38.2 (stable)
+**Current Version**: v1.38.3 (stable)
 
 A centralized inventory management system for collecting and storing data from various sources including Ninja and ThreatLocker.
 
@@ -44,7 +44,15 @@ If ES Inventory Hub needs dashboard-related changes, put your request in a text 
 - Provide dashboards for analysis (seat counts, spares, billing vs non-billing, etc.).
 - Highlight mismatches and exceptions (e.g., ThreatLocker device missing in Ninja).
 
-## Current Version (v1.38.2)
+## Current Version (v1.38.3)
+
+SSL Certificate Renewal & New M365 Organizations:
+- **SSL Certificate Renewal**: Updated api.crt and api.key for continued HTTPS operation
+- **New M365 Organizations**: Added CLF (Capitelli Law Firm LLC) and CSF (Cornerstone Financial LLC) to M365 collector
+- **Prompt Cleanup**: Removed obsolete QBR prompt files (qbr-access-control-audit-response.md, qbr-production-data-ready.md, qbr-total-expenses-metric-fix.md)
+- **Daily Collectors**: All collectors (M365, Ninja, ThreatLocker, Duo, VadeSecure, Dropsuite) running successfully
+
+### Previous Version (v1.38.2)
 
 NinjaRMM Token Rotation & Local Credentials:
 - **Token Rotation**: Implemented automatic NinjaRMM refresh token rotation to prevent token expiration

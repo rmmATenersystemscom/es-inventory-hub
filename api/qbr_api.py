@@ -54,6 +54,14 @@ INTERMEDIATE_METRICS = {
     'uncategorized_expenses',  # Subtracted from total_expenses
 }
 
+# Protected metrics - cannot be modified via API
+# These are collected/calculated by the QBR collector with specific filtering logic
+# and have been manually corrected for historical accuracy
+PROTECTED_METRICS = {
+    'endpoints_managed',    # Ninja billable device count - collected by QBR Ninja collector
+    'seats_managed',        # Ninja BHAG calculation - collected by QBR Ninja collector
+}
+
 
 def validate_period(period: str, period_type: str = 'monthly') -> bool:
     """
@@ -1092,6 +1100,22 @@ def manual_metrics_entry():
                 "status": 400
             }
         }), 400
+
+    # Check for protected metrics
+    protected_in_request = [
+        m.get('metric_name') for m in data['metrics']
+        if m.get('metric_name') in PROTECTED_METRICS
+    ]
+    if protected_in_request:
+        return jsonify({
+            "success": False,
+            "error": {
+                "code": "PROTECTED_METRIC",
+                "message": f"Cannot modify protected metrics via API: {', '.join(protected_in_request)}. "
+                           f"These metrics are managed by the QBR Ninja collector.",
+                "status": 403
+            }
+        }), 403
 
     try:
         with get_session() as session:

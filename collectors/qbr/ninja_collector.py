@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from common.db import session_scope
 from storage.schema import DeviceSnapshot
 from .base_collector import BaseQBRCollector
-from .utils import get_period_boundaries
+from .utils import get_period_boundaries, get_previous_period
 
 
 class NinjaQBRCollector(BaseQBRCollector):
@@ -19,6 +19,10 @@ class NinjaQBRCollector(BaseQBRCollector):
     Collects two metrics:
     1. # of Endpoints Managed (billable count)
     2. # of Seats Managed (BHAG calculation)
+
+    IMPORTANT: QBR metrics use a one-month offset. When collecting for period
+    "2026-02", we use the snapshot from the last day of "2026-01" (January 31).
+    This represents the "starting position" for each QBR period.
 
     Note: This collector queries existing device_snapshot data, not the Ninja API.
     The daily Ninja collector already populates device_snapshot at 02:10 AM.
@@ -91,21 +95,36 @@ class NinjaQBRCollector(BaseQBRCollector):
 
     def _get_latest_snapshot_date(self, session: Session, period: str):
         """
-        Get the latest snapshot date within the period.
+        Get the latest snapshot date from the PREVIOUS month.
+
+        QBR metrics use a one-month offset: February's QBR uses January 31st snapshot.
+        This represents the "starting position" for each QBR period.
 
         Args:
             session: Database session
-            period: Period string (YYYY-MM)
+            period: Period string (YYYY-MM) - the QBR period we're collecting FOR
 
         Returns:
-            Latest snapshot date, or None if no snapshots found
+            Latest snapshot date from previous month, or None if no snapshots found
         """
-        period_start, period_end = get_period_boundaries(period)
+        from calendar import monthrange
+        from datetime import date
+        from .utils import parse_period
+
+        # Get PREVIOUS month (Feb QBR -> use Jan snapshot)
+        previous_period = get_previous_period(period)
+        year, month = parse_period(previous_period)
+
+        # Calculate exact date boundaries (no timezone issues)
+        first_day = date(year, month, 1)
+        last_day = date(year, month, monthrange(year, month)[1])
+
+        self.logger.info(f"QBR period {period} will use snapshot from {previous_period} ({first_day} to {last_day})")
 
         latest_date = session.query(func.max(DeviceSnapshot.snapshot_date)).filter(
             DeviceSnapshot.vendor_id == 2,  # Ninja vendor ID
-            DeviceSnapshot.snapshot_date >= period_start.date(),
-            DeviceSnapshot.snapshot_date <= period_end.date()
+            DeviceSnapshot.snapshot_date >= first_day,
+            DeviceSnapshot.snapshot_date <= last_day
         ).scalar()
 
         return latest_date

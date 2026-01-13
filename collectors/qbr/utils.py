@@ -121,6 +121,24 @@ def get_current_period() -> str:
     return get_period_string(now.year, now.month)
 
 
+def get_previous_period(period: str) -> str:
+    """
+    Get the previous period (one month earlier).
+
+    Args:
+        period: Period string (YYYY-MM)
+
+    Returns:
+        str: Previous period (e.g., "2025-01" -> "2024-12")
+    """
+    year, month = parse_period(period)
+    month -= 1
+    if month < 1:
+        month = 12
+        year -= 1
+    return get_period_string(year, month)
+
+
 def format_iso_date(dt: datetime) -> str:
     """
     Format datetime for ConnectWise API (ISO 8601 with brackets).

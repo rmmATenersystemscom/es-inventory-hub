@@ -1,6 +1,6 @@
 # ES Inventory Hub
 
-**Current Version**: v1.38.5 (stable)
+**Current Version**: v1.38.6 (stable)
 
 A centralized inventory management system for collecting and storing data from various sources including Ninja and ThreatLocker.
 
@@ -44,7 +44,16 @@ If ES Inventory Hub needs dashboard-related changes, put your request in a text 
 - Provide dashboards for analysis (seat counts, spares, billing vs non-billing, etc.).
 - Highlight mismatches and exceptions (e.g., ThreatLocker device missing in Ninja).
 
-## Current Version (v1.38.5)
+## Current Version (v1.38.6)
+
+QBR Month Offset & Protected Metrics:
+- **QBR Month Offset**: QBR collector now uses previous month's snapshot (Feb QBR uses Jan 31 data)
+- **Protected Metrics**: `endpoints_managed` and `seats_managed` cannot be modified via API (403 error)
+- **Dashboard AI Prompt**: New reference document at `/prompts/qbr-seats-endpoints-reference.md`
+- **Historical Values Corrected**: Oct 2025 - Jan 2026 seat/endpoint values manually verified and locked
+- **Utility Function**: Added `get_previous_period()` helper for month offset calculations
+
+### Previous Version (v1.38.5)
 
 Ninja Credentials Architecture & BHAG Calculation Fix:
 - **Ninja Credentials Isolated**: ALL Ninja credentials (base_url, client_id, client_secret, refresh_token) now stored in JSON file exclusively

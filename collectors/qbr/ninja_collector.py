@@ -22,12 +22,18 @@ class NinjaQBRCollector(BaseQBRCollector):
 
     Note: This collector queries existing device_snapshot data, not the Ninja API.
     The daily Ninja collector already populates device_snapshot at 02:10 AM.
+
+    BHAG Calculation (must match Dashboard AI exactly):
+    - Start with ALL devices
+    - Exclude by node_class: VMWARE_VM_GUEST, WINDOWS_SERVER, VMWARE_VM_HOST
+    - Exclude by spare: displayName or location contains "spare" (case-insensitive)
+    - Exclude by organization: exact match on excluded org names
     """
 
-    # Organizations to exclude from both metrics
-    EXCLUDED_ORGS = ['Ener Systems', 'Internal Infrastructure', 'z_Terese Ashley']
+    # Organizations to exclude from both metrics (EXACT match required)
+    EXCLUDED_ORGS = ['Ener Systems, LLC', 'Internal Infrastructure', 'z_Terese Ashley']
 
-    # Node classes to exclude from BHAG only
+    # Node classes to exclude from BHAG (case-sensitive exact match)
     BHAG_EXCLUDED_NODE_CLASSES = ['VMWARE_VM_GUEST', 'WINDOWS_SERVER', 'VMWARE_VM_HOST']
 
     def __init__(self, organization_id: int = 1):
@@ -138,13 +144,11 @@ class NinjaQBRCollector(BaseQBRCollector):
         """
         Count # of Seats Managed (BHAG calculation).
 
-        BHAG = Total devices MINUS:
-        1. Servers (device_type_name = 'server')
-        2. Spare devices (display name or location contains "spare")
-        3. Internal organizations
-
-        Note: VM guests are already excluded (not in database).
-        VM hosts cannot be distinguished in current schema, so we exclude all servers as proxy.
+        BHAG calculation matches Dashboard AI exactly:
+        1. Start with ALL devices from Ninja
+        2. Exclude by node_class: VMWARE_VM_GUEST, WINDOWS_SERVER, VMWARE_VM_HOST
+        3. Exclude by spare: displayName or location contains "spare" (case-insensitive)
+        4. Exclude by organization: exact match on excluded org names
 
         Args:
             session: Database session
@@ -156,7 +160,7 @@ class NinjaQBRCollector(BaseQBRCollector):
         # Get all devices for the snapshot date
         all_devices_query = session.query(
             DeviceSnapshot.device_identity_id,
-            DeviceSnapshot.device_type_name,
+            DeviceSnapshot.node_class,
             DeviceSnapshot.display_name,
             DeviceSnapshot.location_name,
             DeviceSnapshot.organization_name
@@ -165,27 +169,32 @@ class NinjaQBRCollector(BaseQBRCollector):
             DeviceSnapshot.snapshot_date == snapshot_date
         )
 
-        # Build exclusion criteria
+        # Build exclusion criteria (order matters for logging, but not for result)
         excluded_device_ids = set()
+        exclusion_counts = {'node_class': 0, 'spare': 0, 'organization': 0}
 
-        for device_identity_id, device_type, display_name, location, org_name in all_devices_query:
-            # Exclusion 1: Servers (includes Windows Server and VM hosts)
-            if device_type == 'server':
+        for device_identity_id, node_class, display_name, location, org_name in all_devices_query:
+            if device_identity_id in excluded_device_ids:
+                continue  # Already excluded
+
+            # Exclusion 1: Node class (case-sensitive exact match)
+            if node_class and node_class in self.BHAG_EXCLUDED_NODE_CLASSES:
                 excluded_device_ids.add(device_identity_id)
+                exclusion_counts['node_class'] += 1
                 continue
 
-            # Exclusion 2: Spare devices (display name or location contains "spare")
-            if display_name and 'spare' in display_name.lower():
+            # Exclusion 2: Spare devices (display name or location contains "spare", case-insensitive)
+            display_name_lower = (display_name or '').lower()
+            location_lower = (location or '').lower()
+            if 'spare' in display_name_lower or 'spare' in location_lower:
                 excluded_device_ids.add(device_identity_id)
+                exclusion_counts['spare'] += 1
                 continue
 
-            if location and 'spare' in location.lower():
-                excluded_device_ids.add(device_identity_id)
-                continue
-
-            # Exclusion 3: Internal organizations
+            # Exclusion 3: Internal organizations (exact match)
             if org_name in self.EXCLUDED_ORGS:
                 excluded_device_ids.add(device_identity_id)
+                exclusion_counts['organization'] += 1
                 continue
 
         # Count total devices
@@ -197,10 +206,15 @@ class NinjaQBRCollector(BaseQBRCollector):
         ).scalar() or 0
 
         # Calculate BHAG
-        bhag = total_devices - len(excluded_device_ids)
+        total_excluded = len(excluded_device_ids)
+        bhag = total_devices - total_excluded
 
         self.logger.info(
-            f"BHAG calculation: {total_devices} total - {len(excluded_device_ids)} excluded = {bhag}"
+            f"BHAG calculation: {total_devices} total - {total_excluded} excluded = {bhag}"
+        )
+        self.logger.info(
+            f"BHAG exclusion breakdown: node_class={exclusion_counts['node_class']}, "
+            f"spare={exclusion_counts['spare']}, organization={exclusion_counts['organization']}"
         )
 
         return bhag

@@ -176,6 +176,9 @@ class DeviceSnapshot(Base):
     
     # Hardware Information (Ninja-specific)
     os_architecture = Column(String(100), nullable=True)
+
+    # NinjaRMM Node Class (for BHAG/seat calculation)
+    node_class = Column(String(100), nullable=True)
     
     # Windows 11 24H2 Assessment fields
     windows_11_24h2_capable = Column(Boolean, nullable=True)
@@ -222,6 +225,8 @@ class DeviceSnapshot(Base):
         Index('idx_device_snapshot_location_name', 'location_name'),
         Index('idx_device_snapshot_device_type_name', 'device_type_name'),
         Index('idx_device_snapshot_billable_status_name', 'billable_status_name'),
+        # NinjaRMM Node Class index
+        Index('idx_device_snapshot_node_class', 'node_class'),
     )
     
     # Relationships

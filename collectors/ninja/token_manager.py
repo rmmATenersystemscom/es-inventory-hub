@@ -1,10 +1,17 @@
 """
-NinjaRMM Token Manager - handles OAuth token rotation
+NinjaRMM Credentials Manager - handles all Ninja authentication
+
+This module manages ALL NinjaRMM credentials for this system (DbAI):
+- base_url, client_id, client_secret: Static credentials specific to this system
+- refresh_token: Rotates on every use, must be persisted
+
+IMPORTANT: Each system (DbAI vs Dashboard AI) has its own Ninja client credentials.
+The shared secrets file (/opt/shared-secrets/api-secrets.env) contains Dashboard AI's
+credentials, NOT DbAI's. Therefore ALL Ninja credentials must come from this JSON file.
 
 NinjaRMM uses refresh token rotation - each time you exchange a refresh token
 for an access token, NinjaRMM may return a NEW refresh token. The old token
-can become invalid. This module handles saving the rotated tokens to prevent
-authentication failures.
+can become invalid.
 """
 
 import json
@@ -17,65 +24,91 @@ from typing import Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
 
-# Token file location - outside of git-tracked directories
-TOKEN_FILE_PATH = '/opt/es-inventory-hub/data/ninja_refresh_token.json'
+# Credentials file location - stores ALL Ninja credentials for this system
+CREDENTIALS_FILE_PATH = '/opt/es-inventory-hub/data/ninja_refresh_token.json'
 
 
-def _read_token_file() -> Optional[Dict[str, Any]]:
-    """Read token from file with locking."""
+def _read_credentials_file() -> Optional[Dict[str, Any]]:
+    """Read credentials from file with locking."""
     try:
-        if os.path.exists(TOKEN_FILE_PATH):
-            with open(TOKEN_FILE_PATH, 'r') as f:
+        if os.path.exists(CREDENTIALS_FILE_PATH):
+            with open(CREDENTIALS_FILE_PATH, 'r') as f:
                 fcntl.flock(f.fileno(), fcntl.LOCK_SH)
                 try:
                     return json.load(f)
                 finally:
                     fcntl.flock(f.fileno(), fcntl.LOCK_UN)
     except Exception as e:
-        logger.warning(f"Could not read token file: {e}")
+        logger.warning(f"Could not read credentials file: {e}")
     return None
 
 
-def _write_token_file(data: Dict[str, Any]) -> bool:
-    """Write token to file with locking."""
+def _write_credentials_file(data: Dict[str, Any]) -> bool:
+    """Write credentials to file with locking."""
     try:
-        os.makedirs(os.path.dirname(TOKEN_FILE_PATH), exist_ok=True)
-        with open(TOKEN_FILE_PATH, 'w') as f:
+        os.makedirs(os.path.dirname(CREDENTIALS_FILE_PATH), exist_ok=True)
+        with open(CREDENTIALS_FILE_PATH, 'w') as f:
             fcntl.flock(f.fileno(), fcntl.LOCK_EX)
             try:
                 json.dump(data, f, indent=2)
             finally:
                 fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-        os.chmod(TOKEN_FILE_PATH, 0o600)  # Secure permissions
-        logger.info(f"Saved new refresh token to {TOKEN_FILE_PATH}")
+        os.chmod(CREDENTIALS_FILE_PATH, 0o600)  # Secure permissions
+        logger.info(f"Saved credentials to {CREDENTIALS_FILE_PATH}")
         return True
     except Exception as e:
-        logger.error(f"Could not write token file: {e}")
+        logger.error(f"Could not write credentials file: {e}")
         return False
 
 
-def get_refresh_token(env_fallback: Optional[str] = None) -> Optional[str]:
+def get_credentials() -> Optional[Dict[str, str]]:
     """
-    Get current refresh token from file or environment.
+    Get all Ninja credentials from file.
 
-    Args:
-        env_fallback: Fallback token from environment variable
+    Returns dict with: base_url, client_id, client_secret, refresh_token
+    Or None if file is missing or invalid.
+    """
+    creds = _read_credentials_file()
+    if not creds:
+        logger.error(f"No credentials file found at {CREDENTIALS_FILE_PATH}")
+        return None
+
+    required = ['base_url', 'client_id', 'client_secret', 'refresh_token']
+    missing = [k for k in required if not creds.get(k)]
+    if missing:
+        logger.error(f"Missing credentials in {CREDENTIALS_FILE_PATH}: {missing}")
+        return None
+
+    return {
+        'base_url': creds['base_url'].rstrip('/'),
+        'client_id': creds['client_id'],
+        'client_secret': creds['client_secret'],
+        'refresh_token': creds['refresh_token']
+    }
+
+
+def get_refresh_token() -> Optional[str]:
+    """
+    Get current refresh token from file.
+
+    NinjaRMM rotates refresh tokens on every use - the JSON file is the ONLY
+    valid source for the current token. Environment variables cannot be used
+    because they would contain stale/invalid tokens after any API call.
 
     Returns:
         The current refresh token, or None if not available
     """
-    token_data = _read_token_file()
-    if token_data and token_data.get('refresh_token'):
+    creds = _read_credentials_file()
+    if creds and creds.get('refresh_token'):
         logger.debug("Using refresh token from file")
-        return token_data['refresh_token']
-    if env_fallback:
-        logger.debug("Using refresh token from environment (fallback)")
-    return env_fallback
+        return creds['refresh_token']
+    logger.error(f"No refresh token found in {CREDENTIALS_FILE_PATH}")
+    return None
 
 
 def save_refresh_token(new_token: str, source: str = 'api_response') -> bool:
     """
-    Save new refresh token to file.
+    Save new refresh token to file, preserving other credentials.
 
     Args:
         new_token: The new refresh token to save
@@ -86,38 +119,42 @@ def save_refresh_token(new_token: str, source: str = 'api_response') -> bool:
     """
     if not new_token:
         return False
-    data = {
-        'refresh_token': new_token,
-        'updated_at': datetime.utcnow().isoformat() + 'Z',
-        'source': source
-    }
-    return _write_token_file(data)
+
+    # Read existing credentials to preserve them
+    existing = _read_credentials_file() or {}
+
+    # Update only the refresh token and metadata
+    existing['refresh_token'] = new_token
+    existing['updated_at'] = datetime.utcnow().isoformat() + 'Z'
+    existing['source'] = source
+
+    return _write_credentials_file(existing)
 
 
-def get_access_token(base_url: str, client_id: str, client_secret: str,
-                     env_refresh_token: Optional[str] = None) -> Optional[str]:
+def get_access_token() -> Optional[str]:
     """
     Get access token with automatic token rotation handling.
 
     This function:
-    1. Reads the current refresh token from file (or falls back to env variable)
-    2. Exchanges it for an access token
+    1. Reads ALL credentials (base_url, client_id, client_secret, refresh_token) from JSON file
+    2. Exchanges refresh token for an access token
     3. Saves any new refresh token returned by the API
 
-    Args:
-        base_url: NinjaRMM API base URL (e.g., https://app.ninjarmm.com)
-        client_id: OAuth client ID
-        client_secret: OAuth client secret
-        env_refresh_token: Fallback refresh token from environment
+    NinjaRMM rotates tokens on every use - the JSON file is the ONLY valid source.
+    Environment variables are NOT supported because they become stale immediately.
 
     Returns:
         Access token string, or None if failed
     """
-    refresh_token = get_refresh_token(env_refresh_token)
-
-    if not refresh_token:
-        logger.error("No refresh token available (neither in file nor environment)")
+    creds = get_credentials()
+    if not creds:
+        logger.error(f"Cannot get access token - credentials missing from {CREDENTIALS_FILE_PATH}")
         return None
+
+    base_url = creds['base_url']
+    client_id = creds['client_id']
+    client_secret = creds['client_secret']
+    refresh_token = creds['refresh_token']
 
     token_url = f"{base_url}/oauth/token"
     data = {
@@ -141,19 +178,10 @@ def get_access_token(base_url: str, client_id: str, client_secret: str,
             logger.error("No access_token in response")
             return None
 
-        # Handle token rotation - save new refresh token if provided
-        if new_refresh_token:
-            token_data = _read_token_file()
-            current_token = token_data.get('refresh_token') if token_data else None
-
-            # Save if token was rotated OR if we don't have a file yet
-            if new_refresh_token != current_token:
-                if current_token and new_refresh_token != refresh_token:
-                    logger.info("NinjaRMM rotated refresh token - saving new token")
-                    save_refresh_token(new_refresh_token, source='token_rotation')
-                elif token_data is None:
-                    logger.info("No token file exists - creating initial token file")
-                    save_refresh_token(new_refresh_token, source='initial_save')
+        # Handle token rotation - save new refresh token if provided and different
+        if new_refresh_token and new_refresh_token != refresh_token:
+            logger.info("NinjaRMM rotated refresh token - saving new token")
+            save_refresh_token(new_refresh_token, source='token_rotation')
 
         logger.debug("Successfully obtained access token")
         return access_token
@@ -164,7 +192,7 @@ def get_access_token(base_url: str, client_id: str, client_secret: str,
             logger.error(f"NinjaRMM token error (400): {error_detail}")
             if 'invalid_token' in error_detail or 'invalid_grant' in error_detail:
                 logger.error("Refresh token may be expired or invalid. "
-                           "You may need to generate a new refresh token manually.")
+                           "Update refresh_token in " + CREDENTIALS_FILE_PATH)
         else:
             logger.error(f"HTTP error getting access token: {e}")
         return None
@@ -176,23 +204,28 @@ def get_access_token(base_url: str, client_id: str, client_secret: str,
         return None
 
 
-def get_token_status() -> Dict[str, Any]:
+def get_credentials_status() -> Dict[str, Any]:
     """
-    Get status information about the stored token.
+    Get status information about stored credentials.
 
     Returns:
-        Dict with token status information
+        Dict with credentials status information
     """
-    token_data = _read_token_file()
-    if token_data:
+    creds = _read_credentials_file()
+    if creds:
+        has_all = all(creds.get(k) for k in ['base_url', 'client_id', 'client_secret', 'refresh_token'])
         return {
-            'has_token': True,
-            'updated_at': token_data.get('updated_at'),
-            'source': token_data.get('source'),
-            'file_path': TOKEN_FILE_PATH
+            'has_credentials': has_all,
+            'has_base_url': bool(creds.get('base_url')),
+            'has_client_id': bool(creds.get('client_id')),
+            'has_client_secret': bool(creds.get('client_secret')),
+            'has_refresh_token': bool(creds.get('refresh_token')),
+            'updated_at': creds.get('updated_at'),
+            'source': creds.get('source'),
+            'file_path': CREDENTIALS_FILE_PATH
         }
     return {
-        'has_token': False,
-        'file_path': TOKEN_FILE_PATH,
-        'note': 'Will use NINJA_REFRESH_TOKEN environment variable as fallback'
+        'has_credentials': False,
+        'file_path': CREDENTIALS_FILE_PATH,
+        'note': 'Credentials file missing. Create it with base_url, client_id, client_secret, refresh_token.'
     }

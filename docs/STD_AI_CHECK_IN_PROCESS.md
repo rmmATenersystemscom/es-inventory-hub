@@ -119,6 +119,6 @@ All detailed revision notes are preserved in Git tag messages and commit history
 
 ---
 
-**Version**: v1.0.0  
-**Last Updated**: November 4, 2025 03:44 UTC  
+**Version**: v1.38.5
+**Last Updated**: January 13, 2026 15:22 UTC
 **Maintainer**: ES Inventory Hub Team

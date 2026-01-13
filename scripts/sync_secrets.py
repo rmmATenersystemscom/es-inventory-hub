@@ -54,13 +54,11 @@ BACKUP_DIR = Path("/opt/es-inventory-hub/.env-backups")
 BACKUP_DIR.mkdir(exist_ok=True)
 
 # Variables to sync (API secrets that come from shared secrets)
+# NOTE: NinjaRMM variables are NOT synced here because:
+# 1. DbAI has its own Ninja client credentials (separate from Dashboard AI)
+# 2. The refresh token rotates on every use
+# ALL Ninja credentials are stored in: /opt/es-inventory-hub/data/ninja_refresh_token.json
 SYNC_VARIABLES = {
-    # NinjaRMM
-    'NINJA_BASE_URL',
-    'NINJA_CLIENT_ID',
-    'NINJA_CLIENT_SECRET',
-    'NINJA_REFRESH_TOKEN',
-    
     # ThreatLocker
     'THREATLOCKER_API_BASE_URL',
     'THREATLOCKER_API_KEY',

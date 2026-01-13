@@ -1,28 +1,33 @@
 """Ninja API client for device collection."""
 
-import os
 import requests
 from typing import Generator, Dict, Any, Optional
 
-from collectors.ninja.token_manager import get_access_token as get_rotated_access_token
+from collectors.ninja.token_manager import get_access_token, get_credentials
 
 
 class NinjaAPI:
     """NinjaRMM API client for device data collection."""
 
     def __init__(self):
-        """Initialize the API client with credentials from environment."""
-        self.base_url = os.getenv('NINJA_BASE_URL', 'https://app.ninjarmm.com').rstrip('/')
-        self.client_id = os.getenv('NINJA_CLIENT_ID')
-        self.client_secret = os.getenv('NINJA_CLIENT_SECRET')
-        self.refresh_token = os.getenv('NINJA_REFRESH_TOKEN')
+        """
+        Initialize the API client.
 
-        # Check for required credentials
-        if not self.client_id or not self.client_secret:
+        ALL credentials (base_url, client_id, client_secret, refresh_token) are read
+        from the JSON file: /opt/es-inventory-hub/data/ninja_refresh_token.json
+
+        This is necessary because DbAI has separate Ninja client credentials from
+        Dashboard AI, and the shared secrets file contains Dashboard AI's credentials.
+        """
+        # Get credentials from JSON file (NOT from environment)
+        creds = get_credentials()
+        if not creds:
             raise ValueError(
-                "Missing required NinjaRMM environment variables: "
-                "NINJA_CLIENT_ID and NINJA_CLIENT_SECRET"
+                "Missing NinjaRMM credentials. Check "
+                "/opt/es-inventory-hub/data/ninja_refresh_token.json"
             )
+
+        self.base_url = creds['base_url']
 
         # Initialize session
         self.session = requests.Session()
@@ -30,16 +35,14 @@ class NinjaAPI:
 
     def _get_access_token(self) -> str:
         """Get OAuth access token using refresh token flow with automatic rotation handling."""
-        # Use token manager for automatic refresh token rotation
-        access_token = get_rotated_access_token(
-            self.base_url,
-            self.client_id,
-            self.client_secret,
-            self.refresh_token  # Fallback to env variable
-        )
+        # Token manager reads ALL credentials from JSON file and handles rotation
+        access_token = get_access_token()
 
         if not access_token:
-            raise Exception('Failed to obtain NinjaRMM access token')
+            raise Exception(
+                'Failed to obtain NinjaRMM access token. '
+                'Check /opt/es-inventory-hub/data/ninja_refresh_token.json'
+            )
 
         return access_token
     

@@ -200,6 +200,9 @@ def insert_snapshot(
         'volumes': normalized.get('volumes'),
         'system_manufacturer': normalized.get('system_manufacturer'),
         'system_model': normalized.get('system_model'),
+
+        # NinjaRMM Node Class (for BHAG/seat calculation)
+        'node_class': normalized.get('node_class'),
     }
     
     # Perform PostgreSQL upsert
@@ -257,8 +260,11 @@ def insert_snapshot(
         'volumes': stmt.excluded.volumes,
         'system_manufacturer': stmt.excluded.system_manufacturer,
         'system_model': stmt.excluded.system_model,
+
+        # NinjaRMM Node Class (for BHAG/seat calculation)
+        'node_class': stmt.excluded.node_class,
     }
-    
+
     # Add ON CONFLICT clause for the unique constraint
     stmt = stmt.on_conflict_do_update(
         constraint='uq_device_snapshot_date_vendor_device',

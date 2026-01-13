@@ -62,6 +62,72 @@ PROTECTED_METRICS = {
     'seats_managed',        # Ninja BHAG calculation - collected by QBR Ninja collector
 }
 
+# Metric descriptions - explains the source and calculation for each metric
+# These are included in API responses to help Dashboard AI understand the data
+METRIC_DESCRIPTIONS = {
+    # Ninja collected metrics (protected)
+    'endpoints_managed': (
+        "Billable Ninja devices. Excludes internal orgs (Ener Systems LLC, "
+        "Internal Infrastructure, z_Terese Ashley) and spare devices."
+    ),
+    'seats_managed': (
+        "BHAG calculation: Total Ninja devices minus exclusions. "
+        "Excludes node_class (VMWARE_VM_GUEST, WINDOWS_SERVER, VMWARE_VM_HOST), "
+        "spare devices (name/location contains 'spare'), and internal orgs."
+    ),
+
+    # QuickBooks revenue metrics
+    'nrr': "QuickBooks: Non-Recurring Revenue, Professional Services accounts.",
+    'mrr': "QuickBooks: Monthly Recurring Revenue, Managed Services accounts.",
+    'orr': "QuickBooks: Other Recurring Revenue, Annual Revenue accounts.",
+    'product_sales': "Calculated: Total Income minus NRR, MRR, and ORR.",
+    'misc_revenue': "QuickBooks: Other Income accounts.",
+    'total_revenue': "Calculated: NRR + MRR + ORR + Product Sales + Misc Revenue.",
+    'total_income': "QuickBooks: Total Income subtotal (intermediate value).",
+
+    # QuickBooks expense inputs
+    'payroll_total': "QuickBooks: Payroll Expenses subtotal (intermediate value).",
+    'product_cogs': "QuickBooks: Cost of Goods Sold accounts.",
+    'total_expenses_qb': "QuickBooks: Total Expenses subtotal (intermediate value).",
+    'uncategorized_expenses': "QuickBooks: Uncategorized Expenses - subtracted from total.",
+
+    # Calculated expense metrics
+    'employee_expense': "Formula: payroll_total - owner_comp_taxes - owner_comp",
+    'other_expenses': "Formula: total_expenses_qb - employee_expense - owner_comp_taxes - owner_comp",
+    'total_expenses': (
+        "Formula: employee_expense + other_expenses + owner_comp + owner_comp_taxes "
+        "+ product_cogs - uncategorized_expenses"
+    ),
+    'net_profit': "Formula: total_revenue - total_expenses",
+
+    # CFO manual entry metrics
+    'owner_comp': "Owner compensation - manual entry from CFO.",
+    'owner_comp_taxes': "Owner compensation taxes - manual entry from CFO.",
+
+    # Staffing metrics (manual entry)
+    'employees': "Total number of employees - manual entry.",
+    'technical_employees': "Number of technical/service employees - manual entry.",
+    'agreements': "Number of active managed service agreements - manual entry.",
+
+    # ConnectWise ticket metrics
+    'reactive_tickets_created': "Reactive tickets opened during the period from ConnectWise.",
+    'reactive_tickets_closed': "Reactive tickets closed during the period from ConnectWise.",
+    'reactive_time_spent': "Total hours spent on reactive tickets from ConnectWise.",
+
+    # Sales/marketing metrics (manual entry)
+    'telemarketing_dials': "Number of outbound telemarketing calls made - manual entry.",
+    'first_time_appointments': "Number of first-time prospect appointments - manual entry.",
+    'prospects_to_pbr': "Prospects converted to PBR (Potential Business Review) - manual entry.",
+    'new_agreements': "New managed service agreements signed - manual entry.",
+    'new_mrr': "New Monthly Recurring Revenue added - manual entry.",
+    'lost_mrr': "Monthly Recurring Revenue lost (churn) - manual entry.",
+}
+
+
+def get_metric_description(metric_name: str) -> Optional[str]:
+    """Get the description for a metric, or None if not defined."""
+    return METRIC_DESCRIPTIONS.get(metric_name)
+
 
 def validate_period(period: str, period_type: str = 'monthly') -> bool:
     """
@@ -246,6 +312,7 @@ def get_monthly_metrics():
                             "metric_value": float(m.metric_value) if m.metric_value else None,
                             "vendor_id": m.vendor_id,
                             "data_source": m.data_source,
+                            "description": get_metric_description(m.metric_name),
                             "notes": m.notes,
                             "updated_at": m.updated_at.isoformat() if m.updated_at else None
                         }
@@ -711,13 +778,24 @@ def get_quarterly_metrics():
                 if count > 0:
                     quarterly_metrics[metric_name] = float(total / count)
 
+            # Build metrics with descriptions
+            metrics_with_descriptions = [
+                {
+                    "metric_name": name,
+                    "metric_value": value,
+                    "description": get_metric_description(name),
+                    "aggregation": "sum" if name in sum_metrics else "average"
+                }
+                for name, value in quarterly_metrics.items()
+            ]
+
             result = {
                 "success": True,
                 "data": {
                     "period": period,
                     "organization_id": organization_id,
                     "monthly_periods": monthly_periods,
-                    "metrics": quarterly_metrics
+                    "metrics": metrics_with_descriptions
                 }
             }
 

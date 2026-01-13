@@ -87,17 +87,33 @@ Returns:
       {
         "metric_name": "endpoints_managed",
         "metric_value": 586.0,
-        "data_source": "corrected"
+        "data_source": "corrected",
+        "description": "Billable Ninja devices. Excludes internal orgs (Ener Systems LLC, Internal Infrastructure, z_Terese Ashley) and spare devices."
       },
       {
         "metric_name": "seats_managed",
         "metric_value": 536.0,
-        "data_source": "corrected"
+        "data_source": "corrected",
+        "description": "BHAG calculation: Total Ninja devices minus exclusions. Excludes node_class (VMWARE_VM_GUEST, WINDOWS_SERVER, VMWARE_VM_HOST), spare devices (name/location contains 'spare'), and internal orgs."
+      },
+      {
+        "metric_name": "employee_expense",
+        "metric_value": 45000.00,
+        "data_source": "calculated",
+        "description": "Formula: payroll_total - owner_comp_taxes - owner_comp"
       }
     ]
   }
 }
 ```
+
+### Metric Descriptions for UI
+
+Each metric in the API response includes a `description` field that explains:
+- **Source**: Where the data comes from (QuickBooks, Ninja, manual entry, etc.)
+- **Formula**: For calculated metrics, the exact computation formula
+
+**Use these descriptions as flyover/tooltip text** in the Dashboard UI to help users understand each metric.
 
 ### Writing Metrics - PROTECTED
 
@@ -164,6 +180,6 @@ When displaying QBR metrics:
 
 ---
 
-**Version**: v1.38.5
-**Last Updated**: January 13, 2026 15:45 UTC
+**Version**: v1.38.7
+**Last Updated**: January 13, 2026 17:09 UTC
 **Maintainer**: ES Inventory Hub Team

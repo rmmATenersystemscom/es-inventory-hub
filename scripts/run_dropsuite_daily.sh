@@ -18,7 +18,9 @@ log_message "Starting Dropsuite daily collection"
 # Load environment variables
 set -a
 . /opt/es-inventory-hub/.env
+set +u  # Temporarily disable unset variable check (bcrypt hashes contain $2b)
 . /opt/shared-secrets/api-secrets.env
+set -u  # Re-enable
 set +a
 
 # Activate virtual environment

@@ -17,7 +17,9 @@ log_message "Starting Ninja daily collection"
 
 # Load environment variables
 set -a
+set +u  # Temporarily disable unset variable check (bcrypt hashes contain $2b)
 . /opt/shared-secrets/api-secrets.env
+set -u  # Re-enable
 . /opt/es-inventory-hub/.env
 set +a
 

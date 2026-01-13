@@ -1,6 +1,6 @@
 # ES Inventory Hub
 
-**Current Version**: v1.38.3 (stable)
+**Current Version**: v1.38.4 (stable)
 
 A centralized inventory management system for collecting and storing data from various sources including Ninja and ThreatLocker.
 
@@ -44,7 +44,15 @@ If ES Inventory Hub needs dashboard-related changes, put your request in a text 
 - Provide dashboards for analysis (seat counts, spares, billing vs non-billing, etc.).
 - Highlight mismatches and exceptions (e.g., ThreatLocker device missing in Ninja).
 
-## Current Version (v1.38.3)
+## Current Version (v1.38.4)
+
+Daily Collector Script Fix - Bcrypt Hash Variable Expansion:
+- **Fixed Daily Scripts**: All 7 daily collector scripts updated to handle bcrypt hash in secrets file
+- **Root Cause**: `set -u` in bash scripts caused `$2b` in bcrypt hash to be interpreted as undefined variable
+- **Solution**: Added `set +u` before sourcing api-secrets.env and `set -u` after
+- **Affected Scripts**: run_m365_daily.sh, run_ninja_daily.sh, run_threatlocker_daily.sh, run_veeam_daily.sh, run_duo_daily.sh, run_vadesecure_daily.sh, run_dropsuite_daily.sh
+
+### Previous Version (v1.38.3)
 
 SSL Certificate Renewal & New M365 Organizations:
 - **SSL Certificate Renewal**: Updated api.crt and api.key for continued HTTPS operation

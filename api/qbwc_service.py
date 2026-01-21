@@ -140,6 +140,26 @@ def get_synced_periods(session_db, organization_id: int = 1) -> set:
     return {row[0].strftime('%Y-%m') for row in result.fetchall()}
 
 
+def get_always_resync_periods() -> set:
+    """
+    Get periods that should ALWAYS be re-synced, even if previously synced.
+
+    QuickBooks data for the current month and previous month may change frequently
+    (invoices, corrections, etc.), so we always want to refresh these.
+    """
+    today = date.today()
+    current_period = today.strftime('%Y-%m')
+
+    # Calculate previous month
+    if today.month == 1:
+        prev_month = date(today.year - 1, 12, 1)
+    else:
+        prev_month = date(today.year, today.month - 1, 1)
+    prev_period = prev_month.strftime('%Y-%m')
+
+    return {current_period, prev_period}
+
+
 def build_pl_query(start_date: str, end_date: str) -> str:
     """Build QBXML Profit & Loss Standard report query (Cash basis - QB default)"""
     return f'''<?xml version="1.0" encoding="utf-8"?>
@@ -534,11 +554,16 @@ def handle_authenticate(params: Dict[str, str]) -> List[str]:
 
     # Check if there's work to do
     periods_to_sync = get_periods_to_sync()
+    always_resync = get_always_resync_periods()
 
     with session_scope() as session:
         synced_periods = get_synced_periods(session)
 
-    pending_periods = [p for p in periods_to_sync if p not in synced_periods]
+    # Include periods that haven't been synced OR periods that should always be refreshed
+    pending_periods = [
+        p for p in periods_to_sync
+        if p not in synced_periods or p in always_resync
+    ]
 
     if not pending_periods:
         logger.info("No pending periods to sync")
@@ -549,6 +574,8 @@ def handle_authenticate(params: Dict[str, str]) -> List[str]:
             details={'status': 'no_work'}
         )
         return ['', 'none']
+
+    logger.info(f"Periods to sync: {pending_periods} (always_resync: {always_resync})")
 
     # Create session
     ticket = str(uuid.uuid4())
@@ -599,10 +626,27 @@ def handle_send_request_xml(params: Dict[str, str]) -> str:
 
         synced_periods = get_synced_periods(session, sync_session.organization_id)
         periods_to_sync = get_periods_to_sync()
-        pending_periods = [p for p in periods_to_sync if p not in synced_periods]
+        always_resync = get_always_resync_periods()
+
+        # Get periods synced in THIS session (to avoid re-syncing same period multiple times)
+        session_synced = session.execute(
+            select(QBWCSyncHistory.period_start)
+            .where(QBWCSyncHistory.session_id == sync_session.id)
+            .where(QBWCSyncHistory.sync_type == 'profit_loss')
+        )
+        session_synced_periods = {row[0].strftime('%Y-%m') for row in session_synced.fetchall()}
+
+        # Include periods that:
+        # - Haven't been synced ever, OR
+        # - Are in always_resync (current/previous month) AND haven't been synced in THIS session
+        pending_periods = [
+            p for p in periods_to_sync
+            if (p not in synced_periods) or (p in always_resync and p not in session_synced_periods)
+        ]
 
         if pending_periods:
             period = pending_periods[0]
+            logger.info(f"Next period to sync: {period} (session already synced: {session_synced_periods})")
             year, month = map(int, period.split('-'))
             start_date = date(year, month, 1)
             if month == 12:

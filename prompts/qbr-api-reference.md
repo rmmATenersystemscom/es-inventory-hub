@@ -357,6 +357,6 @@ Some metrics have specific display labels that differ from their API names:
 
 ---
 
-**Version**: v1.38.7
-**Last Updated**: January 13, 2026 17:09 UTC
+**Version**: v1.38.8
+**Last Updated**: January 21, 2026 01:24 UTC
 **Maintainer**: ES Inventory Hub Team

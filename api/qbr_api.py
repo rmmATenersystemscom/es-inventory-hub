@@ -93,7 +93,7 @@ METRIC_DESCRIPTIONS = {
 
     # Calculated expense metrics
     'employee_expense': "Formula: payroll_total - owner_comp_taxes - owner_comp",
-    'other_expenses': "Formula: total_expenses_qb - employee_expense - owner_comp_taxes - owner_comp",
+    'other_expenses': "Calculated: Total QB Expenses minus Employee Expense, Owner Comp, and Owner Taxes. Does NOT include COGS.",
     'total_expenses': (
         "Formula: employee_expense + other_expenses + owner_comp + owner_comp_taxes "
         "+ product_cogs - uncategorized_expenses"
@@ -1474,6 +1474,497 @@ def calculate_expenses():
                 "code": "SERVER_ERROR",
                 "message": str(e),
                 "status": 500
+            }
+        }), 500
+
+
+# ============================================================================
+# METRIC DEFINITIONS ENDPOINT - For Dashboard AI Tooltips
+# ============================================================================
+
+# Complete metric metadata for Dashboard AI
+METRIC_METADATA = {
+    # Support Tickets
+    'reactive_tickets_created': {
+        'label': 'Reactive Tickets Opened',
+        'category': 'Support Tickets',
+        'format': 'number',
+        'source': 'connectwise',
+        'is_editable': False,
+        'is_calculated': False,
+        'formula': None,
+        'components': []
+    },
+    'reactive_tickets_closed': {
+        'label': 'Reactive Tickets Closed',
+        'category': 'Support Tickets',
+        'format': 'number',
+        'source': 'connectwise',
+        'is_editable': False,
+        'is_calculated': False,
+        'formula': None,
+        'components': []
+    },
+    'reactive_time_spent': {
+        'label': 'Reactive Hours',
+        'category': 'Support Tickets',
+        'format': 'number',
+        'source': 'connectwise',
+        'is_editable': False,
+        'is_calculated': False,
+        'formula': None,
+        'components': []
+    },
+
+    # Device Metrics
+    'endpoints_managed': {
+        'label': 'Billable Ninja Devices',
+        'category': 'Devices',
+        'format': 'number',
+        'source': 'ninja',
+        'is_editable': False,
+        'is_calculated': False,
+        'formula': None,
+        'components': []
+    },
+    'seats_managed': {
+        'label': 'Total Endpoints (BHAG)',
+        'category': 'Devices',
+        'format': 'number',
+        'source': 'ninja',
+        'is_editable': False,
+        'is_calculated': False,
+        'formula': None,
+        'components': []
+    },
+
+    # Revenue
+    'nrr': {
+        'label': 'Non-Recurring Revenue',
+        'category': 'Revenue',
+        'format': 'currency',
+        'source': 'quickbooks',
+        'is_editable': False,
+        'is_calculated': False,
+        'formula': None,
+        'components': []
+    },
+    'mrr': {
+        'label': 'Monthly Recurring Revenue',
+        'category': 'Revenue',
+        'format': 'currency',
+        'source': 'quickbooks',
+        'is_editable': False,
+        'is_calculated': False,
+        'formula': None,
+        'components': []
+    },
+    'orr': {
+        'label': 'Other Recurring Revenue',
+        'category': 'Revenue',
+        'format': 'currency',
+        'source': 'quickbooks',
+        'is_editable': False,
+        'is_calculated': False,
+        'formula': None,
+        'components': []
+    },
+    'product_sales': {
+        'label': 'Product Sales',
+        'category': 'Revenue',
+        'format': 'currency',
+        'source': 'calculated',
+        'is_editable': False,
+        'is_calculated': True,
+        'formula': 'total_income - nrr - mrr - orr',
+        'components': ['total_income', 'nrr', 'mrr', 'orr']
+    },
+    'misc_revenue': {
+        'label': 'Miscellaneous Revenue',
+        'category': 'Revenue',
+        'format': 'currency',
+        'source': 'quickbooks',
+        'is_editable': False,
+        'is_calculated': False,
+        'formula': None,
+        'components': []
+    },
+    'total_revenue': {
+        'label': 'Total Revenue',
+        'category': 'Revenue',
+        'format': 'currency',
+        'source': 'calculated',
+        'is_editable': False,
+        'is_calculated': True,
+        'formula': 'nrr + mrr + orr + product_sales + misc_revenue',
+        'components': ['nrr', 'mrr', 'orr', 'product_sales', 'misc_revenue']
+    },
+
+    # Expenses
+    'employee_expense': {
+        'label': 'Employee Expense',
+        'category': 'Expenses',
+        'format': 'currency',
+        'source': 'calculated',
+        'is_editable': False,
+        'is_calculated': True,
+        'formula': 'payroll_total - owner_comp - owner_comp_taxes',
+        'components': ['payroll_total', 'owner_comp', 'owner_comp_taxes']
+    },
+    'owner_comp': {
+        'label': 'Owner Compensation',
+        'category': 'Expenses',
+        'format': 'currency',
+        'source': 'manual',
+        'is_editable': True,
+        'is_calculated': False,
+        'formula': None,
+        'components': []
+    },
+    'owner_comp_taxes': {
+        'label': 'Owner Comp Taxes',
+        'category': 'Expenses',
+        'format': 'currency',
+        'source': 'manual',
+        'is_editable': True,
+        'is_calculated': False,
+        'formula': None,
+        'components': []
+    },
+    'product_cogs': {
+        'label': 'Product COGS',
+        'category': 'Expenses',
+        'format': 'currency',
+        'source': 'quickbooks',
+        'is_editable': False,
+        'is_calculated': False,
+        'formula': None,
+        'components': []
+    },
+    'other_expenses': {
+        'label': 'All Other Expenses',
+        'category': 'Expenses',
+        'format': 'currency',
+        'source': 'calculated',
+        'is_editable': False,
+        'is_calculated': True,
+        'formula': 'total_expenses_qb - employee_expense - owner_comp - owner_comp_taxes',
+        'components': ['total_expenses_qb', 'employee_expense', 'owner_comp', 'owner_comp_taxes']
+    },
+    'total_expenses': {
+        'label': 'Total Expenses',
+        'category': 'Expenses',
+        'format': 'currency',
+        'source': 'calculated',
+        'is_editable': False,
+        'is_calculated': True,
+        'formula': 'employee_expense + other_expenses + owner_comp + owner_comp_taxes + product_cogs - uncategorized_expenses',
+        'components': ['employee_expense', 'other_expenses', 'owner_comp', 'owner_comp_taxes', 'product_cogs', 'uncategorized_expenses']
+    },
+
+    # Profit
+    'net_profit': {
+        'label': 'Net Profit',
+        'category': 'Profit',
+        'format': 'currency',
+        'source': 'calculated',
+        'is_editable': False,
+        'is_calculated': True,
+        'formula': 'total_revenue - total_expenses',
+        'components': ['total_revenue', 'total_expenses']
+    },
+
+    # Staffing
+    'employees': {
+        'label': 'Total Employees',
+        'category': 'General',
+        'format': 'number',
+        'source': 'manual',
+        'is_editable': True,
+        'is_calculated': False,
+        'formula': None,
+        'components': []
+    },
+    'technical_employees': {
+        'label': 'Technical Employees',
+        'category': 'General',
+        'format': 'number',
+        'source': 'manual',
+        'is_editable': True,
+        'is_calculated': False,
+        'formula': None,
+        'components': []
+    },
+    'agreements': {
+        'label': 'MSA Agreements',
+        'category': 'General',
+        'format': 'number',
+        'source': 'manual',
+        'is_editable': True,
+        'is_calculated': False,
+        'formula': None,
+        'components': []
+    },
+
+    # Sales/Marketing
+    'telemarketing_dials': {
+        'label': 'Telemarketing Dials',
+        'category': 'Sales',
+        'format': 'number',
+        'source': 'manual',
+        'is_editable': True,
+        'is_calculated': False,
+        'formula': None,
+        'components': []
+    },
+    'first_time_appointments': {
+        'label': 'First Time Appointments',
+        'category': 'Sales',
+        'format': 'number',
+        'source': 'manual',
+        'is_editable': True,
+        'is_calculated': False,
+        'formula': None,
+        'components': []
+    },
+    'prospects_to_pbr': {
+        'label': 'Prospects to PBR',
+        'category': 'Sales',
+        'format': 'number',
+        'source': 'manual',
+        'is_editable': True,
+        'is_calculated': False,
+        'formula': None,
+        'components': []
+    },
+    'new_agreements': {
+        'label': 'New Agreements',
+        'category': 'Sales',
+        'format': 'number',
+        'source': 'manual',
+        'is_editable': True,
+        'is_calculated': False,
+        'formula': None,
+        'components': []
+    },
+    'new_mrr': {
+        'label': 'New MRR',
+        'category': 'Sales',
+        'format': 'currency',
+        'source': 'manual',
+        'is_editable': True,
+        'is_calculated': False,
+        'formula': None,
+        'components': []
+    },
+    'lost_mrr': {
+        'label': 'Lost MRR',
+        'category': 'Sales',
+        'format': 'currency',
+        'source': 'manual',
+        'is_editable': True,
+        'is_calculated': False,
+        'formula': None,
+        'components': []
+    },
+
+    # Intermediate/hidden metrics
+    'total_income': {
+        'label': 'Total Income (QB)',
+        'category': 'Intermediate',
+        'format': 'currency',
+        'source': 'quickbooks',
+        'is_editable': False,
+        'is_calculated': False,
+        'formula': None,
+        'components': []
+    },
+    'payroll_total': {
+        'label': 'Payroll Total (QB)',
+        'category': 'Intermediate',
+        'format': 'currency',
+        'source': 'quickbooks',
+        'is_editable': False,
+        'is_calculated': False,
+        'formula': None,
+        'components': []
+    },
+    'total_expenses_qb': {
+        'label': 'Total Expenses (QB)',
+        'category': 'Intermediate',
+        'format': 'currency',
+        'source': 'quickbooks',
+        'is_editable': False,
+        'is_calculated': False,
+        'formula': None,
+        'components': []
+    },
+    'uncategorized_expenses': {
+        'label': 'Uncategorized Expenses',
+        'category': 'Intermediate',
+        'format': 'currency',
+        'source': 'quickbooks',
+        'is_editable': False,
+        'is_calculated': False,
+        'formula': None,
+        'components': []
+    },
+}
+
+
+def format_currency(value):
+    """Format a decimal value as currency string."""
+    if value is None:
+        return '$0.00'
+    return f"${value:,.2f}"
+
+
+def build_calculation_display(formula: str, components: dict, result_value) -> str:
+    """
+    Build a human-readable calculation display string.
+
+    Example: "$88,098.48 - $14,248.85 - $22,588.00 - $13,000.00 = $38,261.63"
+    """
+    if not formula or not components:
+        return None
+
+    # Parse the formula and substitute values
+    display_parts = []
+    formula_parts = formula.replace(' ', '').replace('-', ' - ').replace('+', ' + ').split()
+
+    for part in formula_parts:
+        if part in ['+', '-']:
+            display_parts.append(part)
+        elif part in components:
+            display_parts.append(format_currency(components.get(part, 0)))
+        else:
+            display_parts.append(part)
+
+    calculation = ' '.join(display_parts)
+    result = format_currency(result_value)
+
+    return f"{calculation} = {result}"
+
+
+@qbr_api.route('/api/qbr/metric-definitions', methods=['GET'])
+def get_metric_definitions():
+    """
+    Get metric definitions with optional period-specific calculations.
+
+    Returns all metric metadata including labels, formats, descriptions,
+    and for calculated metrics, the actual component values and calculation display.
+
+    Query Parameters:
+        period: Optional. Period to get actual values for (e.g., '2026-01')
+        category: Optional. Filter by category (e.g., 'Expenses', 'Revenue')
+        include_intermediate: Optional. Include intermediate metrics (default: false)
+
+    Response includes:
+        - key: metric identifier
+        - label: display name
+        - category: grouping
+        - format: currency, number, percentage
+        - description: human-readable description
+        - source: quickbooks, calculated, manual, connectwise, ninja
+        - is_editable: whether CFO can edit
+        - is_calculated: whether derived from other metrics
+        - formula: calculation formula (if calculated)
+        - components: list of component metric keys (if calculated)
+        - value: actual value for the period (if period specified)
+        - component_values: actual component values (if calculated and period specified)
+        - calculation_display: formatted calculation string (if calculated and period specified)
+    """
+    from api.api_server import get_session
+
+    period = request.args.get('period')
+    category_filter = request.args.get('category')
+    include_intermediate = request.args.get('include_intermediate', 'false').lower() == 'true'
+    organization_id = int(request.args.get('organization_id', 1))
+
+    try:
+        # Get actual values if period is specified
+        period_values = {}
+        if period:
+            with get_session() as session:
+                metrics = session.query(QBRMetricsMonthly).filter(
+                    QBRMetricsMonthly.period == period,
+                    QBRMetricsMonthly.organization_id == organization_id
+                ).all()
+
+                for m in metrics:
+                    period_values[m.metric_name] = float(m.metric_value) if m.metric_value else 0
+
+        # Build response
+        result_metrics = []
+
+        for key, metadata in METRIC_METADATA.items():
+            # Filter by category if specified
+            if category_filter and metadata['category'].lower() != category_filter.lower():
+                continue
+
+            # Skip intermediate metrics unless requested
+            if metadata['category'] == 'Intermediate' and not include_intermediate:
+                continue
+
+            metric_def = {
+                'key': key,
+                'label': metadata['label'],
+                'category': metadata['category'],
+                'format': metadata['format'],
+                'description': METRIC_DESCRIPTIONS.get(key, ''),
+                'source': metadata['source'],
+                'is_editable': metadata['is_editable'],
+                'is_calculated': metadata['is_calculated'],
+            }
+
+            # Add formula info for calculated metrics
+            if metadata['is_calculated'] and metadata['formula']:
+                metric_def['formula'] = metadata['formula']
+                metric_def['components'] = metadata['components']
+
+                # Add actual values if period specified
+                if period and period_values:
+                    metric_def['value'] = period_values.get(key, 0)
+
+                    # Get component values
+                    component_values = {}
+                    for comp in metadata['components']:
+                        component_values[comp] = period_values.get(comp, 0)
+
+                    metric_def['component_values'] = component_values
+
+                    # Build calculation display
+                    calc_display = build_calculation_display(
+                        metadata['formula'],
+                        component_values,
+                        metric_def['value']
+                    )
+                    if calc_display:
+                        metric_def['calculation_display'] = calc_display
+
+            elif period and period_values:
+                # Non-calculated metrics - just add the value
+                metric_def['value'] = period_values.get(key, 0)
+
+            result_metrics.append(metric_def)
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'period': period,
+                'organization_id': organization_id,
+                'metrics': result_metrics,
+                'count': len(result_metrics)
+            }
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': {
+                'code': 'SERVER_ERROR',
+                'message': str(e),
+                'status': 500
             }
         }), 500
 

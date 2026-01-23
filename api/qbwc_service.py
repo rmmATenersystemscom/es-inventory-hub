@@ -430,7 +430,113 @@ def store_qbr_metrics(organization_id: int, period: str, metrics: Dict[str, Deci
         session.commit()
 
     logger.info(f"Stored {count} metrics for period {period}")
+
+    # After storing QB metrics, recalculate derived expense metrics if manual inputs exist
+    recalculate_expense_metrics(organization_id, period, vendor_id)
+
     return count
+
+
+def recalculate_expense_metrics(organization_id: int, period: str, vendor_id: int = None):
+    """
+    Recalculate derived expense metrics after QB data is updated.
+
+    This ensures employee_expense, other_expenses, and total_expenses are
+    recalculated when payroll_total or total_expenses_qb change via QBWC sync.
+
+    Only recalculates if manual inputs (owner_comp, owner_comp_taxes) exist for the period.
+
+    Formulas:
+        employee_expense = payroll_total - owner_comp_taxes - owner_comp
+        other_expenses = total_expenses_qb - employee_expense - owner_comp_taxes - owner_comp
+        total_expenses = employee_expense + other_expenses + owner_comp + owner_comp_taxes + product_cogs - uncategorized_expenses
+    """
+    with session_scope() as session:
+        # Get all metrics for this period
+        metrics_query = session.query(QBRMetricsMonthly).filter(
+            QBRMetricsMonthly.period == period,
+            QBRMetricsMonthly.organization_id == organization_id
+        ).all()
+
+        # Build a dict of metric_name -> metric_value
+        metrics = {m.metric_name: m.metric_value for m in metrics_query}
+
+        # Check if manual inputs exist
+        owner_comp = metrics.get('owner_comp')
+        owner_comp_taxes = metrics.get('owner_comp_taxes')
+
+        if owner_comp is None or owner_comp_taxes is None:
+            logger.info(f"No manual inputs for {period}, skipping expense recalculation")
+            return
+
+        # Get QB values needed for calculation
+        payroll_total = metrics.get('payroll_total', Decimal('0'))
+        total_expenses_qb = metrics.get('total_expenses_qb', Decimal('0'))
+        product_cogs = metrics.get('product_cogs', Decimal('0'))
+        uncategorized_expenses = metrics.get('uncategorized_expenses', Decimal('0'))
+        total_revenue = metrics.get('total_revenue', Decimal('0'))
+
+        if payroll_total == 0 or total_expenses_qb == 0:
+            logger.info(f"Missing QB expense data for {period}, skipping recalculation")
+            return
+
+        # Calculate derived values
+        employee_expense = payroll_total - owner_comp_taxes - owner_comp
+        other_expenses = total_expenses_qb - employee_expense - owner_comp_taxes - owner_comp
+        total_expenses = (employee_expense + other_expenses + owner_comp +
+                          owner_comp_taxes + product_cogs - uncategorized_expenses)
+
+        # Calculate net_profit using the derived total_expenses (not raw QB value)
+        net_profit = total_revenue - total_expenses if total_revenue > 0 else Decimal('0')
+
+        logger.info(f"Recalculating expenses for {period}:")
+        logger.info(f"  payroll_total=${payroll_total}, owner_comp=${owner_comp}, owner_comp_taxes=${owner_comp_taxes}")
+        logger.info(f"  employee_expense = ${payroll_total} - ${owner_comp_taxes} - ${owner_comp} = ${employee_expense}")
+        logger.info(f"  other_expenses = ${total_expenses_qb} - ${employee_expense} - ${owner_comp_taxes} - ${owner_comp} = ${other_expenses}")
+        logger.info(f"  total_expenses = ${total_expenses}")
+        logger.info(f"  net_profit = ${total_revenue} - ${total_expenses} = ${net_profit}")
+
+        # Store recalculated values
+        derived_metrics = {
+            'employee_expense': employee_expense,
+            'other_expenses': other_expenses,
+            'total_expenses': total_expenses,
+            'net_profit': net_profit
+        }
+
+        for metric_name, metric_value in derived_metrics.items():
+            existing = session.query(QBRMetricsMonthly).filter(
+                QBRMetricsMonthly.period == period,
+                QBRMetricsMonthly.organization_id == organization_id,
+                QBRMetricsMonthly.metric_name == metric_name
+            ).first()
+
+            if existing:
+                old_value = existing.metric_value
+                existing.metric_value = metric_value
+                existing.data_source = 'calculated'
+                existing.updated_at = datetime.utcnow()
+                logger.info(f"  Updated {metric_name}: ${old_value} -> ${metric_value}")
+            else:
+                if vendor_id is None:
+                    vendor = session.query(Vendor).filter_by(name='QuickBooks').first()
+                    vendor_id = vendor.id if vendor else 1
+
+                new_metric = QBRMetricsMonthly(
+                    period=period,
+                    organization_id=organization_id,
+                    vendor_id=vendor_id,
+                    metric_name=metric_name,
+                    metric_value=metric_value,
+                    data_source='calculated',
+                    collected_at=datetime.utcnow(),
+                    notes='Auto-recalculated after QBWC sync'
+                )
+                session.add(new_metric)
+                logger.info(f"  Created {metric_name}: ${metric_value}")
+
+        session.commit()
+        logger.info(f"Expense recalculation complete for {period}")
 
 
 # ==============================================================================

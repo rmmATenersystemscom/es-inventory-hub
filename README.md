@@ -1,6 +1,6 @@
 # ES Inventory Hub
 
-**Current Version**: v1.38.9 (stable)
+**Current Version**: v1.38.10 (stable)
 
 A centralized inventory management system for collecting and storing data from various sources including Ninja and ThreatLocker.
 
@@ -44,7 +44,17 @@ If ES Inventory Hub needs dashboard-related changes, put your request in a text 
 - Provide dashboards for analysis (seat counts, spares, billing vs non-billing, etc.).
 - Highlight mismatches and exceptions (e.g., ThreatLocker device missing in Ninja).
 
-## Current Version (v1.38.9)
+## Current Version (v1.38.10)
+
+QBR Metric Definitions API & Auto-Recalculation:
+- **New Endpoint**: `/api/qbr/metric-definitions` returns all metric metadata with live calculation breakdowns
+- **Enhanced Tooltips**: `calculation_display` field shows actual values (e.g., "$88,098.48 - $14,248.85 = $38,261.63")
+- **Auto-Recalculation**: QBWC now auto-recalculates `employee_expense`, `other_expenses`, `total_expenses`, and `net_profit` after sync
+- **Net Profit Fix**: Now uses derived `total_expenses` instead of raw QB value
+- **Description Fix**: Corrected `other_expenses` description - does NOT include COGS
+- **Dashboard AI Documentation**: New API reference at `/prompts/qbr-metric-definitions-api.md`
+
+### Previous Version (v1.38.9)
 
 M365 Usage Dashboard API Integration:
 - **New Endpoints**: Added `/api/m365/summary`, `/api/m365/users`, and `/api/m365/export` for Dashboard AI integration

@@ -4,15 +4,21 @@ M365 API Endpoints
 Provides REST API endpoints for:
 1. M365 usage changes - Compare user/license data between two dates
 2. Available dates - List dates with M365 snapshot data
+3. Summary - Organization-level user counts (ES Users vs M365 Licensed Users)
+4. Users - Per-user details for a specific organization
+5. Export - Full dataset export (CSV/JSON)
 """
 
+import csv
+import io
+import re
 import sys
 from pathlib import Path
 from datetime import datetime, date, timedelta
 from typing import Dict, List, Any, Optional
 import time
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, Response
 from sqlalchemy import text
 
 # Add project root to path
@@ -20,6 +26,59 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Create Blueprint for M365 API
 m365_api = Blueprint('m365_api', __name__)
+
+# Email license patterns - licenses that provide an Exchange mailbox
+EMAIL_LICENSE_INCLUDE_PATTERNS = [
+    r'^Microsoft 365 Business',      # Basic, Standard, Premium
+    r'^Microsoft 365 E\d',           # E3, E5, etc.
+    r'^Microsoft 365 F\d',           # F1, F3, etc.
+    r'^Office 365 E\d',              # E1, E3, E5, etc.
+    r'^Office 365 F\d',              # F3, etc.
+    r'^Exchange Online \(Plan',      # Plan 1, Plan 2
+    r'^Exchange Online Kiosk',
+    r'^Exchange Online Essentials',
+]
+
+# Patterns that should NOT count as email licenses (add-ons, not mailboxes)
+EMAIL_LICENSE_EXCLUDE_PATTERNS = [
+    r'Archiving',
+    r'Protection',
+]
+
+
+def has_email_license(licenses_str: str) -> bool:
+    """
+    Determine if a user has at least one license that provides an Exchange mailbox.
+
+    Args:
+        licenses_str: Comma-separated list of license names
+
+    Returns:
+        True if user has an email-capable license, False otherwise
+    """
+    if not licenses_str:
+        return False
+
+    licenses = [lic.strip() for lic in licenses_str.split(',') if lic.strip()]
+
+    for license_name in licenses:
+        # Check if license matches any exclude pattern first
+        is_excluded = any(
+            re.search(pattern, license_name, re.IGNORECASE)
+            for pattern in EMAIL_LICENSE_EXCLUDE_PATTERNS
+        )
+        if is_excluded:
+            continue
+
+        # Check if license matches any include pattern
+        is_email_license = any(
+            re.search(pattern, license_name, re.IGNORECASE)
+            for pattern in EMAIL_LICENSE_INCLUDE_PATTERNS
+        )
+        if is_email_license:
+            return True
+
+    return False
 
 
 def validate_date(date_str: str) -> Optional[date]:
@@ -528,4 +587,282 @@ def get_available_dates():
                     'end': end_date.isoformat()
                 }
             }
+        })
+
+
+@m365_api.route('/api/m365/summary', methods=['GET'])
+def get_m365_summary():
+    """
+    Get organization-level summary counts for the M365 dashboard.
+
+    Provides two user counts per organization:
+    - es_user_count: Users with a functioning email account (Exchange mailbox)
+    - m365_licensed_user_count: All users with any M365 license
+
+    Returns:
+        JSON response with organization summaries and totals
+    """
+    from api.api_server import get_session
+
+    start_time = time.time()
+
+    with get_session() as session:
+        # Get the most recent snapshot date
+        latest_date_result = session.execute(text("""
+            SELECT MAX(snapshot_date) as latest_date
+            FROM m365_user_snapshot
+        """)).fetchone()
+
+        if not latest_date_result or not latest_date_result.latest_date:
+            return jsonify({
+                "status": "error",
+                "error": "No M365 data available"
+            }), 404
+
+        snapshot_date = latest_date_result.latest_date
+
+        # Get all users from the latest snapshot
+        results = session.execute(text("""
+            SELECT
+                organization_name,
+                username,
+                display_name,
+                licenses
+            FROM m365_user_snapshot
+            WHERE snapshot_date = :snapshot_date
+            ORDER BY organization_name, display_name
+        """), {'snapshot_date': snapshot_date}).fetchall()
+
+        # Aggregate by organization
+        org_data = {}
+        for row in results:
+            org_name = row.organization_name
+            if org_name not in org_data:
+                org_data[org_name] = {
+                    'organization_name': org_name,
+                    'es_user_count': 0,
+                    'm365_licensed_user_count': 0
+                }
+
+            org_data[org_name]['m365_licensed_user_count'] += 1
+            if has_email_license(row.licenses):
+                org_data[org_name]['es_user_count'] += 1
+
+        # Sort by organization name and build response
+        organizations = sorted(org_data.values(), key=lambda x: x['organization_name'])
+
+        # Calculate totals
+        total_es_users = sum(org['es_user_count'] for org in organizations)
+        total_m365_users = sum(org['m365_licensed_user_count'] for org in organizations)
+
+        query_time_ms = int((time.time() - start_time) * 1000)
+
+        return jsonify({
+            "status": "success",
+            "organizations": organizations,
+            "totals": {
+                "total_organizations": len(organizations),
+                "total_es_users": total_es_users,
+                "total_m365_licensed_users": total_m365_users
+            },
+            "last_collected": snapshot_date.isoformat() + "T00:00:00Z",
+            "metadata": {
+                "query_time_ms": query_time_ms
+            }
+        })
+
+
+@m365_api.route('/api/m365/users', methods=['GET'])
+def get_m365_users():
+    """
+    Get detailed user list for a specific organization.
+
+    Query Parameters:
+        org (required): Organization name to filter by
+
+    Returns:
+        JSON response with user details including has_email_license flag
+    """
+    from api.api_server import get_session
+
+    org_name = request.args.get('org')
+
+    if not org_name:
+        return jsonify({
+            "status": "error",
+            "error": "Missing required parameter: org"
+        }), 400
+
+    with get_session() as session:
+        # Get the most recent snapshot date
+        latest_date_result = session.execute(text("""
+            SELECT MAX(snapshot_date) as latest_date
+            FROM m365_user_snapshot
+        """)).fetchone()
+
+        if not latest_date_result or not latest_date_result.latest_date:
+            return jsonify({
+                "status": "error",
+                "error": "No M365 data available"
+            }), 404
+
+        snapshot_date = latest_date_result.latest_date
+
+        # Get users for the specified organization
+        results = session.execute(text("""
+            SELECT
+                username,
+                display_name,
+                licenses
+            FROM m365_user_snapshot
+            WHERE snapshot_date = :snapshot_date
+              AND organization_name = :org_name
+            ORDER BY display_name
+        """), {
+            'snapshot_date': snapshot_date,
+            'org_name': org_name
+        }).fetchall()
+
+        if not results:
+            return jsonify({
+                "status": "error",
+                "error": f"No users found for organization: {org_name}"
+            }), 404
+
+        users = []
+        for row in results:
+            users.append({
+                "user_principal_name": row.username,
+                "display_name": row.display_name,
+                "licenses": row.licenses or "",
+                "has_email_license": has_email_license(row.licenses)
+            })
+
+        return jsonify({
+            "status": "success",
+            "organization": org_name,
+            "users": users,
+            "total_users": len(users)
+        })
+
+
+@m365_api.route('/api/m365/export', methods=['GET'])
+def export_m365_data():
+    """
+    Export full M365 dataset for CSV/Excel export.
+
+    Query Parameters:
+        format (optional): 'csv' or 'json' (default: 'json')
+        sort (optional): Field to sort by (default: 'organization_name')
+
+    Returns:
+        JSON or CSV response with all user data
+    """
+    from api.api_server import get_session
+
+    export_format = request.args.get('format', 'json').lower()
+    sort_field = request.args.get('sort', 'organization_name')
+
+    if export_format not in ('csv', 'json'):
+        return jsonify({
+            "status": "error",
+            "error": "Invalid format. Use 'csv' or 'json'"
+        }), 400
+
+    # Validate sort field
+    valid_sort_fields = ['organization_name', 'user_principal_name', 'display_name']
+    if sort_field not in valid_sort_fields:
+        sort_field = 'organization_name'
+
+    with get_session() as session:
+        # Get the most recent snapshot date
+        latest_date_result = session.execute(text("""
+            SELECT MAX(snapshot_date) as latest_date
+            FROM m365_user_snapshot
+        """)).fetchone()
+
+        if not latest_date_result or not latest_date_result.latest_date:
+            if export_format == 'csv':
+                return Response(
+                    "No M365 data available",
+                    mimetype='text/plain',
+                    status=404
+                )
+            return jsonify({
+                "status": "error",
+                "error": "No M365 data available"
+            }), 404
+
+        snapshot_date = latest_date_result.latest_date
+
+        # Build sort clause
+        sort_clause = "organization_name, display_name"
+        if sort_field == 'user_principal_name':
+            sort_clause = "username, organization_name"
+        elif sort_field == 'display_name':
+            sort_clause = "display_name, organization_name"
+
+        # Get all users from the latest snapshot
+        results = session.execute(text(f"""
+            SELECT
+                organization_name,
+                username,
+                display_name,
+                licenses
+            FROM m365_user_snapshot
+            WHERE snapshot_date = :snapshot_date
+            ORDER BY {sort_clause}
+        """), {'snapshot_date': snapshot_date}).fetchall()
+
+        data = []
+        for row in results:
+            data.append({
+                "organization_name": row.organization_name,
+                "user_principal_name": row.username,
+                "display_name": row.display_name,
+                "licenses": row.licenses or "",
+                "has_email_license": has_email_license(row.licenses)
+            })
+
+        if export_format == 'csv':
+            # Generate CSV response
+            output = io.StringIO()
+            writer = csv.writer(output)
+
+            # Write header
+            writer.writerow([
+                'organization_name',
+                'user_principal_name',
+                'display_name',
+                'licenses',
+                'has_email_license'
+            ])
+
+            # Write data
+            for record in data:
+                writer.writerow([
+                    record['organization_name'],
+                    record['user_principal_name'],
+                    record['display_name'],
+                    record['licenses'],
+                    str(record['has_email_license']).lower()
+                ])
+
+            csv_content = output.getvalue()
+            output.close()
+
+            return Response(
+                csv_content,
+                mimetype='text/csv',
+                headers={
+                    'Content-Disposition': f'attachment; filename=m365_users_{snapshot_date.isoformat()}.csv'
+                }
+            )
+
+        # JSON format
+        return jsonify({
+            "status": "success",
+            "data": data,
+            "total_records": len(data),
+            "last_collected": snapshot_date.isoformat() + "T00:00:00Z"
         })

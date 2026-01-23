@@ -1,6 +1,6 @@
 # ES Inventory Hub
 
-**Current Version**: v1.38.8 (stable)
+**Current Version**: v1.38.9 (stable)
 
 A centralized inventory management system for collecting and storing data from various sources including Ninja and ThreatLocker.
 
@@ -44,7 +44,16 @@ If ES Inventory Hub needs dashboard-related changes, put your request in a text 
 - Provide dashboards for analysis (seat counts, spares, billing vs non-billing, etc.).
 - Highlight mismatches and exceptions (e.g., ThreatLocker device missing in Ninja).
 
-## Current Version (v1.38.8)
+## Current Version (v1.38.9)
+
+M365 Usage Dashboard API Integration:
+- **New Endpoints**: Added `/api/m365/summary`, `/api/m365/users`, and `/api/m365/export` for Dashboard AI integration
+- **ES Users vs M365 Licensed Users**: Distinguishes users with Exchange mailboxes from all licensed users
+- **Email License Classification**: Pattern-based detection of licenses that provide Exchange mailbox (Business, E3, E5, etc.)
+- **Export Functionality**: Full dataset export in JSON or CSV format
+- **Dashboard AI Documentation**: Comprehensive API reference at `/prompts/m365-usage-dashboard-response.md`
+
+### Previous Version (v1.38.8)
 
 QBWC Always Re-Sync Current & Previous Month:
 - **Re-Sync Logic**: QBWC now always re-syncs the current month and previous month on every connection

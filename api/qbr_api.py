@@ -1886,13 +1886,17 @@ def get_metric_definitions():
         period_values = {}
         if period:
             with get_session() as session:
+                # Order by updated_at DESC so latest values come first
+                # Then keep only the first (latest) value per metric_name
                 metrics = session.query(QBRMetricsMonthly).filter(
                     QBRMetricsMonthly.period == period,
                     QBRMetricsMonthly.organization_id == organization_id
-                ).all()
+                ).order_by(QBRMetricsMonthly.updated_at.desc()).all()
 
                 for m in metrics:
-                    period_values[m.metric_name] = float(m.metric_value) if m.metric_value else 0
+                    # Only keep the first (latest) value for each metric
+                    if m.metric_name not in period_values:
+                        period_values[m.metric_name] = float(m.metric_value) if m.metric_value else 0
 
         # Build response
         result_metrics = []

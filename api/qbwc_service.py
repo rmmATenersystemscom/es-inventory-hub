@@ -400,10 +400,10 @@ def store_qbr_metrics(organization_id: int, period: str, metrics: Dict[str, Deci
             data_source = 'calculated' if metric_name in calculated_metrics else 'quickbooks'
 
             # Check if metric exists - do update or insert
+            # Note: uniqueness is on (period, organization_id, metric_name) - vendor_id is NOT part of unique key
             existing = session.query(QBRMetricsMonthly).filter_by(
                 period=period,
                 organization_id=organization_id,
-                vendor_id=vendor_id,
                 metric_name=metric_name
             ).first()
 

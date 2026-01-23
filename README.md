@@ -1,6 +1,6 @@
 # ES Inventory Hub
 
-**Current Version**: v1.38.10 (stable)
+**Current Version**: v1.38.11 (stable)
 
 A centralized inventory management system for collecting and storing data from various sources including Ninja and ThreatLocker.
 
@@ -44,7 +44,16 @@ If ES Inventory Hub needs dashboard-related changes, put your request in a text 
 - Provide dashboards for analysis (seat counts, spares, billing vs non-billing, etc.).
 - Highlight mismatches and exceptions (e.g., ThreatLocker device missing in Ninja).
 
-## Current Version (v1.38.10)
+## Current Version (v1.38.11)
+
+QBR Duplicate Data Prevention & Stale Value Fix:
+- **Unique Constraint Fix**: Changed DB constraint to `(period, metric_name, organization_id)` - prevents duplicate records
+- **Latest Value Guarantee**: API now orders by `updated_at DESC` and returns only the latest value per metric
+- **Data Cleanup**: Removed 146 stale duplicate records from database
+- **Code Update**: Upsert logic no longer uses `vendor_id` for uniqueness checks
+- **Dashboard AI Documentation**: New prompt at `/prompts/qbr-data-refresh-required.md`
+
+### Previous Version (v1.38.10)
 
 QBR Metric Definitions API & Auto-Recalculation:
 - **New Endpoint**: `/api/qbr/metric-definitions` returns all metric metadata with live calculation breakdowns

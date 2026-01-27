@@ -599,6 +599,12 @@ def get_m365_summary():
     - es_user_count: Users with a functioning email account (Exchange mailbox)
     - m365_licensed_user_count: All users with any M365 license
 
+    Also includes ES user definition configuration:
+    - es_user_definition: 1 (email mailbox) or 2 (all M365 licensed)
+    - es_user_definition_reviewed: Whether the definition has been verified
+
+    New organizations are auto-created with definition=2, needs_review=true.
+
     Returns:
         JSON response with organization summaries and totals
     """
@@ -633,6 +639,20 @@ def get_m365_summary():
             ORDER BY organization_name, display_name
         """), {'snapshot_date': snapshot_date}).fetchall()
 
+        # Get ES user definitions for all organizations
+        config_results = session.execute(text("""
+            SELECT organization_name, es_user_definition, needs_review
+            FROM m365_es_user_config
+        """)).fetchall()
+
+        org_configs = {
+            row.organization_name: {
+                'es_user_definition': row.es_user_definition,
+                'needs_review': row.needs_review
+            }
+            for row in config_results
+        }
+
         # Aggregate by organization
         org_data = {}
         for row in results:
@@ -647,6 +667,33 @@ def get_m365_summary():
             org_data[org_name]['m365_licensed_user_count'] += 1
             if has_email_license(row.licenses):
                 org_data[org_name]['es_user_count'] += 1
+
+        # Add ES user definition config to each organization
+        # Auto-create config for new organizations (definition=2, needs_review=true)
+        new_orgs_to_create = []
+        for org_name in org_data:
+            if org_name in org_configs:
+                org_data[org_name]['es_user_definition'] = org_configs[org_name]['es_user_definition']
+                org_data[org_name]['es_user_definition_reviewed'] = not org_configs[org_name]['needs_review']
+            else:
+                # New organization - default to definition 2 with needs_review=true
+                org_data[org_name]['es_user_definition'] = 2
+                org_data[org_name]['es_user_definition_reviewed'] = False
+                new_orgs_to_create.append(org_name)
+
+        # Auto-create config entries for new organizations
+        for org_name in new_orgs_to_create:
+            try:
+                session.execute(text("""
+                    INSERT INTO m365_es_user_config (organization_name, es_user_definition, needs_review)
+                    VALUES (:org_name, 2, true)
+                    ON CONFLICT (organization_name) DO NOTHING
+                """), {'org_name': org_name})
+            except Exception:
+                pass  # Ignore if insert fails (race condition)
+
+        if new_orgs_to_create:
+            session.commit()
 
         # Sort by organization name and build response
         organizations = sorted(org_data.values(), key=lambda x: x['organization_name'])
@@ -668,6 +715,143 @@ def get_m365_summary():
             "last_collected": snapshot_date.isoformat() + "T00:00:00Z",
             "metadata": {
                 "query_time_ms": query_time_ms
+            }
+        })
+
+
+@m365_api.route('/api/m365/es-user-config', methods=['GET'])
+def get_es_user_config():
+    """
+    Get ES user definition configuration for all organizations.
+
+    Returns:
+        JSON response with all organization configurations
+    """
+    from api.api_server import get_session
+
+    with get_session() as session:
+        results = session.execute(text("""
+            SELECT organization_name, es_user_definition, needs_review, created_at, updated_at
+            FROM m365_es_user_config
+            ORDER BY organization_name
+        """)).fetchall()
+
+        configs = []
+        for row in results:
+            configs.append({
+                'organization_name': row.organization_name,
+                'es_user_definition': row.es_user_definition,
+                'needs_review': row.needs_review,
+                'created_at': row.created_at.isoformat() if row.created_at else None,
+                'updated_at': row.updated_at.isoformat() if row.updated_at else None
+            })
+
+        return jsonify({
+            "status": "success",
+            "configs": configs,
+            "total": len(configs)
+        })
+
+
+@m365_api.route('/api/m365/es-user-config/<path:org_name>', methods=['PUT'])
+def update_es_user_config(org_name: str):
+    """
+    Update ES user definition configuration for an organization.
+
+    URL Parameters:
+        org_name: Organization name (URL encoded)
+
+    Request Body (JSON):
+        es_user_definition (optional): 1 (email mailbox) or 2 (all M365 licensed)
+        needs_review (optional): Boolean indicating if definition needs review
+
+    Returns:
+        JSON response with updated configuration
+    """
+    from api.api_server import get_session
+
+    data = request.get_json()
+    if not data:
+        return jsonify({
+            "status": "error",
+            "error": "Request body must be JSON"
+        }), 400
+
+    es_user_definition = data.get('es_user_definition')
+    needs_review = data.get('needs_review')
+
+    # Validate es_user_definition if provided
+    if es_user_definition is not None:
+        if es_user_definition not in (1, 2):
+            return jsonify({
+                "status": "error",
+                "error": "es_user_definition must be 1 or 2"
+            }), 400
+
+    # Validate needs_review if provided
+    if needs_review is not None:
+        if not isinstance(needs_review, bool):
+            return jsonify({
+                "status": "error",
+                "error": "needs_review must be a boolean"
+            }), 400
+
+    # Need at least one field to update
+    if es_user_definition is None and needs_review is None:
+        return jsonify({
+            "status": "error",
+            "error": "Must provide es_user_definition and/or needs_review"
+        }), 400
+
+    with get_session() as session:
+        # Check if config exists
+        existing = session.execute(text("""
+            SELECT organization_name FROM m365_es_user_config
+            WHERE organization_name = :org_name
+        """), {'org_name': org_name}).fetchone()
+
+        if not existing:
+            return jsonify({
+                "status": "error",
+                "error": f"No configuration found for organization: {org_name}"
+            }), 404
+
+        # Build update query dynamically
+        update_parts = ["updated_at = CURRENT_TIMESTAMP"]
+        params = {'org_name': org_name}
+
+        if es_user_definition is not None:
+            update_parts.append("es_user_definition = :es_user_definition")
+            params['es_user_definition'] = es_user_definition
+
+        if needs_review is not None:
+            update_parts.append("needs_review = :needs_review")
+            params['needs_review'] = needs_review
+
+        update_sql = f"""
+            UPDATE m365_es_user_config
+            SET {', '.join(update_parts)}
+            WHERE organization_name = :org_name
+        """
+
+        session.execute(text(update_sql), params)
+        session.commit()
+
+        # Fetch updated config
+        result = session.execute(text("""
+            SELECT organization_name, es_user_definition, needs_review, created_at, updated_at
+            FROM m365_es_user_config
+            WHERE organization_name = :org_name
+        """), {'org_name': org_name}).fetchone()
+
+        return jsonify({
+            "status": "success",
+            "config": {
+                'organization_name': result.organization_name,
+                'es_user_definition': result.es_user_definition,
+                'needs_review': result.needs_review,
+                'created_at': result.created_at.isoformat() if result.created_at else None,
+                'updated_at': result.updated_at.isoformat() if result.updated_at else None
             }
         })
 

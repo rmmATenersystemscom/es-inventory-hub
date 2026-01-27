@@ -1,7 +1,8 @@
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import (
-    Column, Integer, String, DateTime, Date, Text, ForeignKey, 
-    UniqueConstraint, Index, CheckConstraint, BigInteger, Boolean, Numeric
+    Column, Integer, String, DateTime, Date, Text, ForeignKey,
+    UniqueConstraint, Index, CheckConstraint, BigInteger, Boolean, Numeric,
+    text
 )
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlalchemy.orm import relationship
@@ -732,6 +733,29 @@ class M365UserSnapshot(Base):
         Index('idx_m365_user_snapshot_tenant_id', 'tenant_id'),
         Index('idx_m365_user_snapshot_org_name', 'organization_name'),
         Index('idx_m365_user_snapshot_username', 'username'),
+    )
+
+
+class M365ESUserConfig(Base):
+    """M365 ES User definition configuration per organization.
+
+    Stores which definition of 'ES User' applies to each organization:
+    - Definition 1: Users with a functioning email mailbox (Exchange license)
+    - Definition 2: All M365 users with any paid M365 license
+    """
+    __tablename__ = 'm365_es_user_config'
+
+    organization_name = Column(String(255), primary_key=True)
+    es_user_definition = Column(Integer, nullable=False, default=1)  # 1=email, 2=all licensed
+    needs_review = Column(Boolean, nullable=False, default=True)
+
+    # Metadata
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default='CURRENT_TIMESTAMP')
+    updated_at = Column(TIMESTAMP(timezone=True), nullable=True, onupdate=text('CURRENT_TIMESTAMP'))
+
+    __table_args__ = (
+        Index('idx_m365_es_user_config_definition', 'es_user_definition'),
+        Index('idx_m365_es_user_config_needs_review', 'needs_review'),
     )
 
 

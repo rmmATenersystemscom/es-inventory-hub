@@ -1,6 +1,6 @@
 # ES Inventory Hub
 
-**Current Version**: v1.38.11 (stable)
+**Current Version**: v1.38.12 (stable)
 
 A centralized inventory management system for collecting and storing data from various sources including Ninja and ThreatLocker.
 
@@ -44,7 +44,18 @@ If ES Inventory Hub needs dashboard-related changes, put your request in a text 
 - Provide dashboards for analysis (seat counts, spares, billing vs non-billing, etc.).
 - Highlight mismatches and exceptions (e.g., ThreatLocker device missing in Ninja).
 
-## Current Version (v1.38.11)
+## Current Version (v1.38.12)
+
+M365 ES User Definition Configuration:
+- **Per-Organization Billing Definitions**: Each org can now be configured with ES User definition 1 (email mailbox) or 2 (all M365 licensed)
+- **New Config Table**: `m365_es_user_config` stores organization-specific billing definitions
+- **Updated Summary API**: `/api/m365/summary` now returns `es_user_definition` and `es_user_definition_reviewed` per org
+- **New Config Endpoints**: `GET/PUT /api/m365/es-user-config` for managing definitions
+- **Auto-Create New Orgs**: New organizations default to definition 2 with `needs_review=true`
+- **Seed Data**: All 38 existing organizations pre-configured with verified definitions
+- **Dashboard AI Documentation**: API reference at `/prompts/m365-es-user-definition-api.md`
+
+### Previous Version (v1.38.11)
 
 QBR Duplicate Data Prevention & Stale Value Fix:
 - **Unique Constraint Fix**: Changed DB constraint to `(period, metric_name, organization_id)` - prevents duplicate records
